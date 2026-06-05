@@ -5,8 +5,9 @@ import pool from "./config/db.js";
 dotenv.config();
 
 const app = express();
+const PORT = process.env.PORT || 3000; 
 
-app.listen(async () => {
+app.listen(PORT , async () => {
   console.log(`🚀 Server listening on port ${process.env.PORT}`);
 
   try {
