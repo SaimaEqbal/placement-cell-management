@@ -1,5 +1,6 @@
 import express from 'express';
 import dotenv from "dotenv";
+import cors from "cors";
 import pool from "./config/db.js";
 import studentRoutes from "./routes/studentRoutes.js";
 import companyRoutes from "./routes/companyRoutes.js";
@@ -10,7 +11,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000; 
 
-
+app.use(cors());
 app.use(express.json());
 app.use("/students", studentRoutes);
 app.use("/companies",companyRoutes);
