@@ -1,21 +1,3 @@
-import pool from "../config/db.js";
-
-export const getStudents = async (req, res) => {
-  try {
-    const result = await pool.query(
-      "SELECT * FROM students ORDER BY id"
-    );
-
-    res.status(200).json(result.rows);
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      message: "Failed to fetch students"
-    });
-  }
-};
-
 export const createStudent = async (req, res) => {
   try {
     const {
@@ -25,13 +7,45 @@ export const createStudent = async (req, res) => {
       phone,
       branch,
       graduation_year,
-      cgpa
+      cgpa,
+      gender,
+      region,
+      religion,
+      date_of_birth,
+      active_backlogs,
+      passive_backlogs,
+      resume_url,
+      tenth_marksheet_url,
+      twelfth_marksheet_url,
+      last_sem_marksheet_url,
+      placement_status
     } = req.body;
 
     const result = await pool.query(
-      `INSERT INTO students
-      (roll_no, name, email, phone, branch, graduation_year, cgpa)
-      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO students (
+        roll_no,
+        name,
+        email,
+        phone,
+        branch,
+        graduation_year,
+        cgpa,
+        gender,
+        region,
+        religion,
+        date_of_birth,
+        active_backlogs,
+        passive_backlogs,
+        resume_url,
+        tenth_marksheet_url,
+        twelfth_marksheet_url,
+        last_sem_marksheet_url,
+        placement_status
+      )
+      VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,
+        $10,$11,$12,$13,$14,$15,$16,$17,$18
+      )
       RETURNING *`,
       [
         roll_no,
@@ -40,41 +54,43 @@ export const createStudent = async (req, res) => {
         phone,
         branch,
         graduation_year,
-        cgpa
+        cgpa,
+        gender,
+        region,
+        religion,
+        date_of_birth,
+        active_backlogs,
+        passive_backlogs,
+        resume_url,
+        tenth_marksheet_url,
+        twelfth_marksheet_url,
+        last_sem_marksheet_url,
+        placement_status
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    return res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error(error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Failed to create student"
     });
   }
 };
 
-export const getStudentById = async (req, res) => {
+export const getStudents = async (req, res) => {
   try {
-    const { id } = req.params;
-
     const result = await pool.query(
-      "SELECT * FROM students WHERE id = $1",
-      [id]
+      "SELECT * FROM students ORDER BY id"
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        message: "Student not found"
-      });
-    }
-
-    res.status(200).json(result.rows[0]);
+    return res.status(200).json(result.rows);
   } catch (error) {
     console.error(error);
 
-    res.status(500).json({
-      message: "Failed to fetch student"
+    return res.status(500).json({
+      message: "Failed to fetch students"
     });
   }
 };
@@ -91,6 +107,16 @@ export const updateStudent = async (req, res) => {
       branch,
       graduation_year,
       cgpa,
+      gender,
+      region,
+      religion,
+      date_of_birth,
+      active_backlogs,
+      passive_backlogs,
+      resume_url,
+      tenth_marksheet_url,
+      twelfth_marksheet_url,
+      last_sem_marksheet_url,
       placement_status
     } = req.body;
 
@@ -103,8 +129,18 @@ export const updateStudent = async (req, res) => {
            branch = $5,
            graduation_year = $6,
            cgpa = $7,
-           placement_status = $8
-       WHERE id = $9
+           gender = $8,
+           region = $9,
+           religion = $10,
+           date_of_birth = $11,
+           active_backlogs = $12,
+           passive_backlogs = $13,
+           resume_url = $14,
+           tenth_marksheet_url = $15,
+           twelfth_marksheet_url = $16,
+           last_sem_marksheet_url = $17,
+           placement_status = $18
+       WHERE id = $19
        RETURNING *`,
       [
         roll_no,
@@ -114,6 +150,16 @@ export const updateStudent = async (req, res) => {
         branch,
         graduation_year,
         cgpa,
+        gender,
+        region,
+        religion,
+        date_of_birth,
+        active_backlogs,
+        passive_backlogs,
+        resume_url,
+        tenth_marksheet_url,
+        twelfth_marksheet_url,
+        last_sem_marksheet_url,
         placement_status,
         id
       ]
@@ -125,11 +171,11 @@ export const updateStudent = async (req, res) => {
       });
     }
 
-    res.status(200).json(result.rows[0]);
+    return res.status(200).json(result.rows[0]);
   } catch (error) {
     console.error(error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Failed to update student"
     });
   }
@@ -150,13 +196,13 @@ export const deleteStudent = async (req, res) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Student deleted successfully"
     });
   } catch (error) {
     console.error(error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Failed to delete student"
     });
   }
