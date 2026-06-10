@@ -1,22 +1,22 @@
-import express from "express";
+// import express from "express";
 
-import {
-  getCompanies,
-  getCompanyById,
-  createCompany,
-  updateCompany,
-  deleteCompany,
-} from "../controllers/companyController.js";
+// import {
+//   getCompanies,
+//   getCompanyById,
+//   createCompany,
+//   updateCompany,
+//   deleteCompany,
+// } from "../controllers/companyController.js";
 
-const router = express.Router();
+// const router = express.Router();
 
-router.get("/", getCompanies);
-router.get("/:id", getCompanyById);
+// router.get("/", getCompanies);
+// router.get("/:id", getCompanyById);
 
-router.post("/", createCompany);
+// router.post("/", createCompany);
 
-router.put("/:id", updateCompany);
+// router.put("/:id", updateCompany);
 
-router.delete("/:id", deleteCompany);
+// router.delete("/:id", deleteCompany);
 
-export default router;
+// export default router;

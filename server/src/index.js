@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import pool from "./config/db.js";
 import studentRoutes from "./routes/studentRoutes.js";
-import companyRoutes from "./routes/companyRoutes.js";
+// import companyRoutes from "./routes/companyRoutes.js";
 import applicationRoutes from "./routes/applicationRoutes.js";
 
 dotenv.config();
@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use("/students", studentRoutes);
-app.use("/companies",companyRoutes);
+// app.use("/companies",companyRoutes);
 app.use("/applications",applicationRoutes);
 
 app.listen(PORT , async () => {
