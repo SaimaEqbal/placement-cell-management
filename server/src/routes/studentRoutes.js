@@ -7,13 +7,13 @@ const router = express.Router();
 
 router.get("/", getStudents);
 router.post(
-  "/students",
+  "/",
   validateCreateStudent,
   createStudent
 );
 
 router.put(
-  "/students/:id",
+  "/:id",
   validateUpdateStudent,
   updateStudent
 );
