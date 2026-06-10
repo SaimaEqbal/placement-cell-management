@@ -33,4 +33,35 @@ export const createStudentSchema = z.object({
   ])
 });
 
-export const updateStudentSchema = createStudentSchema;
+export const updateStudentSchema = z.object({
+  roll_no: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  phone: z.string().min(10).optional(),
+
+  branch: z.string().min(1).optional(),
+  graduation_year: z.number().int().optional(),
+  cgpa: z.number().min(0).max(10).optional(),
+
+  gender: z.string().optional(),
+  region: z.string().optional(),
+  religion: z.string().optional(),
+
+  date_of_birth: z.coerce.date().optional(),
+
+  active_backlogs: z.number().int().min(0).optional(),
+  passive_backlogs: z.number().int().min(0).optional(),
+
+  resume_url: z.string().url().optional(),
+
+  tenth_marksheet_url: z.string().url().optional(),
+  twelfth_marksheet_url: z.string().url().optional(),
+  last_sem_marksheet_url: z.string().url().optional(),
+
+  placement_status: z.enum([
+    "unplaced",
+    "shortlisted",
+    "placed",
+    "rejected"
+  ]).optional()
+});
