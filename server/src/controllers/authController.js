@@ -1,7 +1,7 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import pool from "../config/db.js";
-import { sendVerificationEmail } from "../services/emailService.js";
+import { sendVerificationEmail,sendPasswordResetEmail } from "../services/emailService.js";
 
 export const signup = async (req, res) => {
   try {
@@ -221,76 +221,79 @@ export const login = async (req, res) => {
 };
 
 export const forgotPassword = async (req, res) => {
-  const { email } = req.body;
-
-  const result = await pool.query(
-    "SELECT id, email FROM users WHERE email = $1",
-    [email]
-  );
-
-  const user = result.rows[0];
-
-  if (!user) {
-    return res.status(200).json({
-      message: "If the email exists, a reset link has been sent",
-    });
-  }
-
-  const resetToken = jwt.sign(
-    {
-      userId: user.id,
-      purpose: "password_reset",
-    },
-    process.env.JWT_EMAIL_SECRET,
-    {
-      expiresIn: "15m",
-    }
-  );
-
-  await sendPasswordResetEmail(
-    user.email,
-    resetToken
-  );
-
-  return res.status(200).json({
-    message: "If the email exists, a reset link has been sent",
-  });
-};
-
-export const resetPassword = async (req, res) => {
-  const { token, newPassword } = req.body;
-
   try {
-    const payload = jwt.verify(
-      token,
-      process.env.JWT_EMAIL_SECRET
+    const { email } = req.body;
+
+    const result = await pool.query(
+      `SELECT id, email
+       FROM users
+       WHERE email = $1
+       AND is_verified = TRUE`,
+      [email]
     );
 
-    if (payload.purpose !== "password_reset") {
-      return res.status(400).json({
-        message: "Invalid token",
+    const user = result.rows[0];
+
+    if (!user) {
+      return res.status(200).json({
+        message: "If the email exists, a reset link has been sent",
       });
     }
 
-    const passwordHash = await bcrypt.hash(
-      newPassword,
-      12
+    const resetToken = jwt.sign(
+      {
+        userId: user.id,
+        purpose: "password_reset",
+      },
+      process.env.JWT_EMAIL_SECRET,
+      {
+        expiresIn: "15m",
+      }
     );
 
-    await pool.query(
-      `UPDATE users
-       SET password_hash = $1
-       WHERE id = $2`,
-      [passwordHash, payload.userId]
+    await sendPasswordResetEmail(
+      user.email,
+      resetToken
     );
 
-    return res.json({
-      message: "Password reset successful",
+    return res.status(200).json({
+      message: "If the email exists, a reset link has been sent",
     });
-  } catch {
-    return res.status(400).json({
-      message: "Reset link expired or invalid",
+
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Failed to process request",
     });
   }
+};
+
+export const resetPassword = async (req, res) => {
+  const { token, password } = req.body;
+
+  const payload = jwt.verify(
+    token,
+    process.env.JWT_EMAIL_SECRET
+  );
+
+  if (payload.purpose !== "password_reset") {
+    return res.status(400).json({
+      message: "Invalid token",
+    });
+  }
+
+  const hash = await bcrypt.hash(password, 12);
+
+  await pool.query(
+    `UPDATE users
+     SET password_hash = $1
+     WHERE id = $2`,
+    [hash, payload.userId]
+  );
+
+  return res.json({
+    message: "Password reset successful",
+  });
 };
 
