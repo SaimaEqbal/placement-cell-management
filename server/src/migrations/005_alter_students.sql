@@ -9,3 +9,7 @@ ADD COLUMN resume_url TEXT,
 ADD COLUMN tenth_marksheet_url TEXT,
 ADD COLUMN twelfth_marksheet_url TEXT,
 ADD COLUMN last_sem_marksheet_url TEXT;
+
+ALTER TABLE students
+ADD COLUMN review_status VARCHAR(20) DEFAULT 'pending',
+ADD COLUMN reviewed_at TIMESTAMPTZ;
