@@ -1,4 +1,4 @@
-const auth = (req, res, next) => {
+export const auth = (req, res, next) => {
   const token =
     req.headers.authorization?.split(" ")[1];
 
