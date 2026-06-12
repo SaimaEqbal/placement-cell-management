@@ -13,3 +13,6 @@ ADD COLUMN last_sem_marksheet_url TEXT;
 ALTER TABLE students
 ADD COLUMN review_status VARCHAR(20) DEFAULT 'pending',
 ADD COLUMN reviewed_at TIMESTAMPTZ;
+
+ALTER TABLE students
+ADD COLUMN user_id UUID UNIQUE REFERENCES users(id);
