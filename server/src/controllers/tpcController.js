@@ -38,8 +38,8 @@ export const createTPC = async (req, res) => {
     const existingTPC = await pool.query(
       `SELECT tpc_id
        FROM tpc
-       WHERE user_id = $1`,
-      [user_id]
+       WHERE email = $1`,
+      [email]
     );
 
     if (existingTPC.rows.length > 0) {
@@ -156,50 +156,76 @@ export const deleteTPC = async (req, res) => {
 
 
 export const promoteSPC = async (req, res) => {
+  const client = await pool.connect();
+
   try {
     const { studentId } = req.params;
 
-    const studentResult = await pool.query(
-      `SELECT user_id
+    await client.query("BEGIN");
+
+    const studentResult = await client.query(
+      `SELECT user_id, name, email, phone, branch
        FROM students
        WHERE id = $1`,
       [studentId]
     );
 
     if (studentResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+
       return res.status(404).json({
         message: "Student not found",
       });
     }
 
-    const userId = studentResult.rows[0].user_id;
+    const student = studentResult.rows[0];
 
-    const updateResult = await pool.query(
+    await client.query(
       `UPDATE users
        SET role = 'spc'
-       WHERE id = $1
-       RETURNING id, role`,
-      [userId]
+       WHERE id = $1`,
+      [student.user_id]
     );
+
+    await client.query(
+      `INSERT INTO spc
+       (user_id, name, email, phone, branch)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        student.user_id,
+        student.name,
+        student.email,
+        student.phone,
+        student.branch,
+      ]
+    );
+
+    await client.query("COMMIT");
 
     return res.status(200).json({
       message: "Student promoted to SPC successfully",
-      user: updateResult.rows[0],
     });
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error(error);
 
     return res.status(500).json({
       message: "Failed to promote SPC",
     });
+  } finally {
+    client.release();
   }
 };
 
 export const demoteSPC = async (req, res) => {
+  const client = await pool.connect();
+
   try {
     const { studentId } = req.params;
 
-    const studentResult = await pool.query(
+    await client.query("BEGIN");
+
+    const studentResult = await client.query(
       `SELECT user_id
        FROM students
        WHERE id = $1`,
@@ -207,6 +233,8 @@ export const demoteSPC = async (req, res) => {
     );
 
     if (studentResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+
       return res.status(404).json({
         message: "Student not found",
       });
@@ -214,23 +242,32 @@ export const demoteSPC = async (req, res) => {
 
     const userId = studentResult.rows[0].user_id;
 
-    const updateResult = await pool.query(
+    await client.query(
       `UPDATE users
        SET role = 'student'
-       WHERE id = $1
-       RETURNING id, role`,
+       WHERE id = $1`,
       [userId]
     );
 
+    await client.query(
+      `DELETE FROM spc
+       WHERE user_id = $1`,
+      [userId]
+    );
+
+    await client.query("COMMIT");
+
     return res.status(200).json({
       message: "SPC demoted successfully",
-      user: updateResult.rows[0],
     });
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error(error);
 
     return res.status(500).json({
       message: "Failed to demote SPC",
     });
+  } finally {
+    client.release();
   }
 };
