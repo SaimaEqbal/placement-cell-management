@@ -1,7 +1,7 @@
 import {
   createTPCSchema,
   updateTPCSchema,
-} from "../lib/schema";
+} from "../lib/schema.js";
 
 export const validateCreateTPC = (req, res, next) => {
   const result = createTPCSchema.safeParse(req.body);
