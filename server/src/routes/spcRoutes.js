@@ -4,6 +4,6 @@ import {auth} from "../middleware/authMiddleware.js";
 import { requireSPC } from "../middleware/roleMiddleware.js";
 const router = express.Router();
 
-router.put("/spc/:id",auth,requireSPC,updateStudent);
+router.put("/:id",auth,requireSPC,updateStudent);
 
 export default router;
