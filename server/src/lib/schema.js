@@ -106,3 +106,60 @@ export const updateTPCSchema = z.object({
     .optional(),
 });
 
+export const createCompanySchema = z.object({
+  company_name: z
+    .string()
+    .min(2, "Company name is required"),
+
+  industry: z
+    .string()
+    .min(2, "Industry is required"),
+
+  description: z
+    .string()
+    .min(10, "Description is required"),
+
+  hr_name: z
+    .string()
+    .min(2, "HR name is required").optional(),
+
+  hr_email: z
+    .email("Invalid HR email").optional(),
+
+  hr_phone: z
+    .string()
+    .min(10, "Phone number must be at least 10 digits")
+    .max(15, "Phone number cannot exceed 15 digits").optional(),
+});
+
+export const updateCompanySchema = z.object({
+  company_name: z
+    .string()
+    .min(2, "Company name is required")
+    .optional(),
+
+  industry: z
+    .string()
+    .min(2, "Industry is required")
+    .optional(),
+
+  description: z
+    .string()
+    .min(10, "Description is required")
+    .optional(),
+
+  hr_name: z
+    .string()
+    .min(2, "HR name is required")
+    .optional(),
+
+  hr_email: z
+    .email("Invalid HR email")
+    .optional(),
+
+  hr_phone: z
+    .string()
+    .min(10, "Phone number must be at least 10 digits")
+    .max(15, "Phone number cannot exceed 15 digits")
+    .optional(),
+});

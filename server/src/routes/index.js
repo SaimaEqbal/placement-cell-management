@@ -3,6 +3,7 @@ import authRouter from "./authRoutes.js"
 import studentRouter from "./studentRoutes.js"
 import spcRouter from "./spcRoutes.js";
 import tpcRouter from "./tpcRoutes.js";
+import companyRouter from "./companyRoutes.js";
 
 const router = express.Router();
 
@@ -10,5 +11,6 @@ router.use('/auth', authRouter)
 router.use('/students', studentRouter)
 router.use('/spc',spcRouter);
 router.use('/tpc',tpcRouter);
+router.use('/companies',companyRouter);
 
 export default router;

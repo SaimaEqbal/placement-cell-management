@@ -1,0 +1,17 @@
+CREATE TABLE spc (
+    spc_id SERIAL PRIMARY KEY,
+
+    user_id UUID UNIQUE NOT NULL
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+    name VARCHAR(100) NOT NULL,
+
+    email VARCHAR(255) UNIQUE NOT NULL,
+
+    phone VARCHAR(15) NOT NULL,
+
+    branch VARCHAR(100) NOT NULL,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
