@@ -1,20 +1,29 @@
 CREATE TABLE applications (
-    id BIGSERIAL PRIMARY KEY,
+    application_id SERIAL PRIMARY KEY,
 
-    student_id BIGINT NOT NULL,
-    company_id BIGINT NOT NULL,
-
-    status VARCHAR(30) DEFAULT 'Applied',
-
-    applied_at TIMESTAMPTZ DEFAULT NOW(),
-
-    CONSTRAINT fk_student
-        FOREIGN KEY(student_id)
+    student_id INT NOT NULL
         REFERENCES students(id)
         ON DELETE CASCADE,
 
-    CONSTRAINT fk_company
-        FOREIGN KEY(company_id)
-        REFERENCES companies(id)
-        ON DELETE CASCADE
+    drive_id INT NOT NULL
+        REFERENCES drives(drive_id)
+        ON DELETE CASCADE,
+
+    current_round INT DEFAULT 0
+        CHECK (current_round >= 0),
+
+    status VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CHECK (
+            status IN (
+                'pending',
+                'approved',
+                'rejected',
+                'selected',
+                'not_selected'
+            )
+        ),
+
+    applied_at TIMESTAMPTZ DEFAULT NOW(),
+
+    UNIQUE (student_id, drive_id)
 );

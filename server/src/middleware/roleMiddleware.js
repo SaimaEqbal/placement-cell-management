@@ -37,3 +37,13 @@ export const requireAdminTPC = (req, res, next) => {
 
   next();
 };
+
+export const requireAdminTPCSPC = (req, res, next) => {
+  if (req.user.role !== "admin" && req.user.role !== "tpc" && req.user.role !== "spc") {
+    return res.status(403).json({
+      message: "Admin , TPC or SPC access required"
+    });
+  }
+
+  next();
+};

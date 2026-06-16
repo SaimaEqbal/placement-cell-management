@@ -1,19 +1,32 @@
 import express from "express";
+import { auth } from "../middleware/authMiddleware.js";
 
 import {
-  getApplications,
-  createApplication,
-  getApplicationById,
-  updateApplicationStatus,
-  deleteApplication
+  applyForDrive,
+  withdrawApplication,
+  getMyApplications
 } from "../controllers/applicationController.js";
 
+import { validateApplyForDrive } from "../middleware/applicationMiddleware.js";
 const router = express.Router();
 
-router.get("/", getApplications);
-router.get("/:id",getApplicationById);
-router.post("/", createApplication);
-router.put("/:id/status",updateApplicationStatus);
-router.delete("/:id",deleteApplication);
+router.post(
+  "/apply/:driveId",
+  auth,
+  validateApplyForDrive,
+  applyForDrive
+);
+
+router.delete(
+  "/:applicationId",
+  auth,
+  withdrawApplication
+);
+
+router.get(
+  "/student/:studentId",
+  auth,
+  getMyApplications
+);
 
 export default router;

@@ -4,6 +4,8 @@ import studentRouter from "./studentRoutes.js"
 import spcRouter from "./spcRoutes.js";
 import tpcRouter from "./tpcRoutes.js";
 import companyRouter from "./companyRoutes.js";
+import driveRouter from "./driveRoutes.js";
+import applicationRouter from "./applicationRoutes.js";
 
 const router = express.Router();
 
@@ -12,5 +14,7 @@ router.use('/students', studentRouter)
 router.use('/spc',spcRouter);
 router.use('/tpc',tpcRouter);
 router.use('/companies',companyRouter);
+router.use('/drive',driveRouter);
+router.use('/application',applicationRouter);
 
 export default router;
