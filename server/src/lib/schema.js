@@ -163,3 +163,136 @@ export const updateCompanySchema = z.object({
     .max(15, "Phone number cannot exceed 15 digits")
     .optional(),
 });
+
+export const createDriveSchema = z.object({
+  company_id: z
+    .number({
+      required_error: "Company ID is required",
+    })
+    .int()
+    .positive(),
+
+  job_role: z
+    .string()
+    .min(2, "Job role is required").optional(),
+
+  job_description: z
+    .string()
+    .min(10, "Job description is required").optional(),
+
+  package_ctc: z
+    .number({
+      required_error: "Package CTC is required",
+    })
+    .positive().optional(),
+
+  employment_type: z.enum([
+    "FTE",
+    "Internship",
+    "Internship + PPO",
+  ]),
+
+  drive_date: z.string(),
+
+  application_deadline: z.string(),
+
+  minimum_cgpa: z
+    .number()
+    .min(0)
+    .max(10),
+
+  allowed_branches: z
+    .array(z.string())
+    .min(1, "At least one branch is required"),
+
+  max_active_backlogs: z
+    .number()
+    .int()
+    .min(0).optional(),
+
+  max_passive_backlogs: z
+    .number()
+    .int()
+    .min(0).optional(),
+
+  number_of_rounds: z
+    .number()
+    .int()
+    .positive().optional(),
+});
+
+export const updateDriveSchema = z
+  .object({
+    company_id: z.number().int().positive().optional(),
+
+    job_role: z.string().min(2).optional(),
+
+    job_description: z.string().min(10).optional(),
+
+    package_ctc: z.number().positive().optional(),
+
+    employment_type: z
+      .enum([
+        "FTE",
+        "Internship",
+        "Internship + PPO",
+      ])
+      .optional(),
+
+    drive_date: z.string().optional(),
+
+    application_deadline: z.string().optional(),
+
+    minimum_cgpa: z
+      .number()
+      .min(0)
+      .max(10)
+      .optional(),
+
+    allowed_branches: z
+      .array(z.string())
+      .min(1)
+      .optional(),
+
+    max_active_backlogs: z
+      .number()
+      .int()
+      .min(0)
+      .optional(),
+
+    max_passive_backlogs: z
+      .number()
+      .int()
+      .min(0)
+      .optional(),
+
+    number_of_rounds: z
+      .number()
+      .int()
+      .positive()
+      .optional(),
+
+    status: z
+      .enum([
+        "upcoming",
+        "ongoing",
+        "completed",
+        "cancelled",
+      ])
+      .optional(),
+  })
+  .strict();
+
+export const applyForDriveSchema = z.object({
+  student_id: z
+    .number()
+    .int()
+    .positive(),
+});
+
+export const updateStudentRoundSchema = z.object({
+  current_round: z
+    .number()
+    .int()
+    .min(0),
+});

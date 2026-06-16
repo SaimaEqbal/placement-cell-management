@@ -1,147 +1,114 @@
 import pool from "../config/db.js";
 
-export const getApplications = async (req, res) => {
+export const applyForDrive = async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT
-        a.id,
-        a.student_id,
-        a.company_id,
-        a.status,
-        a.applied_at,
-        s.name AS student_name,
-        c.name AS company_name
-      FROM applications a
-      JOIN students s ON a.student_id = s.id
-      JOIN companies c ON a.company_id = c.id
-      ORDER BY a.id
-    `);
+    const { driveId } = req.params;
+    const { student_id } = req.body;
 
-    res.status(200).json(result.rows);
+    const existing = await pool.query(
+      `SELECT *
+       FROM applications
+       WHERE student_id = $1
+       AND drive_id = $2`,
+      [student_id, driveId]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.status(400).json({
+        message: "Already applied",
+      });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO applications (
+          student_id,
+          drive_id
+       )
+       VALUES ($1, $2)
+       RETURNING *`,
+      [student_id, driveId]
+    );
+
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to apply",
+    });
+  }
+};
+
+export const withdrawApplication = async (
+  req,
+  res
+) => {
+  try {
+    const { applicationId } = req.params;
+
+    const applicationResult = await pool.query(
+      `SELECT
+          a.application_id,
+          d.application_deadline
+       FROM applications a
+       JOIN drives d
+       ON a.drive_id = d.drive_id
+       WHERE a.application_id = $1`,
+      [applicationId]
+    );
+
+    if (applicationResult.rows.length === 0) {
+      return res.status(404).json({
+        message: "Application not found",
+      });
+    }
+
+    const deadline =
+      applicationResult.rows[0]
+        .application_deadline;
+
+    if (new Date() > new Date(deadline)) {
+      return res.status(400).json({
+        message:
+          "Application deadline has passed. Withdrawal is not allowed.",
+      });
+    }
+
+    await pool.query(
+      `DELETE FROM applications
+       WHERE application_id = $1`,
+      [applicationId]
+    );
+
+    return res.status(200).json({
+      message: "Application withdrawn successfully",
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({
+
+    return res.status(500).json({
+      message: "Failed to withdraw application",
+    });
+  }
+};
+
+export const getMyApplications = async (
+  req,
+  res
+) => {
+  try {
+    const { studentId } = req.params;
+
+    const result = await pool.query(
+      `SELECT *
+       FROM applications
+       WHERE student_id = $1
+       ORDER BY applied_at DESC`,
+      [studentId]
+    );
+
+    return res.status(200).json(result.rows);
+  } catch {
+    return res.status(500).json({
       message: "Failed to fetch applications",
-    });
-  }
-};
-
-export const getApplicationById = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const result = await pool.query(
-      `
-      SELECT
-        a.id,
-        a.student_id,
-        a.company_id,
-        a.status,
-        a.applied_at,
-        s.name AS student_name,
-        c.name AS company_name
-      FROM applications a
-      JOIN students s ON a.student_id = s.id
-      JOIN companies c ON a.company_id = c.id
-      WHERE a.id = $1
-      `,
-      [id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        message: "Application not found",
-      });
-    }
-
-    res.status(200).json(result.rows[0]);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: "Failed to fetch application",
-    });
-  }
-};
-
-export const createApplication = async (req, res) => {
-  try {
-    const { student_id, company_id } = req.body;
-
-    const result = await pool.query(
-      `
-      INSERT INTO applications
-      (student_id, company_id)
-      VALUES ($1, $2)
-      RETURNING *
-      `,
-      [student_id, company_id]
-    );
-
-    res.status(201).json(result.rows[0]);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: "Failed to create application",
-    });
-  }
-};
-
-export const updateApplicationStatus = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    const result = await pool.query(
-      `
-      UPDATE applications
-      SET status = $1
-      WHERE id = $2
-      RETURNING *
-      `,
-      [status, id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        message: "Application not found",
-      });
-    }
-
-    res.status(200).json(result.rows[0]);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: "Failed to update application",
-    });
-  }
-};
-
-export const deleteApplication = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const result = await pool.query(
-      `
-      DELETE FROM applications
-      WHERE id = $1
-      RETURNING *
-      `,
-      [id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        message: "Application not found",
-      });
-    }
-
-    res.status(200).json({
-      message: "Application deleted successfully",
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: "Failed to delete application",
     });
   }
 };
