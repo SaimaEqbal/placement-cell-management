@@ -1,0 +1,113 @@
+/*
+ * auth-status.css
+ * ---------------------------------------------------------------------------
+ * NEW FILE - small centered status cards for the secondary auth pages that
+ * the original mock didn't have yet: /verify-email, /forgot-password,
+ * /reset-password. Deliberately reuses the same green page background and
+ * card-on-white-card language as login.css instead of inventing a new look.
+ */
+
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--green);
+  padding: 32px;
+}
+
+.auth-card {
+  width: min(100%, 440px);
+  background: #fff;
+  border-radius: 20px;
+  padding: 34px;
+  box-shadow: 0 24px 70px #0d536c55;
+  text-align: center;
+}
+
+.auth-card .brand {
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.auth-card .brand span {
+  opacity: 0.78;
+}
+
+.auth-card h2 {
+  font-size: 24px;
+  letter-spacing: -0.03em;
+  margin: 6px 0;
+}
+
+.auth-card p.muted {
+  margin-bottom: 22px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.auth-card form {
+  text-align: left;
+}
+
+.auth-card label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #394843;
+  display: block;
+  margin-bottom: 18px;
+}
+
+.auth-card input {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px 13px;
+  margin-top: 7px;
+  outline: none;
+  color: #17201e;
+}
+
+.auth-card input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px #07784224;
+}
+
+/* Status icon shown above the heading - success/error/pending variants. */
+.auth-status-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 18px;
+}
+
+.auth-status-icon.success {
+  background: #e1f2eb;
+  color: var(--green);
+}
+
+.auth-status-icon.error {
+  background: #fbe8e6;
+  color: var(--red);
+}
+
+.auth-status-icon.pending {
+  background: #fff1dd;
+  color: var(--amber);
+}
+
+.auth-card .back-link {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+@media (max-width: 900px) {
+  .auth-page {
+    padding: 22px;
+  }
+}

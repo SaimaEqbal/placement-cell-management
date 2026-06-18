@@ -1,0 +1,157 @@
+/*
+ * data-table.css
+ * ---------------------------------------------------------------------------
+ * The searchable/paginated table look shared by every listing screen: the
+ * SPC/TPC verification queues, the SPC/Admin student rosters, and the Admin
+ * companies/drives lists.
+ *
+ * .queue-panel extends the plain .panel card (background/border/radius/
+ * spacing) defined in dashboard.css with its own padding/overflow - import
+ * dashboard.css alongside this file wherever a table uses .queue-panel.
+ */
+
+.queue-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.queue-head {
+  padding: 22px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.queue-head h2 {
+  font-size: 18px;
+  margin: 8px 0 3px;
+}
+
+.queue-head p {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.queue-head .secondary,
+.table-tools .secondary {
+  font-size: 9px;
+  padding: 8px 11px;
+}
+
+.table-tools {
+  padding: 12px 24px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 8px;
+}
+
+.searchbox {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  flex: 1;
+  color: #8c9995;
+}
+
+.searchbox input {
+  border: 0;
+  outline: 0;
+  width: 100%;
+  font-size: 10px;
+}
+
+.data-row {
+  display: grid;
+  grid-template-columns: 1.7fr 1.2fr 0.6fr 1fr 0.6fr;
+  align-items: center;
+  min-height: 60px;
+  padding: 0 24px;
+  border-top: 1px solid #edf0ee;
+  font-size: 10px;
+}
+
+.data-head {
+  min-height: 35px;
+  background: #f7f9f7;
+  color: #7f8c88;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.student-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.student-cell i {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: #e1eee9;
+  color: var(--green);
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.student-cell b,
+.student-cell small {
+  display: block;
+}
+
+.student-cell small {
+  color: var(--muted);
+  font-size: 8px;
+  margin-top: 3px;
+}
+
+.row-action {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 9px;
+  color: var(--green);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 24px;
+  border-top: 1px solid var(--line);
+  font-size: 8px;
+  color: var(--muted);
+}
+
+.pagination div {
+  display: flex;
+  gap: 3px;
+}
+
+.pagination button {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 5px;
+  width: 25px;
+  height: 25px;
+  font-size: 8px;
+}
+
+.pagination button.active {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+}
