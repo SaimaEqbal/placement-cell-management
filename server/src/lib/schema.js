@@ -16,21 +16,21 @@ export const createStudentSchema = z.object({
 
   date_of_birth: z.coerce.date(),
 
-  active_backlogs: z.number().int().min(0),
-  passive_backlogs: z.number().int().min(0),
+  active_backlogs: z.number().int().min(0).optional(),
+  passive_backlogs: z.number().int().min(0).optional(),
 
-  resume_url: z.string().url(),
+  resume_url: z.string(),
 
-  tenth_marksheet_url: z.string().url(),
-  twelfth_marksheet_url: z.string().url(),
-  last_sem_marksheet_url: z.string().url(),
+  tenth_marksheet_url: z.string(),
+  twelfth_marksheet_url: z.string(),
+  last_sem_marksheet_url: z.string(),
 
   placement_status: z.enum([
     "unplaced",
     "shortlisted",
     "placed",
     "rejected"
-  ])
+  ]).optional()
 });
 
 export const updateStudentSchema = z.object({
@@ -52,11 +52,11 @@ export const updateStudentSchema = z.object({
   active_backlogs: z.number().int().min(0).optional(),
   passive_backlogs: z.number().int().min(0).optional(),
 
-  resume_url: z.string().url().optional(),
+  resume_url: z.string().optional(),
 
-  tenth_marksheet_url: z.string().url().optional(),
-  twelfth_marksheet_url: z.string().url().optional(),
-  last_sem_marksheet_url: z.string().url().optional(),
+  tenth_marksheet_url: z.string().optional(),
+  twelfth_marksheet_url: z.string().optional(),
+  last_sem_marksheet_url: z.string().optional(),
 
   placement_status: z.enum([
     "unplaced",
@@ -67,6 +67,10 @@ export const updateStudentSchema = z.object({
 });
 
 export const createTPCSchema = z.object({
+  user_id: z
+    .string()
+    .uuid("user_id must be a valid UUID"),
+
   name: z
     .string()
     .min(2, "Name must be at least 2 characters"),

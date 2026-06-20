@@ -1,3 +1,11 @@
+// CHANGE: Added missing imports for jwt and pool.
+// PROBLEM: jwt and pool were used in auth() but never imported, causing
+//          ReferenceError: jwt is not defined on every call → always 401.
+// BEFORE:  (no imports)
+// AFTER:   imports added below.
+import jwt from "jsonwebtoken";
+import pool from "../config/db.js";
+
 export const auth = async (req, res, next) => {
   const token =
     req.headers.authorization?.split(" ")[1];

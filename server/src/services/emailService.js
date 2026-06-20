@@ -36,9 +36,9 @@ export const sendVerificationEmail = async (
 
   const data = await response.json();
 
-  // ADD THESE LOGS
-  console.log("Brevo Status:", response.status);
-  console.log("Brevo Response:", data);
+  // // ADD THESE LOGS
+  // console.log("Brevo Status:", response.status);
+  // console.log("Brevo Response:", data);
 
   if (!response.ok) {
     throw new Error(
