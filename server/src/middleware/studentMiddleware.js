@@ -6,6 +6,7 @@ export const validateCreateStudent = (req, res, next) => {
     req.body = createStudentSchema.parse(req.body);
     next();
   } catch (err) {
+    console.log(err);
     return res.status(400).json({
       success: false,
       errors: err.issues

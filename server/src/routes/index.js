@@ -6,6 +6,7 @@ import tpcRouter from "./tpcRoutes.js";
 import companyRouter from "./companyRoutes.js";
 import driveRouter from "./driveRoutes.js";
 import applicationRouter from "./applicationRoutes.js";
+import invitationRouter from "./invitationRoutes.js";
 
 const router = express.Router();
 
@@ -16,5 +17,6 @@ router.use('/tpc',tpcRouter);
 router.use('/companies',companyRouter);
 router.use('/drive',driveRouter);
 router.use('/application',applicationRouter);
+router.use('/invite',invitationRouter);
 
 export default router;

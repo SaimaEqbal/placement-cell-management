@@ -266,7 +266,9 @@
 import pool from "../config/db.js";
 
 export const createStudent = async (req, res) => {
+
   try {
+
     const {
       roll_no,
       name,
@@ -299,6 +301,7 @@ export const createStudent = async (req, res) => {
     // BEFORE:  INSERT INTO students (roll_no, ..., placement_status) with no user_id.
     // AFTER:   user_id = req.user.userId is inserted (auth middleware now runs
     //          on this route, so req.user is guaranteed to be present).
+
     const userId = req.user.userId;
 
     const result = await pool.query(
@@ -350,11 +353,9 @@ export const createStudent = async (req, res) => {
         userId
       ]
     );
-
     return res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error(error);
-
+    console.log(error);
     return res.status(500).json({
       message: "Failed to create student"
     });
