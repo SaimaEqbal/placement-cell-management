@@ -67,6 +67,10 @@ export const updateStudentSchema = z.object({
 });
 
 export const createTPCSchema = z.object({
+  user_id: z
+    .string()
+    .uuid("user_id must be a valid UUID"),
+
   name: z
     .string()
     .min(2, "Name must be at least 2 characters"),

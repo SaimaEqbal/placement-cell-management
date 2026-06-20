@@ -316,12 +316,6 @@ export const signup = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // if (!email?.endsWith("@st.jmi.ac.in")) {
-    //   return res.status(400).json({
-    //     message: "Use your college email",
-    //   });
-    // }
-
     const existingUser = await pool.query(
       "SELECT id FROM users WHERE email = $1",
       [email]
