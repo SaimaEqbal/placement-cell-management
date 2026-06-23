@@ -40,7 +40,7 @@ export interface StudentRecord {
   reviewed_at: string | null;
   /**
    * Server-computed profile-completion flag. Backed by a Postgres STORED
-   * GENERATED column (server/src/migrations/010_add_profile_complete.sql) -
+   * GENERATED column (server/src/migrations/012_add_profile_complete.sql) -
    * TRUE only when every Complete Profile field is filled. Read-only: it is
    * never sent in create/update payloads. Optional here because rows created
    * before that migration ran will not include it.

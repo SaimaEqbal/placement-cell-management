@@ -270,3 +270,50 @@
   color:#5c6965;
   cursor:default;
 }
+
+/* Password show/hide toggle fix (applies app-wide).
+   The live .input-icon rules are in this file (line ~6); styles/base.css is a
+   parallel copy that is never imported. Earlier the toggle <button> had no
+   absolute positioning here, so it rendered as a stray empty box BELOW the
+   field, and the browser's native password-reveal eye (Edge/Windows) overlapped
+   the custom one. Fix: position the button over the input's right edge, keep
+   the icon static inside it (overriding the absolute `.input-icon svg` rule
+   above so there is a single, correctly-placed eye), hide the native reveal,
+   and pad the input so the masked dots clear the icon. */
+.input-icon button{
+  position:absolute;
+  top:50%;
+  right:8px;
+  transform:translateY(-50%);
+  display:grid;
+  place-items:center;
+  padding:4px;
+  border:0;
+  background:transparent;
+  color:#89958f;
+  cursor:pointer;
+}
+
+.input-icon button svg{
+  position:static;
+  top:auto;
+  right:auto;
+  color:inherit;
+}
+
+div.input-icon input{
+  padding-right:42px;
+}
+
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear{
+  display:none;
+}
+
+/* Global type scale: nudge every font up ~5%, proportionally. The design is
+   px-based, so a small zoom is the cleanest way to enlarge all text in
+   proportion to its existing size (an 8px label and a 30px heading both grow
+   by the same factor). */
+body{
+  zoom:1.05;
+}

@@ -65,11 +65,11 @@ export default function LoginPage() {
               <ShieldCheck size={15} /> Student placement portal
             </div>
             <h1>
-              University Placement Cell
+              Placeholder Text
               <br />
-              <em>Jamia Millia Islamia</em>
+              <em>Placeholder Text</em>
             </h1>
-            <p>Student portal for placement profile submission and document updates.</p>
+            <p>Placeholder Text</p>
           </div>
           <p className="hero-foot">Jamia Millia Islamia · New Delhi</p>
         </section>

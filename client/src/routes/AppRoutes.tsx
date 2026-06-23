@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 
 import LoginPage from "../pages/auth/LoginPage";
 import RegistrationPage from "../pages/auth/RegistrationPage";
+import InviteRegisterPage from "../pages/auth/InviteRegisterPage";
 import VerifyEmailPage from "../pages/auth/VerifyEmailPage";
 import ForgotPasswordPage from "../pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "../pages/auth/ResetPasswordPage";
@@ -26,7 +27,9 @@ import TpcVerificationQueuePage from "../pages/tpc/TpcVerificationQueuePage";
 import AdminDashboard from "../pages/admin/AdminDashboard";
 import CompaniesPage from "../pages/admin/CompaniesPage";
 import DrivesPage from "../pages/admin/DrivesPage";
+import DriveApplicantsPage from "../pages/admin/DriveApplicantsPage";
 import AdminStudentsPage from "../pages/admin/AdminStudentsPage";
+import InvitationsPage from "../pages/admin/InvitationsPage";
 
 import { homePathForRole, paths } from "./paths";
 import ProtectedRoute from "./ProtectedRoute";
@@ -58,6 +61,10 @@ export default function AppRoutes() {
           )
         }
       />
+      {/* Invite-acceptance link (public): an invited TPC/Admin/SPC self-registers.
+          Kept distinct from /register (student signup) and outside ProtectedRoute
+          since the invitee is logged out. */}
+      <Route path={paths.inviteRegister} element={<InviteRegisterPage />} />
       <Route path={paths.verifyEmail} element={<VerifyEmailPage />} />
       <Route path={paths.forgotPassword} element={<ForgotPasswordPage />} />
       <Route path={paths.resetPassword} element={<ResetPasswordPage />} />
@@ -99,6 +106,16 @@ export default function AppRoutes() {
       <Route element={<ProtectedRoute allowedRoles={["tpc"]} />}>
         <Route element={<AppShellLayout />}>
           <Route path={paths.tpc} element={<TpcDashboard />} />
+          {/* TPC reuses the same company/drive/student pages as Admin - the
+              backend authorizes TPC for all of them (requireAdminTPC /
+              requireAdminTPCSPC). */}
+          <Route path={paths.tpcCompanies} element={<CompaniesPage />} />
+          <Route path={paths.tpcDrives} element={<DrivesPage />} />
+          <Route
+            path={`${paths.tpcDrives}/:driveId`}
+            element={<DriveApplicantsPage />}
+          />
+          <Route path={paths.tpcStudents} element={<AdminStudentsPage />} />
           <Route
             path={paths.tpcVerification}
             element={<TpcVerificationQueuePage />}
@@ -116,7 +133,12 @@ export default function AppRoutes() {
           <Route path={paths.admin} element={<AdminDashboard />} />
           <Route path={paths.adminCompanies} element={<CompaniesPage />} />
           <Route path={paths.adminDrives} element={<DrivesPage />} />
+          <Route
+            path={`${paths.adminDrives}/:driveId`}
+            element={<DriveApplicantsPage />}
+          />
           <Route path={paths.adminStudents} element={<AdminStudentsPage />} />
+          <Route path={paths.adminInvitations} element={<InvitationsPage />} />
         </Route>
       </Route>
 

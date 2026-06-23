@@ -9,6 +9,7 @@ import {
   useDeleteCompany,
   useUpdateCompany,
 } from "../../hooks/useCompanies";
+import type { ApiError } from "../../api/apiError";
 import type { CompanyRecord, CreateCompanyPayload } from "../../services/companyService";
 
 import "../../styles/dashboard.css";
@@ -22,6 +23,19 @@ const EMPTY_FORM: CreateCompanyPayload = {
   hr_email: "",
   hr_phone: "",
 };
+
+/**
+ * Purpose: flatten an ApiError's per-field validation errors (from the backend's
+ * Zod schema) into a single readable line, so the form shows "industry: Industry
+ * is required" instead of a generic "Request failed (400)".
+ */
+function fieldErrorText(error: ApiError): string | undefined {
+  if (!error.fieldErrors) return undefined;
+  const msgs = Object.entries(error.fieldErrors).flatMap(([field, list]) =>
+    list.map((m) => `${field}: ${m}`),
+  );
+  return msgs.length ? msgs.join(" · ") : undefined;
+}
 
 /**
  * Purpose: /Admin/companies - UPC/Admin's company management CRUD (Add,
@@ -38,15 +52,18 @@ export default function CompaniesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<CreateCompanyPayload>(EMPTY_FORM);
+  const [formError, setFormError] = useState<string>();
 
   function openCreateForm() {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setFormError(undefined);
     setShowForm(true);
   }
 
   function openEditForm(company: CompanyRecord) {
     setEditingId(company.company_id);
+    setFormError(undefined);
     setForm({
       company_name: company.company_name,
       industry: company.industry ?? "",
@@ -60,15 +77,38 @@ export default function CompaniesPage() {
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!form.company_name.trim()) return;
+
+    const company_name = form.company_name.trim();
+    const industry = form.industry.trim();
+    const description = form.description.trim();
+
+    // Mirror the backend's createCompanySchema so the user gets an inline message
+    // instead of a round-trip 400.
+    if (company_name.length < 2)
+      return setFormError("Company name must be at least 2 characters.");
+    if (industry.length < 2) return setFormError("Industry is required.");
+    if (description.length < 10)
+      return setFormError("Description must be at least 10 characters.");
+    if (form.hr_phone?.trim() && !/^\d{10,15}$/.test(form.hr_phone.trim()))
+      return setFormError("HR phone must be 10-15 digits (or leave it blank).");
+
+    setFormError(undefined);
+
+    // Omit optional HR fields when blank: the backend's Zod schema treats an
+    // empty string as an invalid value (fails min-length / email), not as
+    // "absent". Sending "" for an unfilled HR field is what was causing the 400.
+    const payload: CreateCompanyPayload = { company_name, industry, description };
+    if (form.hr_name?.trim()) payload.hr_name = form.hr_name.trim();
+    if (form.hr_email?.trim()) payload.hr_email = form.hr_email.trim();
+    if (form.hr_phone?.trim()) payload.hr_phone = form.hr_phone.trim();
 
     if (editingId !== null) {
       updateMutation.mutate(
-        { id: editingId, payload: form },
+        { id: editingId, payload },
         { onSuccess: () => setShowForm(false) },
       );
     } else {
-      createMutation.mutate(form, { onSuccess: () => setShowForm(false) });
+      createMutation.mutate(payload, { onSuccess: () => setShowForm(false) });
     }
   }
 
@@ -135,7 +175,12 @@ export default function CompaniesPage() {
                     />
                   </label>
                 </div>
-                {mutation.isError && <span className="field-error">{mutation.error.message}</span>}
+                {formError && <span className="field-error">{formError}</span>}
+                {mutation.isError && (
+                  <span className="field-error">
+                    {fieldErrorText(mutation.error) ?? mutation.error.message}
+                  </span>
+                )}
                 <div className="form-actions">
                   <p />
                   <button className="primary" type="submit" disabled={mutation.isPending}>

@@ -318,6 +318,23 @@
   gap: 5px;
 }
 
+/* --- Read-only/locked field hint (e.g. the locked email on Complete Profile) - */
+.field-hint {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+/* Locked inputs get a subtly greyed background so it's clear they aren't meant
+   to be re-typed. */
+.form-grid input[readonly] {
+  background: #f3f5f3;
+  color: #5c6965;
+  cursor: default;
+}
+
 @media (max-width: 900px) {
   .register-wrap {
     width: auto;

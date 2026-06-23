@@ -15,7 +15,7 @@ import { SectionTitle } from "../../components/ui";
 import Topbar from "../../components/Topbar";
 import { useAuth } from "../../context/AuthContext";
 import { useCreateProfile, useProfile, useUpdateProfile } from "../../hooks/useProfile";
-import { readRegistrationDraft } from "../../lib/registrationDraft";
+import { capitalize, toLowerTrim, toTitleCase, toUpperTrim } from "../../lib/format";
 import { DEPARTMENTS } from "../../lib/validation";
 import { paths } from "../../routes/paths";
 import type { CreateStudentPayload } from "../../services/studentService";
@@ -51,8 +51,6 @@ export default function CompleteProfilePage() {
   const createMutation = useCreateProfile();
   const updateMutation = useUpdateProfile(profile?.id);
 
-  const draft = readRegistrationDraft();
-
   const [name, setName] = useState("");
   const [rollNo, setRollNo] = useState("");
   const [email, setEmail] = useState("");
@@ -71,26 +69,16 @@ export default function CompleteProfilePage() {
   const [backlogs, setBacklogs] = useState<BacklogRow[]>([]);
   const [formError, setFormError] = useState<string | undefined>();
 
-  // Identity fields (name, roll number, institutional email, department) are
-  // already collected at registration. When a value is available - from an
-  // existing profile or the registration draft - lock that field so it is
-  // shown for confirmation but not redundantly re-entered here. If no value is
-  // available (e.g. an old draft or a different browser), the field stays
-  // editable so the student is never blocked from saving.
-  const identityLocked = {
-    name: Boolean(profile?.name || draft?.fullName),
-    rollNo: Boolean(profile?.roll_no || draft?.rollNumber),
-    // Email is always known once signed in (carried in the JWT), so it is
-    // locked for every authenticated student, draft or not.
-    email: Boolean(profile?.email || draft?.email || user?.email),
-    branch: Boolean(profile?.branch || draft?.department),
-  };
+  // The institutional email is the ONLY identity field the backend reliably
+  // knows post-login: signup persists just email+password, and the login token
+  // carries only { userId, role, email }. So email is the only field locked
+  // here (pre-filled from the existing profile or the JWT); everything else -
+  // name, roll number, department, etc. - is entered here and freely editable.
+  const emailLocked = Boolean(profile?.email || user?.email);
 
-  // Purpose: pre-fill the form once - from the existing profile if one was
-  // already created, otherwise from the registration draft saved at signup
-  // (see registrationDraft.ts). A plain effect + plain useState (not
-  // Context) is enough here: this is a single page's local form state, not
-  // shared across routes the way auth/multi-step-workflow state is.
+  // Purpose: pre-fill the form once from the existing profile (if any); on a
+  // first visit always seed email from the JWT so it isn't re-collected here.
+  // Plain useState is correct for single-page local form state.
   useEffect(() => {
     if (profile) {
       setName(profile.name ?? "");
@@ -100,7 +88,9 @@ export default function CompleteProfilePage() {
       setPhone(profile.phone ?? "");
       setCgpa(profile.cgpa ?? "");
       setGraduationYear(profile.graduation_year ? String(profile.graduation_year) : "");
-      setGender(profile.gender ?? "");
+      // capitalize() so legacy lowercase values ("male") match the Male/Female
+      // option values below.
+      setGender(profile.gender ? capitalize(profile.gender) : "");
       setRegion(profile.region ?? "");
       setReligion(profile.religion ?? "");
       setDateOfBirth(profile.date_of_birth ?? "");
@@ -108,17 +98,8 @@ export default function CompleteProfilePage() {
       setTenthUrl(profile.tenth_marksheet_url ?? "");
       setTwelfthUrl(profile.twelfth_marksheet_url ?? "");
       setLastSemUrl(profile.last_sem_marksheet_url ?? "");
-    } else if (draft) {
-      setName(draft.fullName);
-      setRollNo(draft.rollNumber);
-      // Carry the institutional email forward - from the registration draft if
-      // present, otherwise from the signed-in session (JWT) - so it isn't
-      // redundantly re-collected here.
-      setEmail(draft.email || user?.email || "");
-      setBranch(draft.department);
     } else if (user?.email) {
-      // Returning student with no draft (e.g. logged in fresh): the email is
-      // still known from the access token, so pre-fill it rather than asking again.
+      // First visit: email is already known from the JWT access token.
       setEmail(user.email);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -139,8 +120,20 @@ export default function CompleteProfilePage() {
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
-    if (!name.trim() || !rollNo.trim() || !email.trim() || !branch) {
-      setFormError("Name, roll number, email, and branch are required.");
+    // Per-field required check so the error names the EXACT missing field
+    // instead of lumping all four together (which made it impossible to tell
+    // which one React saw as empty).
+    const missing: string[] = [];
+    if (!name.trim()) missing.push("Full name");
+    if (!rollNo.trim()) missing.push("Roll number");
+    if (!email.trim()) missing.push("Institutional email");
+    if (!branch) missing.push("Department / branch");
+    if (missing.length > 0) {
+      setFormError(
+        missing.length === 1
+          ? `${missing[0]} is required.`
+          : `Required: ${missing.join(", ")}.`,
+      );
       return;
     }
     setFormError(undefined);
@@ -148,17 +141,22 @@ export default function CompleteProfilePage() {
     const activeBacklogs = backlogs.filter((row) => row.status === "active").length;
     const passiveBacklogs = backlogs.filter((row) => row.status === "cleared").length;
 
+    // Normalise free-text identity fields into a consistent stored format:
+    // name -> Title Case, roll number -> UPPERCASE, email -> lowercase,
+    // region/religion -> UPPERCASE. (gender is already a Male/Female select.)
+    // Applied here too - not just on blur - so the saved value is always
+    // normalised even if a field never lost focus.
     const payload: CreateStudentPayload = {
-      roll_no: rollNo.trim(),
-      name: name.trim(),
-      email: email.trim(),
+      roll_no: toUpperTrim(rollNo),
+      name: toTitleCase(name),
+      email: toLowerTrim(email),
       phone: phone.trim(),
       branch,
       graduation_year: Number(graduationYear) || new Date().getFullYear(),
       cgpa: Number(cgpa) || 0,
       gender,
-      region,
-      religion,
+      region: toUpperTrim(region),
+      religion: toUpperTrim(religion),
       date_of_birth: dateOfBirth,
       active_backlogs: activeBacklogs,
       passive_backlogs: passiveBacklogs,
@@ -196,7 +194,10 @@ export default function CompleteProfilePage() {
         subtitle="Add your academic details and documents for placement review."
       />
       <div className="dashboard-content">
-        <form onSubmit={handleSubmit} noValidate>
+        {/* autoComplete="off" disables browser autofill for the whole form so a
+            field can never be silently populated in the DOM without React state
+            (which produced a "looks filled but flagged required" mismatch). */}
+        <form onSubmit={handleSubmit} noValidate autoComplete="off">
           <section className="form-section">
             <SectionTitle
               icon={<User size={18} />}
@@ -206,41 +207,48 @@ export default function CompleteProfilePage() {
             <div className="form-grid">
               <label>
                 Full name
+                {/* onBlur prettifies to Title Case so the student sees the
+                    normalised value immediately, without fighting their typing. */}
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  readOnly={identityLocked.name}
+                  onBlur={() => setName((v) => toTitleCase(v))}
+                  autoComplete="off"
                 />
-                {identityLocked.name && (
-                  <span className="field-hint">From your registration</span>
-                )}
               </label>
               <label>
                 Roll number
+                {/* onBlur normalises to UPPERCASE. */}
                 <input
                   value={rollNo}
                   onChange={(e) => setRollNo(e.target.value)}
-                  readOnly={identityLocked.rollNo}
+                  onBlur={() => setRollNo((v) => toUpperTrim(v))}
+                  autoComplete="off"
                 />
-                {identityLocked.rollNo && (
-                  <span className="field-hint">From your registration</span>
-                )}
               </label>
               <label>
                 Institutional email
+                {/* Email is the only field known from the session, so it's the
+                    only one locked here. */}
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  readOnly={identityLocked.email}
+                  onBlur={() => setEmail((v) => toLowerTrim(v))}
+                  readOnly={emailLocked}
+                  autoComplete="off"
                 />
-                {identityLocked.email && (
-                  <span className="field-hint">From your registration</span>
+                {emailLocked && (
+                  <span className="field-hint">From your account - cannot be changed</span>
                 )}
               </label>
               <label>
                 Contact number
-                <input value={phone} onChange={(e) => setPhone(e.target.value)} />
+                <input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  autoComplete="off"
+                />
               </label>
               <label>
                 Date of birth
@@ -252,20 +260,32 @@ export default function CompleteProfilePage() {
               </label>
               <label>
                 Gender
+                {/* Binary Male/Female, stored capitalised. */}
                 <select value={gender} onChange={(e) => setGender(e.target.value)}>
                   <option value="">Select</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
                 </select>
               </label>
               <label>
                 Region
-                <input value={region} onChange={(e) => setRegion(e.target.value)} />
+                {/* onBlur normalises to UPPERCASE. */}
+                <input
+                  value={region}
+                  onChange={(e) => setRegion(e.target.value)}
+                  onBlur={() => setRegion((v) => toUpperTrim(v))}
+                  autoComplete="off"
+                />
               </label>
               <label>
                 Religion
-                <input value={religion} onChange={(e) => setReligion(e.target.value)} />
+                {/* onBlur normalises to UPPERCASE. */}
+                <input
+                  value={religion}
+                  onChange={(e) => setReligion(e.target.value)}
+                  onBlur={() => setReligion((v) => toUpperTrim(v))}
+                  autoComplete="off"
+                />
               </label>
             </div>
           </section>
@@ -279,23 +299,14 @@ export default function CompleteProfilePage() {
             <div className="form-grid">
               <label>
                 Department / branch
-                {identityLocked.branch ? (
-                  // Already chosen at registration - show read-only instead of
-                  // re-prompting via the department dropdown.
-                  <>
-                    <input value={branch} readOnly />
-                    <span className="field-hint">From your registration</span>
-                  </>
-                ) : (
-                  <select value={branch} onChange={(e) => setBranch(e.target.value)}>
-                    <option value="">Select department</option>
-                    {DEPARTMENTS.map((dept) => (
-                      <option key={dept} value={dept}>
-                        {dept}
-                      </option>
-                    ))}
-                  </select>
-                )}
+                <select value={branch} onChange={(e) => setBranch(e.target.value)}>
+                  <option value="">Select department</option>
+                  {DEPARTMENTS.map((dept) => (
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 Graduation year
@@ -366,19 +377,19 @@ export default function CompleteProfilePage() {
             <div className="form-grid">
               <label>
                 Resume URL
-                <input value={resumeUrl} onChange={(e) => setResumeUrl(e.target.value)} />
+                <input value={resumeUrl} onChange={(e) => setResumeUrl(e.target.value)} autoComplete="off" />
               </label>
               <label>
                 10th marksheet URL
-                <input value={tenthUrl} onChange={(e) => setTenthUrl(e.target.value)} />
+                <input value={tenthUrl} onChange={(e) => setTenthUrl(e.target.value)} autoComplete="off" />
               </label>
               <label>
                 12th marksheet URL
-                <input value={twelfthUrl} onChange={(e) => setTwelfthUrl(e.target.value)} />
+                <input value={twelfthUrl} onChange={(e) => setTwelfthUrl(e.target.value)} autoComplete="off" />
               </label>
               <label>
                 Latest semester marksheet URL
-                <input value={lastSemUrl} onChange={(e) => setLastSemUrl(e.target.value)} />
+                <input value={lastSemUrl} onChange={(e) => setLastSemUrl(e.target.value)} autoComplete="off" />
               </label>
             </div>
             <div className="upload-zone">

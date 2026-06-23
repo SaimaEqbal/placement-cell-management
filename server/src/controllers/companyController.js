@@ -64,7 +64,14 @@ export const getCompanies = async (req, res) => {
 
 export const getCompanyById = async (req, res) => {
   try {
-    const { companyId } = req.params;
+    // CHANGE: read req.params.id instead of req.params.companyId.
+    // PROBLEM: companyRoutes.js defines this route as "/:id", so
+    //          req.params.companyId was always undefined -> the SELECT below
+    //          matched 0 rows -> every company detail fetch returned
+    //          404 "Company not found".
+    // BEFORE:  const { companyId } = req.params;
+    // AFTER:   const { id: companyId } = req.params; // keep the local name, read the correct param
+    const { id: companyId } = req.params;
 
     const result = await pool.query(
       `SELECT *
@@ -89,7 +96,14 @@ export const getCompanyById = async (req, res) => {
 
 export const updateCompany = async (req, res) => {
   try {
-    const { companyId } = req.params;
+    // CHANGE: read req.params.id instead of req.params.companyId.
+    // PROBLEM: companyRoutes.js defines this route as "/:id", so
+    //          req.params.companyId was always undefined -> the UPDATE below
+    //          matched 0 rows -> every company edit returned
+    //          404 "Company not found".
+    // BEFORE:  const { companyId } = req.params;
+    // AFTER:   const { id: companyId } = req.params; // keep the local name, read the correct param
+    const { id: companyId } = req.params;
 
     const {
       company_name,
@@ -137,7 +151,14 @@ export const updateCompany = async (req, res) => {
 
 export const deleteCompany = async (req, res) => {
   try {
-    const { companyId } = req.params;
+    // CHANGE: read req.params.id instead of req.params.companyId.
+    // PROBLEM: companyRoutes.js defines this route as "/:id", so
+    //          req.params.companyId was always undefined -> the DELETE below
+    //          matched 0 rows -> every company delete returned
+    //          404 "Company not found".
+    // BEFORE:  const { companyId } = req.params;
+    // AFTER:   const { id: companyId } = req.params; // keep the local name, read the correct param
+    const { id: companyId } = req.params;
 
     const result = await pool.query(
       `DELETE FROM companies

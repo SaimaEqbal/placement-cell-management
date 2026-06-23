@@ -3,8 +3,9 @@ import { Search, UserCheck, Users } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
 import { Badge, EmptyState, ErrorState, LoadingState } from "../../components/ui";
-import { useCreateApplication } from "../../hooks/useApplications";
+import { useApplyForDrive } from "../../hooks/useApplications";
 import { useCompanies } from "../../hooks/useCompanies";
+import { useDrives } from "../../hooks/useDrives";
 import { useStudents } from "../../hooks/useStudents";
 import { formatCgpa, initialsFromName } from "../../lib/format";
 import { DEPARTMENTS } from "../../lib/validation";
@@ -18,21 +19,22 @@ import "../../styles/data-table.css";
  * creates a drive -> system filters eligible students -> UPC shortlists
  * students). Filtering (branch, minimum CGPA, no-active-backlogs) happens
  * client-side over the cached GET /students list, same approach as the
- * SPC/TPC roster pages. Shortlisting calls POST /applications
- * (useCreateApplication) - per applicationService.ts's STATUS note this
- * 404s until the backend mounts that router, surfaced here as an inline
- * per-row error rather than blocking the page.
+ * SPC/TPC roster pages. Shortlisting a student into the selected drive calls
+ * POST /application/apply/:driveId (useApplyForDrive) - the same endpoint a
+ * student uses to apply for themselves - surfaced here as an inline per-row
+ * error rather than blocking the page.
  */
 export default function AdminStudentsPage() {
   const { data: students, isLoading, isError, error, refetch } = useStudents();
   const { data: companies } = useCompanies();
-  const createApplication = useCreateApplication();
+  const { data: drives } = useDrives();
+  const applyForDrive = useApplyForDrive();
 
   const [search, setSearch] = useState("");
   const [branch, setBranch] = useState("");
   const [minCgpa, setMinCgpa] = useState("");
   const [noBacklogsOnly, setNoBacklogsOnly] = useState(false);
-  const [companyId, setCompanyId] = useState("");
+  const [driveId, setDriveId] = useState("");
   const [shortlistedId, setShortlistedId] = useState<number | null>(null);
 
   const filtered = useMemo(() => {
@@ -51,9 +53,9 @@ export default function AdminStudentsPage() {
   }, [students, search, branch, minCgpa, noBacklogsOnly]);
 
   function handleShortlist(studentId: number) {
-    if (!companyId) return;
+    if (!driveId) return;
     setShortlistedId(studentId);
-    createApplication.mutate({ studentId, companyId: Number(companyId) });
+    applyForDrive.mutate({ driveId: Number(driveId), studentId });
   }
 
   return (
@@ -106,13 +108,21 @@ export default function AdminStudentsPage() {
                 />
                 No active backlogs
               </label>
-              <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+              <select value={driveId} onChange={(e) => setDriveId(e.target.value)}>
                 <option value="">Select a drive to shortlist into...</option>
-                {companies?.map((company) => (
-                  <option key={company.company_id} value={company.company_id}>
-                    {company.company_name}
-                  </option>
-                ))}
+                {drives?.map((drive) => {
+                  const companyName = companies?.find(
+                    (c) => c.company_id === drive.company_id,
+                  )?.company_name;
+                  const label = drive.job_role
+                    ? `${drive.job_role}${companyName ? ` · ${companyName}` : ""}`
+                    : companyName ?? `Drive #${drive.drive_id}`;
+                  return (
+                    <option key={drive.drive_id} value={drive.drive_id}>
+                      {label}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -153,7 +163,7 @@ export default function AdminStudentsPage() {
                       <button
                         className="row-action"
                         type="button"
-                        disabled={!companyId || createApplication.isPending}
+                        disabled={!driveId || applyForDrive.isPending}
                         onClick={() => handleShortlist(s.id)}
                       >
                         <UserCheck size={14} /> Shortlist
@@ -163,9 +173,14 @@ export default function AdminStudentsPage() {
                 ))}
               </div>
             )}
-            {createApplication.isError && shortlistedId !== null && (
+            {applyForDrive.isError && shortlistedId !== null && (
               <p style={{ padding: "0 24px 16px", fontSize: 10, color: "var(--red)" }}>
-                Could not shortlist this student: {createApplication.error.message}
+                Could not shortlist this student: {applyForDrive.error.message}
+              </p>
+            )}
+            {applyForDrive.isSuccess && shortlistedId !== null && (
+              <p style={{ padding: "0 24px 16px", fontSize: 10, color: "var(--green)" }}>
+                Student shortlisted into the selected drive.
               </p>
             )}
           </section>

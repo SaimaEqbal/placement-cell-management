@@ -1,6 +1,3 @@
-// Purpose: small formatting helpers shared by multiple pages, kept in one
-// place instead of re-implemented per component.
-
 /** Purpose: turn a full name into up to 2 uppercase initials for avatar badges, e.g. "Jane Doe" -> "JD". */
 export function initialsFromName(name: string | null | undefined): string {
   if (!name) return "??";
@@ -34,4 +31,19 @@ export function formatCgpa(value: string | null | undefined): string {
 export function capitalize(value: string | null | undefined): string {
   if (!value) return "Unknown";
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/**Purpose: prettify a person's name into Title Case - the first letter of each space-separated word uppercased, the rest lowercased, and runs of whitespace collapsed. e.g. "  jOHN   DOE " -> "John Doe". Used to normalise the student's name field on the Complete Profile form.*/
+export function toTitleCase(value: string): string {
+  return value.trim().split(/\s+/).filter(Boolean).map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ");
+}
+
+/** Purpose: normalise a value to trimmed UPPERCASE (e.g. roll number, region, religion). */
+export function toUpperTrim(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+/** Purpose: normalise an email to trimmed lowercase, since email addresses are case-insensitive. */
+export function toLowerTrim(value: string): string {
+  return value.trim().toLowerCase();
 }

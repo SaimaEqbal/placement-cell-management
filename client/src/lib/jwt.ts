@@ -1,17 +1,9 @@
-// Purpose: decode (NOT verify) the payload of the JWT issued by POST
-// /auth/login (server/src/controllers/authController.js signs
-// { userId, role } with JWT_ACCESS_SECRET). This module only ever reads
-// claims so the UI can route/greet correctly; it must never be treated as an
-// authorization check - the server re-verifies the signature on every
-// protected request via server/src/middleware/authMiddleware.js, and that is
-// the actual security boundary.
+/** Purpose: decode the payload of the JWT issued by POST/auth/login (server/src/controllers/authController.js signs { userId, role } with JWT_ACCESS_SECRET). This module only ever reads claims so the UI can route/greet correctly; it must never be treated as an authorization check - the server re-verifies the signature on every protected request via server/src/middleware/authMiddleware.js, and that is the actual security boundary. */
 
 export interface DecodedAccessToken {
   userId: string;
   role: string;
-  /** Signed-in user's institutional email (added to the login token so pages need not re-ask for it). May be absent on older tokens issued before that change. */
   email?: string;
-  /** Standard JWT "expires at" claim, seconds since epoch. */
   exp?: number;
 }
 
@@ -21,15 +13,9 @@ export function decodeAccessToken(token: string): DecodedAccessToken | null {
     const payloadSegment = token.split(".")[1];
     if (!payloadSegment) return null;
 
-    // JWTs use base64url; atob() expects standard base64, so restore the
-    // characters base64url swaps out before decoding.
+    // JWTs use base64url; atob() expects standard base64, so restore the characters base64url swaps out before decoding.
     const base64 = payloadSegment.replace(/-/g, "+").replace(/_/g, "/");
-    const json = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((char) => "%" + char.charCodeAt(0).toString(16).padStart(2, "0"))
-        .join(""),
-    );
+    const json = decodeURIComponent(atob(base64).split("").map((char) => "%" + char.charCodeAt(0).toString(16).padStart(2, "0")).join(""),);
 
     const payload = JSON.parse(json) as Record<string, unknown>;
     if (typeof payload.userId !== "string" || typeof payload.role !== "string") {

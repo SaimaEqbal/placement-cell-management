@@ -1,51 +1,58 @@
 import { axiosInstance } from "../api/axiosInstance";
 
-/* Purpose: Axios calls for the placement-application workflow (server/src/controllers/applicationController.js). STATUS: TODO / not wired up on the backend yet. The controller and router (server/src/routes/applicationRoutes.js) both exist, but server/src/routes/index.js never mounts them under the shared /api router . Every call below currently 404s against the real backend. */
+/*
+ * Purpose: the student-facing side of the placement-application workflow
+ * (server/src/routes/applicationRoutes.js -> applicationController.js):
+ * applying to a drive, withdrawing, and listing a student's applications.
+ *
+ * REWRITE NOTE: this file previously pointed at a guessed "/applications"
+ * resource that the backend never exposed (every call 404'd) and modelled
+ * applications as attaching to a company_id. The real backend mounts these
+ * routes under /application and attaches every application to a drive_id, so
+ * the functions below match that contract. The TPC/Admin review actions
+ * (approve/reject/round/select) live in driveService.ts because the backend
+ * mounts them under /drive.
+ */
 
+/** Shape of a row from the `applications` table (server/src/migrations/003_create_applications.sql). */
 export interface ApplicationRecord {
-  id: number;
+  application_id: number;
   student_id: number;
-  company_id: number;
+  drive_id: number;
+  current_round: number;
   status: string;
   applied_at: string;
-  student_name: string;
-  company_name: string;
 }
 
-/** Purpose: GET /applications - list every application (Admin/TPC view). */
-export function getApplications() {
+/**
+ * Purpose: POST /application/apply/:driveId - apply a student to a drive.
+ * Used both by a student applying for themselves and by Admin/TPC
+ * shortlisting a student into a drive (the backend has a single apply route).
+ */
+export function applyForDrive(
+  driveId: number | string,
+  studentId: number,
+) {
   return axiosInstance
-    .get<ApplicationRecord[]>("/applications")
-    .then((res) => res.data);
-}
-
-/** Purpose: GET /applications/:id - fetch one application's detail. */
-export function getApplicationById(id: number | string) {
-  return axiosInstance
-    .get<ApplicationRecord>(`/applications/${id}`)
-    .then((res) => res.data);
-}
-
-/** Purpose: POST /applications - shortlist a student for a company/drive. */
-export function createApplication(studentId: number, companyId: number) {
-  return axiosInstance
-    .post<ApplicationRecord>("/applications", {
+    .post<ApplicationRecord>(`/application/apply/${driveId}`, {
       student_id: studentId,
-      company_id: companyId,
     })
     .then((res) => res.data);
 }
 
-/** Purpose: PUT /applications/:id/status - move an application through its workflow (e.g. Applied -> Shortlisted -> Selected/Rejected). */
-export function updateApplicationStatus(id: number | string, status: string) {
+/**
+ * Purpose: DELETE /application/:applicationId - withdraw an application.
+ * The backend only allows this before the drive's application_deadline.
+ */
+export function withdrawApplication(applicationId: number | string) {
   return axiosInstance
-    .put<ApplicationRecord>(`/applications/${id}/status`, { status })
+    .delete<{ message: string }>(`/application/${applicationId}`)
     .then((res) => res.data);
 }
 
-/** Purpose: DELETE /applications/:id - withdraw/remove an application. */
-export function deleteApplication(id: number | string) {
+/** Purpose: GET /application/student/:studentId - list a student's applications. */
+export function getStudentApplications(studentId: number | string) {
   return axiosInstance
-    .delete<{ message: string }>(`/applications/${id}`)
+    .get<ApplicationRecord[]>(`/application/student/${studentId}`)
     .then((res) => res.data);
 }

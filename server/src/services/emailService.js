@@ -8,7 +8,8 @@ export const sendVerificationEmail = async (
 ) => {
   const verificationUrl =
     `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
-
+    //Added Console log since email didnt reach student id
+    console.log(verificationUrl);
   const response = await fetch(
     "https://api.brevo.com/v3/smtp/email",
     {
@@ -55,7 +56,9 @@ export const sendPasswordResetEmail = async (
 ) => {
   const resetUrl =
     `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-
+      
+    //Added Console log since email didnt reach student id
+    console.log(resetUrl);
   const response = await fetch(
     "https://api.brevo.com/v3/smtp/email",
     {

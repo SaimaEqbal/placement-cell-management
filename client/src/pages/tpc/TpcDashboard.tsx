@@ -1,8 +1,16 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, CheckCircle2, ClipboardCheck, Users } from "lucide-react";
+import {
+  ArrowRight,
+  Building2,
+  CheckCircle2,
+  ClipboardCheck,
+  Megaphone,
+  Users,
+} from "lucide-react";
 
 import Topbar from "../../components/Topbar";
 import { ErrorState, LoadingState, StatCard } from "../../components/ui";
+import { useDrives } from "../../hooks/useDrives";
 import { useStudents } from "../../hooks/useStudents";
 import { paths } from "../../routes/paths";
 
@@ -15,6 +23,7 @@ import "../../styles/dashboard.css";
  */
 export default function TpcDashboard() {
   const { data: students, isLoading, isError, error, refetch } = useStudents();
+  const { data: drives } = useDrives();
 
   if (isLoading) {
     return (
@@ -61,10 +70,10 @@ export default function TpcDashboard() {
             tone="green"
           />
           <StatCard
-            label="Total students"
-            value={String(students.length)}
-            note="Across all departments"
-            icon={<Users />}
+            label="Active drives"
+            value={String(drives?.length ?? 0)}
+            note="Drives on record"
+            icon={<Megaphone />}
             tone="blue"
           />
         </div>
@@ -74,6 +83,15 @@ export default function TpcDashboard() {
             <h2>Quick links</h2>
           </div>
           <div className="quick-links">
+            <Link className="text-btn" to={paths.tpcCompanies}>
+              Manage companies <Building2 size={15} />
+            </Link>
+            <Link className="text-btn" to={paths.tpcDrives}>
+              Manage drives <Megaphone size={15} />
+            </Link>
+            <Link className="text-btn" to={paths.tpcStudents}>
+              Filter & shortlist students <Users size={15} />
+            </Link>
             <Link className="text-btn" to={paths.tpcVerification}>
               Go to verification queue <ArrowRight size={15} />
             </Link>

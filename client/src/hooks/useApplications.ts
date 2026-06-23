@@ -1,70 +1,54 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { ApiError } from "../api/apiError";
-import {
-  createApplication,
-  deleteApplication,
-  getApplications,
-  updateApplicationStatus,
-  type ApplicationRecord,
-} from "../services/applicationService";
+import { applyForDrive, getStudentApplications, withdrawApplication, type ApplicationRecord, } from "../services/applicationService";
 import { queryKeys } from "./queryKeys";
 
-// STATUS: TODO, mirrors applicationService.ts - the backend does not mount
-// /api/applications yet, so useApplications() resolves to a 404 ApiError
-// until it does. Pages should render that as an empty/"coming soon" state
-// instead of a scary error - see PlacementDrivesPage.
+// Purpose: TanStack Query wrappers over the student-facing applicationService.
+//
+// REWRITE NOTE: the old hooks targeted a non-existent "/applications" resource
+// and 404'd. These match the real /application routes - apply, withdraw, and
+// list a student's applications. (The Admin/TPC review actions live in
+// useDrives.ts, since the backend mounts them under /drive.)
 
-/** Purpose: GET /applications - list every application. retry:false because a 404 here means "not implemented yet", not a transient failure. */
-export function useApplications() {
+/** Purpose: GET /application/student/:studentId - a student's own applications. */
+export function useStudentApplications(studentId: number | string | undefined) {
   return useQuery<ApplicationRecord[], ApiError>({
-    queryKey: queryKeys.applications,
-    queryFn: getApplications,
-    retry: false,
+    queryKey: queryKeys.studentApplications(studentId ?? "unknown"),
+    queryFn: () => getStudentApplications(studentId as number | string),
+    enabled: studentId !== undefined,
   });
 }
 
-/** Purpose: POST /applications - shortlist a student for a company/drive. */
-export function useCreateApplication() {
+/** Purpose: POST /application/apply/:driveId - apply a student to a drive. Invalidates that student's applications and the drive's applicant list so both the student view and the TPC/Admin review view stay fresh.*/
+export function useApplyForDrive() {
   const queryClient = useQueryClient();
 
-  return useMutation<
-    ApplicationRecord,
-    ApiError,
-    { studentId: number; companyId: number }
-  >({
-    mutationFn: ({ studentId, companyId }) =>
-      createApplication(studentId, companyId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.applications });
+  return useMutation<ApplicationRecord,ApiError,{ driveId: number | string; studentId: number }>({
+    mutationFn: ({ driveId, studentId }) => applyForDrive(driveId, studentId),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.studentApplications(variables.studentId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.driveApplicants(variables.driveId),
+      });
     },
   });
 }
 
-/** Purpose: PUT /applications/:id/status - move an application through its workflow. */
-export function useUpdateApplicationStatus() {
-  const queryClient = useQueryClient();
-
-  return useMutation<
-    ApplicationRecord,
-    ApiError,
-    { id: number | string; status: string }
-  >({
-    mutationFn: ({ id, status }) => updateApplicationStatus(id, status),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.applications });
-    },
-  });
-}
-
-/** Purpose: DELETE /applications/:id - withdraw/remove an application. */
-export function useDeleteApplication() {
+/** Purpose: DELETE /application/:applicationId - withdraw an application (before the deadline). */
+export function useWithdrawApplication(studentId: number | string | undefined) {
   const queryClient = useQueryClient();
 
   return useMutation<{ message: string }, ApiError, number | string>({
-    mutationFn: deleteApplication,
+    mutationFn: withdrawApplication,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.applications });
+      if (studentId !== undefined) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.studentApplications(studentId),
+        });
+      }
     },
   });
 }

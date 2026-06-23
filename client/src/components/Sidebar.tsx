@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   LogOut,
   Megaphone,
+  UserPlus,
   Users,
 } from "lucide-react";
 
@@ -39,6 +40,9 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
   tpc: [
     { label: "Dashboard", to: paths.tpc, icon: LayoutDashboard },
+    { label: "Companies", to: paths.tpcCompanies, icon: Building2 },
+    { label: "Drives", to: paths.tpcDrives, icon: Megaphone },
+    { label: "Students", to: paths.tpcStudents, icon: Users },
     { label: "Verification queue", to: paths.tpcVerification, icon: ClipboardCheck },
   ],
   admin: [
@@ -46,6 +50,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { label: "Companies", to: paths.adminCompanies, icon: Building2 },
     { label: "Drives", to: paths.adminDrives, icon: Megaphone },
     { label: "Students", to: paths.adminStudents, icon: Users },
+    { label: "Invitations", to: paths.adminInvitations, icon: UserPlus },
   ],
 };
 

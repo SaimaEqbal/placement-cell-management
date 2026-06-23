@@ -235,6 +235,36 @@
   margin-top: 6px;
 }
 
+/* --- Login card footer links + message layout ----------------------------- */
+/* The two footer links (Reset password / Create profile) are the only direct
+   <a class="text-btn"> children of the card. They inherited the body font (too
+   large), sat left-aligned (flex defaults to flex-start), and carried the
+   default anchor underline. Center them, size them down, and drop the underline. */
+.login-card > .text-btn {
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  margin-top: 2px;
+}
+
+/* Center the email/verification messages (and the inline Resend button) so they
+   sit under the field rather than hugging the left edge. */
+.login-card .field-error {
+  text-align: center;
+}
+
+.login-card .field-error .text-btn {
+  justify-content: center;
+  font-size: 12px;
+}
+
+/* Give the Sign in button breathing room so the message text above it isn't
+   cramped against the button. */
+.login-card form .primary.wide {
+  margin-top: 12px;
+}
+
 @media (max-width: 900px) {
   .login-page {
     padding: 22px;
