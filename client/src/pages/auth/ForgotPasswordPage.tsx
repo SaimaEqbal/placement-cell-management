@@ -37,7 +37,7 @@ export default function ForgotPasswordPage() {
               <MailCheck size={26} />
             </div>
             <h2>Check your inbox</h2>
-            {/* The backend deliberately always returns the same message here, whether or not the email exist to avoid leaking which emails are registered - see authController.js forgotPassword(). */}
+            
             <p className="muted">{forgotMutation.data.message}</p>
           </>
         ) : (
@@ -51,18 +51,11 @@ export default function ForgotPasswordPage() {
             <form onSubmit={handleSubmit} noValidate>
               <label>
                 Email
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="you@example.com"
-                />
+                <input type="email" value={email} onChange={(event) => setEmail(event.target.value)}/>
                 {fieldError && <span className="field-error">{fieldError}</span>}
               </label>
 
-              {forgotMutation.isError && (
-                <span className="field-error">{forgotMutation.error.message}</span>
-              )}
+              {forgotMutation.isError && (<span className="field-error">{forgotMutation.error.message}</span>)}
 
               <button className="primary wide" type="submit" disabled={forgotMutation.isPending}>
                 {forgotMutation.isPending ? "Sending..." : "Send reset link"} <ArrowRight size={17} />

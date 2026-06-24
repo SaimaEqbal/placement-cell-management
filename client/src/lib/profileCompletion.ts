@@ -1,11 +1,6 @@
 import type { StudentRecord } from "../services/studentService";
 
-// Purpose: derive a 0-100 "profile completion" percentage from a student
-// record for the Student Dashboard's "Profile Completion Percentage"
-// requirement. The backend has no completion-percentage column, so this is
-// computed client-side from how many of the fields collected during the
-// Complete Profile step are actually filled in, rather than inventing a
-// fake backend field.
+/** Purpose: derive a 0-100 "profile completion" percentage from a student record for the Student Dashboard's "Profile Completion Percentage" requirement. The backend has no completion-percentage column, so this is computed client-side from how many of the fields collected during the Complete Profile step are actually filled in, rather than inventing a fake backend field. */
 const TRACKED_FIELDS: Array<keyof StudentRecord> = [
   "phone",
   "branch",

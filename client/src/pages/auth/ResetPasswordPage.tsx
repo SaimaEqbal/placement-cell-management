@@ -44,8 +44,7 @@ export default function ResetPasswordPage() {
           </div>
           <h2>Missing reset link</h2>
           <p className="muted">
-            This page needs the link from your password-reset email - please open it directly
-            from your inbox, or request a new one.
+            This page needs the link from your password-reset email - please open it directly from your inbox, or request a new one.
           </p>
           <div className="back-link">
             <Link className="text-btn" to={paths.forgotPassword}>
@@ -82,17 +81,8 @@ export default function ResetPasswordPage() {
               <label>
                 New password
                 <div className="input-icon">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    autoComplete="new-password"
-                  />
-                  <button
-                    type="button"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    onClick={() => setShowPassword((prev) => !prev)}
-                  >
+                  <input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)}/>
+                  <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((prev) => !prev)}>
                     {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                   </button>
                 </div>
@@ -100,20 +90,11 @@ export default function ResetPasswordPage() {
               </label>
               <label>
                 Confirm new password
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  autoComplete="new-password"
-                />
-                {errors.confirmPassword && (
-                  <span className="field-error">{errors.confirmPassword}</span>
-                )}
+                <input type={showPassword ? "text" : "password"} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)}/>
+                {errors.confirmPassword && (<span className="field-error">{errors.confirmPassword}</span>)}
               </label>
 
-              {resetMutation.isError && (
-                <span className="field-error">{resetMutation.error.message}</span>
-              )}
+              {resetMutation.isError && (<span className="field-error">{resetMutation.error.message}</span>)}
 
               <button className="primary wide" type="submit" disabled={resetMutation.isPending}>
                 {resetMutation.isPending ? "Updating..." : "Update password"} <ArrowRight size={17} />

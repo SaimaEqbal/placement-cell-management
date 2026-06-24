@@ -12,17 +12,7 @@ import type { Role } from "../../types";
 
 import "../../styles/login.css";
 
-/**
- * Purpose: /login - authenticate against POST /auth/login and route the
- * student/SPC/TPC/admin to their own dashboard.
- *
- * Behaviour change from the original mock: there is no "Sign in as"
- * role dropdown anymore. The real backend has no concept of a client-chosen
- * role at login - the role comes back encoded in the JWT (see
- * server/src/controllers/authController.js's login(), which signs
- * { userId, role }), so the UI now reads it from the token instead of
- * trusting a hand-picked select box.
- */
+/** Purpose: /login - authenticate against POST /auth/login and route the student/SPC/TPC/admin to their own dashboard. */
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -50,7 +40,8 @@ export default function LoginPage() {
     setFormError(undefined);
 
     loginMutation.mutate(
-      { email: email.trim(), password },
+      // Email lowercased to match the canonical form stored at signup - addresses are case-insensitive, but the DB lookup is not.
+      { email: email.trim().toLowerCase(), password },
       {
         onSuccess: (data) => {
           login(data.token);
@@ -62,12 +53,7 @@ export default function LoginPage() {
       },
     );
   }
-
-  // The backend returns 403 specifically when the account exists but its
-  // email hasn't been verified yet (authController.js login()) - surface a
-  // resend-verification action for that case instead of a generic error.
   const isUnverified = loginMutation.error?.status === 403;
-
   return (
     <main className="login-page">
       <div className="login-shell">
@@ -79,11 +65,11 @@ export default function LoginPage() {
               <ShieldCheck size={15} /> Student placement portal
             </div>
             <h1>
-              University Placement Cell
+              Placeholder Text
               <br />
-              <em>Jamia Millia Islamia</em>
+              <em>Placeholder Text</em>
             </h1>
-            <p>Student portal for placement profile submission and document updates.</p>
+            <p>Placeholder Text</p>
           </div>
           <p className="hero-foot">Jamia Millia Islamia · New Delhi</p>
         </section>
@@ -100,28 +86,13 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} noValidate>
               <label>
                 Institutional email
-                <input
-                  type="email"
-                  placeholder="e.g. example.jmi.ac.in"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  autoComplete="username"
-                />
+                <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username"/>
               </label>
               <label>
                 Password
                 <div className="input-icon">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    onClick={() => setShowPassword((prev) => !prev)}
-                  >
+                  <input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password"/>
+                  <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((prev) => !prev)}>
                     {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                   </button>
                 </div>
@@ -134,40 +105,30 @@ export default function LoginPage() {
                   {isUnverified && (
                     <>
                       {" "}
-                      <button
-                        type="button"
-                        className="text-btn"
-                        disabled={resendMutation.isPending}
-                        onClick={() => resendMutation.mutate(email.trim())}
-                      >
-                        Resend verification email
+                      <button type="button" className="text-btn" disabled={resendMutation.isPending} onClick={() => resendMutation.mutate(email.trim().toLowerCase())}>
+                        Resend verification email <ArrowRight size={13} />
                       </button>
                     </>
                   )}
                 </span>
               )}
-              {resendMutation.isSuccess && (
-                <span className="field-error" style={{ color: "var(--green)" }}>
-                  Verification email sent - check your inbox.
-                </span>
-              )}
-
+              {resendMutation.isSuccess && ( <span className="field-error" style={{ color: "var(--green)" }}> Verification email sent - check your inbox. </span>)}
               <button className="primary wide" type="submit" disabled={loginMutation.isPending}>
                 {loginMutation.isPending ? "Signing in..." : "Sign in"} <ArrowRight size={17} />
               </button>
             </form>
 
             <div className="divider">
+              <span>Forgot your password?</span>
+            </div>
+            <Link className="text-btn" to={paths.forgotPassword}>
+              Reset your password <ArrowRight size={15} />
+            </Link>
+            <div className="divider">
               <span>New student?</span>
             </div>
             <Link className="text-btn" to={paths.register}>
               Create your student profile <ArrowRight size={15} />
-            </Link>
-            <div className="divider">
-              <span>Forgot something?</span>
-            </div>
-            <Link className="text-btn" to={paths.forgotPassword}>
-              Reset your password <ArrowRight size={15} />
             </Link>
           </div>
         </section>

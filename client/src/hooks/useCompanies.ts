@@ -1,16 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { ApiError } from "../api/apiError";
-import {
-  createCompany,
-  deleteCompany,
-  getCompanies,
-  getCompanyById,
-  updateCompany,
-  type CompanyRecord,
-  type CreateCompanyPayload,
-  type UpdateCompanyPayload,
-} from "../services/companyService";
+import { createCompany, deleteCompany, getCompanies, getCompanyById, updateCompany, type CompanyRecord, type CreateCompanyPayload, type UpdateCompanyPayload} from "../services/companyService";
 import { queryKeys } from "./queryKeys";
 
 /** Purpose: GET /companies - list companies/placement drives. Shared cache entry for the student Placement Drives page and the Admin Companies/Drives pages. */

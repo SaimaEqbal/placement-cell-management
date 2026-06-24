@@ -356,10 +356,40 @@ export const createStudent = async (req, res) => {
     return res.status(201).json(result.rows[0]);
   } catch (error) {
     console.log(error);
+
+    // CHANGE: Return a clear 409 on a unique-constraint violation.
+    // PROBLEM: roll_no / email / user_id are UNIQUE. A duplicate threw a
+    //          Postgres error (code 23505) that the catch reported as a generic
+    //          500 "Failed to create student", hiding the real cause (e.g. the
+    //          roll number is already taken) from the user.
+    // BEFORE:  every error -> 500 "Failed to create student".
+    // AFTER:   23505 -> 409 with a field-specific message (from error.constraint);
+    //          all other errors still -> 500.
+    if (error.code === "23505") {
+      return res.status(409).json({
+        message: uniqueViolationMessage(error.constraint)
+      });
+    }
+
     return res.status(500).json({
       message: "Failed to create student"
     });
   }
+};
+
+// Purpose: map a Postgres unique-constraint name to a human-readable, UI-safe
+// message so duplicate roll_no / email / profile errors are actionable.
+const uniqueViolationMessage = (constraint) => {
+  if (constraint === "students_roll_no_key") {
+    return "A student with this roll number already exists.";
+  }
+  if (constraint === "students_email_key") {
+    return "A student with this email already exists.";
+  }
+  if (constraint === "students_user_id_key") {
+    return "A profile already exists for this account.";
+  }
+  return "That record conflicts with an existing one.";
 };
 
 export const getStudents = async (req, res) => {
@@ -457,6 +487,18 @@ export const updateStudent = async (req, res) => {
     return res.status(200).json(result.rows[0]);
   } catch (error) {
     console.error(error);
+
+    // CHANGE: Return a clear 409 on a unique-constraint violation.
+    // PROBLEM: changing roll_no/email to one already held by another row threw
+    //          Postgres 23505, reported as a generic 500 "Failed to update
+    //          student" that hid the real cause.
+    // BEFORE:  every error -> 500 "Failed to update student".
+    // AFTER:   23505 -> 409 with a field-specific message; others still -> 500.
+    if (error.code === "23505") {
+      return res.status(409).json({
+        message: uniqueViolationMessage(error.constraint)
+      });
+    }
 
     return res.status(500).json({
       message: "Failed to update student"

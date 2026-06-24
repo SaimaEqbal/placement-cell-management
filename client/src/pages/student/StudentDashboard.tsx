@@ -101,6 +101,16 @@ export default function StudentDashboard() {
           </div>
         </section>
 
+        {/* Existing-but-incomplete profile: prompt the student to finish it,
+            driven by the server-computed is_profile_complete bit. */}
+        {!profile.is_profile_complete && (
+          <div className="empty-state-action" style={{ marginTop: 18 }}>
+            <Link className="primary" to={paths.studentCompleteProfile}>
+              Complete your profile <ArrowRight size={17} />
+            </Link>
+          </div>
+        )}
+
         <div className="stats-row">
           <StatCard
             label="Placement status"
@@ -116,12 +126,19 @@ export default function StudentDashboard() {
             icon={<BookOpen />}
             tone={profile.active_backlogs > 0 ? "amber" : "green"}
           />
+          {/* Profile completion is no longer shown as a percentage. The server
+              computes the is_profile_complete bit (generated column) and we
+              surface it as a simple Complete/Incomplete status. */}
           <StatCard
-            label="Profile completion"
-            value={`${completion}%`}
-            note={completion === 100 ? "All fields complete" : "Some fields still missing"}
+            label="Profile status"
+            value={profile.is_profile_complete ? "Complete" : "Incomplete"}
+            note={
+              profile.is_profile_complete
+                ? "All required details provided"
+                : "Some required details are missing"
+            }
             icon={<FileText />}
-            tone={completion === 100 ? "green" : "amber"}
+            tone={profile.is_profile_complete ? "green" : "amber"}
           />
         </div>
 

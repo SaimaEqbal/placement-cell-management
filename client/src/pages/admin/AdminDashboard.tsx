@@ -4,6 +4,7 @@ import { ArrowRight, Building2, CheckCircle2, Megaphone, Users } from "lucide-re
 import Topbar from "../../components/Topbar";
 import { ErrorState, LoadingState, StatCard } from "../../components/ui";
 import { useCompanies } from "../../hooks/useCompanies";
+import { useDrives } from "../../hooks/useDrives";
 import { useStudents } from "../../hooks/useStudents";
 import { paths } from "../../routes/paths";
 
@@ -18,8 +19,9 @@ import "../../styles/dashboard.css";
 export default function AdminDashboard() {
   const students = useStudents();
   const companies = useCompanies();
+  const drives = useDrives();
 
-  const isLoading = students.isLoading || companies.isLoading;
+  const isLoading = students.isLoading || companies.isLoading || drives.isLoading;
   const isError = students.isError || companies.isError;
 
   if (isLoading) {
@@ -81,8 +83,8 @@ export default function AdminDashboard() {
           />
           <StatCard
             label="Active drives"
-            value={String(companies.data?.length ?? 0)}
-            note="One drive per company on record"
+            value={String(drives.data?.length ?? 0)}
+            note="Drives on record"
             icon={<Megaphone />}
             tone="gray"
           />
@@ -101,6 +103,9 @@ export default function AdminDashboard() {
             </Link>
             <Link className="text-btn" to={paths.adminStudents}>
               Filter & shortlist students <ArrowRight size={15} />
+            </Link>
+            <Link className="text-btn" to={paths.adminInvitations}>
+              Invite TPC / SPC / Admin <ArrowRight size={15} />
             </Link>
           </div>
         </section>

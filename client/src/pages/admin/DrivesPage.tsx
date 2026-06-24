@@ -1,48 +1,155 @@
-import { useState, type FormEvent } from "react";
-import { Megaphone, Plus, X } from "lucide-react";
+import { useMemo, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
+import { ArrowRight, Megaphone, Plus, X } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { EmptyState, ErrorState, LoadingState } from "../../components/ui";
-import { useCompanies, useCreateCompany } from "../../hooks/useCompanies";
+import { Badge, EmptyState, ErrorState, LoadingState } from "../../components/ui";
+import { useAuth } from "../../context/AuthContext";
+import { useCompanies } from "../../hooks/useCompanies";
+import { useCreateDrive, useDrives } from "../../hooks/useDrives";
 import { formatDate } from "../../lib/format";
-import type { CreateCompanyPayload } from "../../services/companyService";
+import { DEPARTMENTS } from "../../lib/validation";
+import { paths } from "../../routes/paths";
+import type {
+  CreateDrivePayload,
+  DriveStatus,
+  EmploymentType,
+} from "../../services/driveService";
+import type { StatusTone } from "../../types";
 
 import "../../styles/dashboard.css";
 import "../../styles/form-wizard.css";
 
-const EMPTY_FORM: CreateCompanyPayload = {
-  company_name: "",
-  industry: "",
-  description: "",
-  hr_name: "",
-  hr_email: "",
-  hr_phone: "",
+const EMPLOYMENT_TYPES: EmploymentType[] = [
+  "FTE",
+  "Internship",
+  "Internship + PPO",
+];
+
+/** Local form state - all inputs are strings/arrays and get coerced to the API's number/array shape on submit. */
+interface DriveFormState {
+  company_id: string;
+  job_role: string;
+  job_description: string;
+  package_ctc: string;
+  employment_type: EmploymentType;
+  drive_date: string;
+  application_deadline: string;
+  minimum_cgpa: string;
+  allowed_branches: string[];
+  max_active_backlogs: string;
+  max_passive_backlogs: string;
+  number_of_rounds: string;
+}
+
+const EMPTY_FORM: DriveFormState = {
+  company_id: "",
+  job_role: "",
+  job_description: "",
+  package_ctc: "",
+  employment_type: "FTE",
+  drive_date: "",
+  application_deadline: "",
+  minimum_cgpa: "",
+  allowed_branches: [],
+  max_active_backlogs: "",
+  max_passive_backlogs: "",
+  number_of_rounds: "",
 };
 
+/** Purpose: map a drive's lifecycle status to a Badge tone. */
+function statusTone(status: DriveStatus): StatusTone {
+  switch (status) {
+    case "ongoing":
+      return "amber";
+    case "completed":
+      return "green";
+    case "cancelled":
+      return "red";
+    default:
+      return "blue"; // upcoming
+  }
+}
+
 /**
- * Purpose: /Admin/drives - Create Placement/Internship Drive screen from
- * the brief's UPC/Admin Requirements.
- *
- * NOTE: the backend has no separate `drives` table/route - companies
- * (server/src/migrations/002_create_companies.sql,
- * server/src/controllers/companyController.js) are the only persisted
- * "drive" concept, and there is no eligibility-criteria column either. This
- * page is intentionally a thin, drive-flavoured view over the same GET/POST
- * /companies endpoint CompaniesPage.tsx uses (description doubles as where
- * eligibility criteria/role details would go) rather than inventing a
- * client-only data model the backend can't actually store.
+ * Purpose: build the POST /drive payload from the string form state - sending
+ * numbers as real numbers (the backend uses z.number()) and omitting optional
+ * fields when blank so we never send NaN/"" that would fail validation.
+ */
+function toCreatePayload(form: DriveFormState): CreateDrivePayload {
+  const payload: CreateDrivePayload = {
+    company_id: Number(form.company_id),
+    employment_type: form.employment_type,
+    drive_date: form.drive_date,
+    application_deadline: form.application_deadline,
+    minimum_cgpa: Number(form.minimum_cgpa),
+    allowed_branches: form.allowed_branches,
+  };
+
+  if (form.job_role.trim()) payload.job_role = form.job_role.trim();
+  if (form.job_description.trim())
+    payload.job_description = form.job_description.trim();
+  if (form.package_ctc !== "") payload.package_ctc = Number(form.package_ctc);
+  if (form.max_active_backlogs !== "")
+    payload.max_active_backlogs = Number(form.max_active_backlogs);
+  if (form.max_passive_backlogs !== "")
+    payload.max_passive_backlogs = Number(form.max_passive_backlogs);
+  if (form.number_of_rounds !== "")
+    payload.number_of_rounds = Number(form.number_of_rounds);
+
+  return payload;
+}
+
+/**
+ * Purpose: /Admin/drives and /TPC/drives - create and list real placement
+ * drives via GET/POST /drive (useDrives/useCreateDrive). Each drive references
+ * a company (company_id) and carries its own eligibility criteria; this
+ * replaces the earlier "companies = drives" stand-in. Shared by Admin and TPC;
+ * the backend authorizes both (requireAdminTPCSPC on POST /drive).
  */
 export default function DrivesPage() {
-  const { data: companies, isLoading, isError, error, refetch } = useCompanies();
-  const createMutation = useCreateCompany();
+  const { role } = useAuth();
+  const { data: drives, isLoading, isError, error, refetch } = useDrives();
+  const { data: companies } = useCompanies();
+  const createMutation = useCreateDrive();
 
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<CreateCompanyPayload>(EMPTY_FORM);
+  const [form, setForm] = useState<DriveFormState>(EMPTY_FORM);
+  const [formError, setFormError] = useState<string | undefined>();
+
+  // Drives only carry company_id; map to a name for display via the cached companies list.
+  const companyNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    companies?.forEach((c) => map.set(c.company_id, c.company_name));
+    return map;
+  }, [companies]);
+
+  // Applicants pages live under whichever role's route group is active.
+  const driveBasePath = role === "tpc" ? paths.tpcDrives : paths.adminDrives;
+
+  function toggleBranch(branch: string) {
+    setForm((prev) => ({
+      ...prev,
+      allowed_branches: prev.allowed_branches.includes(branch)
+        ? prev.allowed_branches.filter((b) => b !== branch)
+        : [...prev.allowed_branches, branch],
+    }));
+  }
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!form.company_name.trim()) return;
-    createMutation.mutate(form, {
+
+    if (!form.company_id) return setFormError("Select a company for this drive.");
+    if (!form.drive_date) return setFormError("Pick a drive date.");
+    if (!form.application_deadline)
+      return setFormError("Pick an application deadline.");
+    if (form.minimum_cgpa === "")
+      return setFormError("Enter the minimum CGPA.");
+    if (form.allowed_branches.length === 0)
+      return setFormError("Select at least one eligible branch.");
+
+    setFormError(undefined);
+    createMutation.mutate(toCreatePayload(form), {
       onSuccess: () => {
         setShowForm(false);
         setForm(EMPTY_FORM);
@@ -52,12 +159,19 @@ export default function DrivesPage() {
 
   return (
     <>
-      <Topbar title="Placement & internship drives" subtitle="Announce a new drive and track active ones." />
+      <Topbar
+        title="Placement & internship drives"
+        subtitle="Announce a new drive against a company and track active ones."
+      />
       <div className="dashboard-content">
         <section className="panel" style={{ marginBottom: 16 }}>
           <div className="panel-head">
             <h2>{showForm ? "Create drive" : "Drives"}</h2>
-            <button className="secondary" type="button" onClick={() => setShowForm((v) => !v)}>
+            <button
+              className="secondary"
+              type="button"
+              onClick={() => setShowForm((v) => !v)}
+            >
               {showForm ? <X size={15} /> : <Plus size={15} />}
               {showForm ? "Cancel" : "Create drive"}
             </button>
@@ -68,37 +182,146 @@ export default function DrivesPage() {
               <form onSubmit={handleSubmit} noValidate>
                 <div className="form-grid">
                   <label>
-                    Company / drive name
+                    Company
+                    <select
+                      value={form.company_id}
+                      onChange={(e) =>
+                        setForm({ ...form, company_id: e.target.value })
+                      }
+                    >
+                      <option value="">Select a company...</option>
+                      {companies?.map((c) => (
+                        <option key={c.company_id} value={c.company_id}>
+                          {c.company_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Employment type
+                    <select
+                      value={form.employment_type}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          employment_type: e.target.value as EmploymentType,
+                        })
+                      }
+                    >
+                      {EMPLOYMENT_TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Job role
                     <input
-                      value={form.company_name}
-                      onChange={(e) => setForm({ ...form, company_name: e.target.value })}
+                      value={form.job_role}
+                      onChange={(e) =>
+                        setForm({ ...form, job_role: e.target.value })
+                      }
                     />
                   </label>
                   <label>
-                    Industry / role
+                    Package (CTC, LPA)
                     <input
-                      value={form.industry}
-                      onChange={(e) => setForm({ ...form, industry: e.target.value })}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={form.package_ctc}
+                      onChange={(e) =>
+                        setForm({ ...form, package_ctc: e.target.value })
+                      }
                     />
                   </label>
                   <label>
-                    HR contact name
+                    Drive date
                     <input
-                      value={form.hr_name}
-                      onChange={(e) => setForm({ ...form, hr_name: e.target.value })}
+                      type="date"
+                      value={form.drive_date}
+                      onChange={(e) =>
+                        setForm({ ...form, drive_date: e.target.value })
+                      }
                     />
                   </label>
                   <label>
-                    HR email
+                    Application deadline
                     <input
-                      type="email"
-                      value={form.hr_email}
-                      onChange={(e) => setForm({ ...form, hr_email: e.target.value })}
+                      type="date"
+                      value={form.application_deadline}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          application_deadline: e.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Minimum CGPA
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="10"
+                      value={form.minimum_cgpa}
+                      onChange={(e) =>
+                        setForm({ ...form, minimum_cgpa: e.target.value })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Number of rounds
+                    <input
+                      type="number"
+                      min="1"
+                      value={form.number_of_rounds}
+                      onChange={(e) =>
+                        setForm({ ...form, number_of_rounds: e.target.value })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Max active backlogs
+                    <input
+                      type="number"
+                      min="0"
+                      value={form.max_active_backlogs}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          max_active_backlogs: e.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Max passive backlogs
+                    <input
+                      type="number"
+                      min="0"
+                      value={form.max_passive_backlogs}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          max_passive_backlogs: e.target.value,
+                        })
+                      }
                     />
                   </label>
                 </div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 18 }}>
-                  Eligibility criteria / description
+
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    margin: "4px 0 18px",
+                  }}
+                >
+                  Job description
                   <input
                     style={{
                       width: "100%",
@@ -107,17 +330,67 @@ export default function DrivesPage() {
                       padding: "12px 13px",
                       marginTop: 7,
                     }}
-                    placeholder="e.g. CSE/ECE, CGPA 7.0+, no active backlogs"
-                    value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    placeholder="Role details, responsibilities, location..."
+                    value={form.job_description}
+                    onChange={(e) =>
+                      setForm({ ...form, job_description: e.target.value })
+                    }
                   />
                 </label>
-                {createMutation.isError && (
-                  <span className="field-error">{createMutation.error.message}</span>
+
+                <fieldset
+                  style={{
+                    border: "1px solid var(--line)",
+                    borderRadius: 8,
+                    padding: "10px 13px",
+                    marginBottom: 16,
+                  }}
+                >
+                  <legend style={{ fontSize: 12, fontWeight: 700 }}>
+                    Eligible branches
+                  </legend>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 14,
+                      marginTop: 6,
+                    }}
+                  >
+                    {DEPARTMENTS.map((dept) => (
+                      <label
+                        key={dept}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          fontSize: 12,
+                          fontWeight: 500,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={form.allowed_branches.includes(dept)}
+                          onChange={() => toggleBranch(dept)}
+                        />
+                        {dept}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+
+                {(formError || createMutation.isError) && (
+                  <span className="field-error">
+                    {formError ?? createMutation.error?.message}
+                  </span>
                 )}
                 <div className="form-actions">
                   <p />
-                  <button className="primary" type="submit" disabled={createMutation.isPending}>
+                  <button
+                    className="primary"
+                    type="submit"
+                    disabled={createMutation.isPending}
+                  >
                     {createMutation.isPending ? "Creating..." : "Create drive"}
                   </button>
                 </div>
@@ -128,10 +401,13 @@ export default function DrivesPage() {
 
         {isLoading && <LoadingState label="Loading drives..." />}
         {isError && (
-          <ErrorState message={error?.message ?? "Could not load drives."} onRetry={refetch} />
+          <ErrorState
+            message={error?.message ?? "Could not load drives."}
+            onRetry={refetch}
+          />
         )}
 
-        {!isLoading && !isError && (!companies || companies.length === 0) && (
+        {!isLoading && !isError && (!drives || drives.length === 0) && (
           <EmptyState
             icon={<Megaphone size={28} />}
             title="No drives announced yet"
@@ -139,28 +415,61 @@ export default function DrivesPage() {
           />
         )}
 
-        {!isLoading && !isError && companies && companies.length > 0 && (
-          <section className="panel">
-            <div className="panel-head">
-              <h2>Active drives</h2>
-            </div>
-            <div className="panel-body">
-              {companies.map((company) => (
-                <div className="activity" key={company.company_id}>
-                  <i className="blue">
-                    <Megaphone size={14} />
-                  </i>
-                  <div>
-                    <b>{company.company_name}</b>
-                    <span>
-                      {company.description || "No eligibility criteria set"} · Announced{" "}
-                      {formatDate(company.created_at)}
-                    </span>
+        {!isLoading && !isError && drives && drives.length > 0 && (
+          <div className="two-column">
+            {drives.map((drive) => (
+              <section className="panel" key={drive.drive_id}>
+                <div className="panel-head">
+                  <h2>
+                    {drive.job_role ||
+                      companyNameById.get(drive.company_id) ||
+                      `Drive #${drive.drive_id}`}
+                  </h2>
+                  <Badge tone={statusTone(drive.status)}>{drive.status}</Badge>
+                </div>
+                <div className="panel-body">
+                  <div className="info-grid">
+                    <div>
+                      <span>Company</span>
+                      <b>
+                        {companyNameById.get(drive.company_id) ??
+                          `#${drive.company_id}`}
+                      </b>
+                    </div>
+                    <div>
+                      <span>Type</span>
+                      <b>{drive.employment_type}</b>
+                    </div>
+                    <div>
+                      <span>Drive date</span>
+                      <b>{formatDate(drive.drive_date)}</b>
+                    </div>
+                    <div>
+                      <span>Deadline</span>
+                      <b>{formatDate(drive.application_deadline)}</b>
+                    </div>
+                    <div>
+                      <span>Min CGPA</span>
+                      <b>{drive.minimum_cgpa}</b>
+                    </div>
+                    <div>
+                      <span>Branches</span>
+                      <b>{drive.allowed_branches?.join(", ") || "-"}</b>
+                    </div>
+                  </div>
+                  <div className="form-actions" style={{ marginTop: 14 }}>
+                    <p />
+                    <Link
+                      className="text-btn"
+                      to={`${driveBasePath}/${drive.drive_id}`}
+                    >
+                      Review applicants <ArrowRight size={15} />
+                    </Link>
                   </div>
                 </div>
-              ))}
-            </div>
-          </section>
+              </section>
+            ))}
+          </div>
         )}
       </div>
     </>
