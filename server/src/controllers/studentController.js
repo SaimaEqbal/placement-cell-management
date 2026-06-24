@@ -1,268 +1,3 @@
-// import pool from "../config/db.js";
-
-// export const createStudent = async (req, res) => {
-//   try {
-//     const {
-//       roll_no,
-//       name,
-//       email,
-//       phone,
-//       branch,
-//       graduation_year,
-//       cgpa,
-//       gender,
-//       region,
-//       religion,
-//       date_of_birth,
-//       active_backlogs,
-//       passive_backlogs,
-//       resume_url,
-//       tenth_marksheet_url,
-//       twelfth_marksheet_url,
-//       last_sem_marksheet_url,
-//       placement_status
-//     } = req.body;
-
-//     const result = await pool.query(
-//       `INSERT INTO students (
-//         roll_no,
-//         name,
-//         email,
-//         phone,
-//         branch,
-//         graduation_year,
-//         cgpa,
-//         gender,
-//         region,
-//         religion,
-//         date_of_birth,
-//         active_backlogs,
-//         passive_backlogs,
-//         resume_url,
-//         tenth_marksheet_url,
-//         twelfth_marksheet_url,
-//         last_sem_marksheet_url,
-//         placement_status
-//       )
-//       VALUES (
-//         $1,$2,$3,$4,$5,$6,$7,$8,$9,
-//         $10,$11,$12,$13,$14,$15,$16,$17,$18
-//       )
-//       RETURNING *`,
-//       [
-//         roll_no,
-//         name,
-//         email,
-//         phone,
-//         branch,
-//         graduation_year,
-//         cgpa,
-//         gender,
-//         region,
-//         religion,
-//         date_of_birth,
-//         active_backlogs,
-//         passive_backlogs,
-//         resume_url,
-//         tenth_marksheet_url,
-//         twelfth_marksheet_url,
-//         last_sem_marksheet_url,
-//         placement_status
-//       ]
-//     );
-
-//     return res.status(201).json(result.rows[0]);
-//   } catch (error) {
-//     console.error(error);
-
-//     return res.status(500).json({
-//       message: "Failed to create student"
-//     });
-//   }
-// };
-
-// export const getStudents = async (req, res) => {
-//   try {
-//     const result = await pool.query(
-//       "SELECT * FROM students ORDER BY id"
-//     );
-
-//     return res.status(200).json(result.rows);
-//   } catch (error) {
-//     console.error(error);
-
-//     return res.status(500).json({
-//       message: "Failed to fetch students"
-//     });
-//   }
-// };
-
-// export const updateStudent = async (req, res) => {
-//   try {
-//     const { id } = req.params;
-
-//     const {
-//       roll_no,
-//       name,
-//       email,
-//       phone,
-//       branch,
-//       graduation_year,
-//       cgpa,
-//       gender,
-//       region,
-//       religion,
-//       date_of_birth,
-//       active_backlogs,
-//       passive_backlogs,
-//       resume_url,
-//       tenth_marksheet_url,
-//       twelfth_marksheet_url,
-//       last_sem_marksheet_url,
-//       placement_status
-//     } = req.body;
-
-//     const result = await pool.query(
-//       `UPDATE students
-//        SET roll_no = $1,
-//            name = $2,
-//            email = $3,
-//            phone = $4,
-//            branch = $5,
-//            graduation_year = $6,
-//            cgpa = $7,
-//            gender = $8,
-//            region = $9,
-//            religion = $10,
-//            date_of_birth = $11,
-//            active_backlogs = $12,
-//            passive_backlogs = $13,
-//            resume_url = $14,
-//            tenth_marksheet_url = $15,
-//            twelfth_marksheet_url = $16,
-//            last_sem_marksheet_url = $17,
-//            placement_status = $18
-//        WHERE id = $19
-//        RETURNING *`,
-//       [
-//         roll_no,
-//         name,
-//         email,
-//         phone,
-//         branch,
-//         graduation_year,
-//         cgpa,
-//         gender,
-//         region,
-//         religion,
-//         date_of_birth,
-//         active_backlogs,
-//         passive_backlogs,
-//         resume_url,
-//         tenth_marksheet_url,
-//         twelfth_marksheet_url,
-//         last_sem_marksheet_url,
-//         placement_status,
-//         id
-//       ]
-//     );
-
-//     if (result.rows.length === 0) {
-//       return res.status(404).json({
-//         message: "Student not found"
-//       });
-//     }
-
-//     return res.status(200).json(result.rows[0]);
-//   } catch (error) {
-//     console.error(error);
-
-//     return res.status(500).json({
-//       message: "Failed to update student"
-//     });
-//   }
-// };
-
-// export const deleteStudent = async (req, res) => {
-//   try {
-//     const { id } = req.params;
-
-//     const result = await pool.query(
-//       "DELETE FROM students WHERE id = $1 RETURNING *",
-//       [id]
-//     );
-
-//     if (result.rows.length === 0) {
-//       return res.status(404).json({
-//         message: "Student not found"
-//       });
-//     }
-
-//     return res.status(200).json({
-//       message: "Student deleted successfully"
-//     });
-//   } catch (error) {
-//     console.error(error);
-
-//     return res.status(500).json({
-//       message: "Failed to delete student"
-//     });
-//   }
-// };
-
-// export const getStudentById = async (req, res) => {
-//   try {
-//     const { id } = req.params;
-
-//     const result = await pool.query(
-//       "SELECT * FROM students WHERE id = $1",
-//       [id]
-//     );
-
-//     if (result.rows.length === 0) {
-//       return res.status(404).json({
-//         message: "Student not found"
-//       });
-//     }
-
-//     res.status(200).json(result.rows[0]);
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({
-//       message: "Failed to fetch student"
-//     });
-//   }
-// };
-
-// export const getMyProfile = async (req, res) => {
-//   try {
-//     const userId = req.user.userId;
-
-//     const result = await pool.query(
-//       `SELECT s.*
-//        FROM students s
-//        WHERE s.user_id = $1`,
-//       [userId]
-//     );
-
-//     if (result.rows.length === 0) {
-//       return res.status(404).json({
-//         message: "Profile not found",
-//       });
-//     }
-
-//     return res.status(200).json(
-//       result.rows[0]
-//     );
-//   } catch (error) {
-//     console.error(error);
-
-//     return res.status(500).json({
-//       message: "Failed to fetch profile",
-//     });
-//   }
-// };
-
 import pool from "../config/db.js";
 
 export const createStudent = async (req, res) => {
@@ -275,19 +10,36 @@ export const createStudent = async (req, res) => {
       email,
       phone,
       branch,
+      department,
       graduation_year,
       cgpa,
+
       gender,
       region,
       religion,
       date_of_birth,
+
       active_backlogs,
       passive_backlogs,
+
+      tenth_percentage,
+      twelfth_percentage,
+
+      sem1_spi,
+      sem2_spi,
+      sem3_spi,
+      sem4_spi,
+      sem5_spi,
+      sem6_spi,
+      sem7_spi,
+      sem8_spi,
+
       resume_url,
       tenth_marksheet_url,
       twelfth_marksheet_url,
       last_sem_marksheet_url,
-      placement_status
+
+      placement_status,
     } = req.body;
 
     // CHANGE: Link the new students row to the signed-in account.
@@ -305,54 +57,79 @@ export const createStudent = async (req, res) => {
     const userId = req.user.userId;
 
     const result = await pool.query(
-      `INSERT INTO students (
-        roll_no,
-        name,
-        email,
-        phone,
-        branch,
-        graduation_year,
-        cgpa,
-        gender,
-        region,
-        religion,
-        date_of_birth,
-        active_backlogs,
-        passive_backlogs,
-        resume_url,
-        tenth_marksheet_url,
-        twelfth_marksheet_url,
-        last_sem_marksheet_url,
-        placement_status,
-        user_id
-      )
-      VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,
-        $10,$11,$12,$13,$14,$15,$16,$17,$18,$19
-      )
-      RETURNING *`,
-      [
-        roll_no,
-        name,
-        email,
-        phone,
-        branch,
-        graduation_year,
-        cgpa,
-        gender,
-        region,
-        religion,
-        date_of_birth,
-        active_backlogs,
-        passive_backlogs,
-        resume_url,
-        tenth_marksheet_url,
-        twelfth_marksheet_url,
-        last_sem_marksheet_url,
-        placement_status,
-        userId
-      ]
-    );
+  `INSERT INTO students (
+      roll_no,
+      name,
+      email,
+      phone,
+      branch,
+      department,
+      graduation_year,
+      cgpa,
+      gender,
+      region,
+      religion,
+      date_of_birth,
+      active_backlogs,
+      passive_backlogs,
+      tenth_percentage,
+      twelfth_percentage,
+      sem1_spi,
+      sem2_spi,
+      sem3_spi,
+      sem4_spi,
+      sem5_spi,
+      sem6_spi,
+      sem7_spi,
+      sem8_spi,
+      resume_url,
+      tenth_marksheet_url,
+      twelfth_marksheet_url,
+      last_sem_marksheet_url,
+      placement_status,
+      user_id
+  )
+  VALUES (
+      $1,$2,$3,$4,$5,$6,$7,$8,
+      $9,$10,$11,$12,$13,$14,
+      $15,$16,$17,$18,$19,$20,
+      $21,$22,$23,$24,$25,$26,
+      $27,$28,$29,$30
+  )
+  RETURNING *`,
+  [
+    roll_no,
+    name,
+    email,
+    phone,
+    branch,
+    department,
+    graduation_year,
+    cgpa,
+    gender,
+    region,
+    religion,
+    date_of_birth,
+    active_backlogs,
+    passive_backlogs,
+    tenth_percentage,
+    twelfth_percentage,
+    sem1_spi,
+    sem2_spi,
+    sem3_spi,
+    sem4_spi,
+    sem5_spi,
+    sem6_spi,
+    sem7_spi,
+    sem8_spi,
+    resume_url,
+    tenth_marksheet_url,
+    twelfth_marksheet_url,
+    last_sem_marksheet_url,
+    placement_status,
+    userId
+  ]
+);
     return res.status(201).json(result.rows[0]);
   } catch (error) {
     console.log(error);
@@ -418,65 +195,104 @@ export const updateStudent = async (req, res) => {
       email,
       phone,
       branch,
+      department,
       graduation_year,
       cgpa,
+
       gender,
       region,
       religion,
       date_of_birth,
+
       active_backlogs,
       passive_backlogs,
+
+      tenth_percentage,
+      twelfth_percentage,
+
+      sem1_spi,
+      sem2_spi,
+      sem3_spi,
+      sem4_spi,
+      sem5_spi,
+      sem6_spi,
+      sem7_spi,
+      sem8_spi,
+
       resume_url,
       tenth_marksheet_url,
       twelfth_marksheet_url,
       last_sem_marksheet_url,
-      placement_status
+
+      placement_status,
     } = req.body;
 
-    const result = await pool.query(
-      `UPDATE students
-       SET roll_no = $1,
-           name = $2,
-           email = $3,
-           phone = $4,
-           branch = $5,
-           graduation_year = $6,
-           cgpa = $7,
-           gender = $8,
-           region = $9,
-           religion = $10,
-           date_of_birth = $11,
-           active_backlogs = $12,
-           passive_backlogs = $13,
-           resume_url = $14,
-           tenth_marksheet_url = $15,
-           twelfth_marksheet_url = $16,
-           last_sem_marksheet_url = $17,
-           placement_status = $18
-       WHERE id = $19
-       RETURNING *`,
-      [
-        roll_no,
-        name,
-        email,
-        phone,
-        branch,
-        graduation_year,
-        cgpa,
-        gender,
-        region,
-        religion,
-        date_of_birth,
-        active_backlogs,
-        passive_backlogs,
-        resume_url,
-        tenth_marksheet_url,
-        twelfth_marksheet_url,
-        last_sem_marksheet_url,
-        placement_status,
-        id
-      ]
-    );
+          const result = await pool.query(
+        `UPDATE students
+        SET roll_no = $1,
+            name = $2,
+            email = $3,
+            phone = $4,
+            branch = $5,
+            department = $6,
+            graduation_year = $7,
+            cgpa = $8,
+            gender = $9,
+            region = $10,
+            religion = $11,
+            date_of_birth = $12,
+            active_backlogs = $13,
+            passive_backlogs = $14,
+            tenth_percentage = $15,
+            twelfth_percentage = $16,
+            sem1_spi = $17,
+            sem2_spi = $18,
+            sem3_spi = $19,
+            sem4_spi = $20,
+            sem5_spi = $21,
+            sem6_spi = $22,
+            sem7_spi = $23,
+            sem8_spi = $24,
+            resume_url = $25,
+            tenth_marksheet_url = $26,
+            twelfth_marksheet_url = $27,
+            last_sem_marksheet_url = $28,
+            placement_status = $29,
+        WHERE id = $30
+        RETURNING *`,
+        [
+          roll_no,
+          name,
+          email,
+          phone,
+          branch,
+          department,
+          graduation_year,
+          cgpa,
+          gender,
+          region,
+          religion,
+          date_of_birth,
+          active_backlogs,
+          passive_backlogs,
+          tenth_percentage,
+          twelfth_percentage,
+          sem1_spi,
+          sem2_spi,
+          sem3_spi,
+          sem4_spi,
+          sem5_spi,
+          sem6_spi,
+          sem7_spi,
+          sem8_spi,
+          resume_url,
+          tenth_marksheet_url,
+          twelfth_marksheet_url,
+          last_sem_marksheet_url,
+          placement_status,
+          id
+        ]
+      );
 
     if (result.rows.length === 0) {
       return res.status(404).json({

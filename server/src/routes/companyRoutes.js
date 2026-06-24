@@ -1,6 +1,6 @@
 import express from "express";
 import { auth } from "../middleware/authMiddleware.js";
-import { requireAdminTPC} from "../middleware/roleMiddleware.js";
+import { requireAdmin} from "../middleware/roleMiddleware.js";
 import { validateCreateCompany,validateUpdateCompany } from "../middleware/companyMiddleware.js";
 import {
   getCompanies,
@@ -15,10 +15,10 @@ const router = express.Router();
 router.get("/",auth,getCompanies);
 router.get("/:id",auth,getCompanyById);
 
-router.post("/",auth,requireAdminTPC,validateCreateCompany,createCompany);
+router.post("/",auth,requireAdmin,validateCreateCompany,createCompany);
 
-router.put("/:id",auth,requireAdminTPC,validateUpdateCompany,updateCompany);
+router.put("/:id",auth,requireAdmin,validateUpdateCompany,updateCompany);
 
-router.delete("/:id",auth,requireAdminTPC,deleteCompany);
+router.delete("/:id",auth,requireAdmin,deleteCompany);
 
 export default router;

@@ -16,3 +16,18 @@ ADD COLUMN reviewed_at TIMESTAMPTZ;
 
 ALTER TABLE students
 ADD COLUMN user_id UUID UNIQUE REFERENCES users(id);
+
+ALTER TABLE students
+ADD COLUMN department VARCHAR(100),
+
+ADD COLUMN tenth_percentage NUMERIC(5,2),
+ADD COLUMN twelfth_percentage NUMERIC(5,2),
+
+ADD COLUMN sem1_spi NUMERIC(4,2),
+ADD COLUMN sem2_spi NUMERIC(4,2),
+ADD COLUMN sem3_spi NUMERIC(4,2),
+ADD COLUMN sem4_spi NUMERIC(4,2),
+ADD COLUMN sem5_spi NUMERIC(4,2),
+ADD COLUMN sem6_spi NUMERIC(4,2),
+ADD COLUMN sem7_spi NUMERIC(4,2),
+ADD COLUMN sem8_spi NUMERIC(4,2);

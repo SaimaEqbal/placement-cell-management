@@ -3,6 +3,7 @@ import express from "express";
 import { auth } from "../middleware/authMiddleware.js";
 import {
   requireAdminTPC,
+  requireAdmin,
   requireAdminTPCSPC
 } from "../middleware/roleMiddleware.js";
 
@@ -32,7 +33,7 @@ const router = express.Router();
 router.post(
   "/",
   auth,
-  requireAdminTPCSPC,
+  requireAdmin,
   validateCreateDrive,
   createDrive
 );
@@ -52,7 +53,7 @@ router.get(
 router.put(
   "/:driveId",
   auth,
-  requireAdminTPCSPC,
+  requireAdmin,
   validateUpdateDrive,
   updateDrive
 );
@@ -60,7 +61,7 @@ router.put(
 router.delete(
   "/:driveId",
   auth,
-  requireAdminTPC,
+  requireAdmin,
   deleteDrive
 );
 

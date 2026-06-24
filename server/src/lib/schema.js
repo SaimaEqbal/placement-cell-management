@@ -7,6 +7,7 @@ export const createStudentSchema = z.object({
   phone: z.string().min(10),
 
   branch: z.string().min(1),
+  department: z.string().min(1),
   graduation_year: z.number().int(),
   cgpa: z.number().min(0).max(10),
 
@@ -18,6 +19,18 @@ export const createStudentSchema = z.object({
 
   active_backlogs: z.number().int().min(0).optional(),
   passive_backlogs: z.number().int().min(0).optional(),
+
+  tenth_percentage: z.number().min(0).max(100),
+  twelfth_percentage: z.number().min(0).max(100),
+
+  sem1_spi: z.number().min(0).max(10).optional(),
+  sem2_spi: z.number().min(0).max(10).optional(),
+  sem3_spi: z.number().min(0).max(10).optional(),
+  sem4_spi: z.number().min(0).max(10).optional(),
+  sem5_spi: z.number().min(0).max(10).optional(),
+  sem6_spi: z.number().min(0).max(10).optional(),
+  sem7_spi: z.number().min(0).max(10).optional(),
+  sem8_spi: z.number().min(0).max(10).optional(),
 
   resume_url: z.string(),
 
@@ -40,6 +53,7 @@ export const updateStudentSchema = z.object({
   phone: z.string().min(10).optional(),
 
   branch: z.string().min(1).optional(),
+  department: z.string().min(1).optional(),
   graduation_year: z.number().int().optional(),
   cgpa: z.number().min(0).max(10).optional(),
 
@@ -51,6 +65,18 @@ export const updateStudentSchema = z.object({
 
   active_backlogs: z.number().int().min(0).optional(),
   passive_backlogs: z.number().int().min(0).optional(),
+
+  tenth_percentage: z.number().min(0).max(100).optional(),
+  twelfth_percentage: z.number().min(0).max(100).optional(),
+
+  sem1_spi: z.number().min(0).max(10).optional(),
+  sem2_spi: z.number().min(0).max(10).optional(),
+  sem3_spi: z.number().min(0).max(10).optional(),
+  sem4_spi: z.number().min(0).max(10).optional(),
+  sem5_spi: z.number().min(0).max(10).optional(),
+  sem6_spi: z.number().min(0).max(10).optional(),
+  sem7_spi: z.number().min(0).max(10).optional(),
+  sem8_spi: z.number().min(0).max(10).optional(),
 
   resume_url: z.string().optional(),
 
@@ -121,7 +147,7 @@ export const createCompanySchema = z.object({
 
   description: z
     .string()
-    .min(10, "Description is required"),
+    .min(10, "Description is required").optional(),
 
   hr_name: z
     .string()
