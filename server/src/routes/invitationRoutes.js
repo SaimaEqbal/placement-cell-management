@@ -7,6 +7,7 @@ import {
   sendInvitation,
   verifyInvitation,
   completeRegistration,
+  updateUserRole
 } from "../controllers/invitationController.js";
 
 const router = express.Router();
@@ -26,6 +27,13 @@ router.get(
 router.post(
   "/complete/:token",
   completeRegistration
+);
+
+router.patch(
+  "/users/:userId/role",
+  auth,
+  requireAdmin,
+  updateUserRole
 );
 
 export default router;
