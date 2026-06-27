@@ -19,8 +19,8 @@ router.put("/:tpcId",auth,requireAdminTPC,validateUpdateTPC,updateTPC);
 
 router.delete("/:tpcId",auth,requireAdmin,deleteTPC);
 
-router.put("/promote-spc/:studentId",auth,requireTPC,promoteSPC);
+router.put("/promote-spc/:studentId",auth,requireAdminTPC,promoteSPC);
 
-router.put("/demote-spc/:studentId",auth,requireTPC,demoteSPC);
+router.put("/demote-spc/:studentId",auth,requireAdminTPC,demoteSPC);
 
 export default router;
