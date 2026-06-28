@@ -326,3 +326,11 @@ export const updateStudentRoundSchema = z.object({
     .int()
     .min(0),
 });
+
+export const createCompanyPostSchema = z.object({
+  title: z.string().min(1),
+  post_type: z.enum(["announcement", "email"]).optional(),
+  content: z.string().min(1),
+});
+
+export const updateCompanyPostSchema = createCompanyPostSchema.partial();
