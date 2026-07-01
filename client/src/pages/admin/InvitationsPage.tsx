@@ -10,19 +10,21 @@ import type { Role } from "../../types";
 import "../../styles/dashboard.css";
 import "../../styles/form-wizard.css";
 
-/** Roles an Admin can invite (everyone except plain students, who self-register). */
+/**
+ * Roles an Admin can invite by email. SPC is intentionally excluded - SPCs are
+ * created by promoting an existing student (a TPC action), and the invite
+ * completion flow only provisions TPC/Admin accounts.
+ */
 const INVITABLE_ROLES: { value: Exclude<Role, "student">; label: string }[] = [
-  { value: "tpc", label: "TPC - Training & Placement Cell" },
-  { value: "spc", label: "SPC - Student Placement Coordinator" },
+  { value: "tpc", label: "Teacher Placement Co-ordinator" },
   { value: "admin", label: "Admin" },
 ];
 
 /**
- * Purpose: /Admin/invitations - the Admin "invite a TPC/Admin/SPC" screen.
- * POSTs to /invite/invite (useSendInvitation). The backend does not actually
- * deliver the email yet (invitationController.js has a "// send email here"
- * placeholder) but returns the invite link in its response, so we display it
- * with a copy button for the Admin to share manually.
+ * Purpose: /Admin/invitations - the Admin "invite a TPC/Admin" screen. POSTs to
+ * /invite/invite (useSendInvitation), which emails the invite link to the
+ * recipient. The link is also shown with a copy button as a fallback (and for
+ * when email delivery isn't configured).
  */
 export default function InvitationsPage() {
   const sendInvitation = useSendInvitation();
@@ -47,8 +49,7 @@ export default function InvitationsPage() {
       await navigator.clipboard.writeText(link);
       setCopied(true);
     } catch {
-      // Clipboard may be unavailable (e.g. non-secure context); the link is
-      // still visible on screen for manual copying.
+      /** Clipboard may be unavailable (e.g. non-secure context); the link is still visible on screen for manual copying. */
       setCopied(false);
     }
   }
@@ -57,7 +58,7 @@ export default function InvitationsPage() {
     <>
       <Topbar
         title="Invitations"
-        subtitle="Invite TPC, SPC, or Admin users to join the placement portal."
+        subtitle="Invite TPC or Admin users to join the placement portal."
       />
       <div className="dashboard-content">
         <section className="panel" style={{ marginBottom: 16 }}>
@@ -115,49 +116,6 @@ export default function InvitationsPage() {
             </form>
           </div>
         </section>
-
-        {sendInvitation.isSuccess && sendInvitation.data && (
-          <section className="panel">
-            <div className="panel-head">
-              <h2>Invitation created</h2>
-            </div>
-            <div className="panel-body">
-              <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
-                <Mail size={13} /> Email delivery isn't wired up yet - copy this
-                link and send it to the invitee. It expires in 7 days.
-              </p>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                }}
-              >
-                <input
-                  readOnly
-                  value={sendInvitation.data.inviteLink}
-                  style={{
-                    flex: 1,
-                    minWidth: 260,
-                    border: "1px solid var(--line)",
-                    borderRadius: 8,
-                    padding: "10px 12px",
-                    fontSize: 12,
-                  }}
-                />
-                <button
-                  className="secondary"
-                  type="button"
-                  onClick={() => copyLink(sendInvitation.data!.inviteLink)}
-                >
-                  {copied ? <Check size={15} /> : <Copy size={15} />}
-                  {copied ? "Copied" : "Copy link"}
-                </button>
-              </div>
-            </div>
-          </section>
-        )}
       </div>
     </>
   );

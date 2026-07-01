@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { pgErrorResponse } from "../lib/dbError.js";
 
 export const createStudent = async (req, res) => {
 
@@ -41,18 +42,6 @@ export const createStudent = async (req, res) => {
 
       placement_status,
     } = req.body;
-
-    // CHANGE: Link the new students row to the signed-in account.
-    // PROBLEM: createStudent never inserted user_id, so every profile created
-    //          via POST /students had user_id = NULL. As a result the row was
-    //          not tied to the users account: GET /students/me (WHERE user_id
-    //          = $1) could never find it, the dashboard always showed "profile
-    //          incomplete", and the client kept re-POSTing (hitting UNIQUE
-    //          violations) instead of updating. The profile effectively only
-    //          "existed" in the users table from the app's point of view.
-    // BEFORE:  INSERT INTO students (roll_no, ..., placement_status) with no user_id.
-    // AFTER:   user_id = req.user.userId is inserted (auth middleware now runs
-    //          on this route, so req.user is guaranteed to be present).
 
     const userId = req.user.userId;
 
@@ -134,23 +123,14 @@ export const createStudent = async (req, res) => {
   } catch (error) {
     console.log(error);
 
-    // CHANGE: Return a clear 409 on a unique-constraint violation.
-    // PROBLEM: roll_no / email / user_id are UNIQUE. A duplicate threw a
-    //          Postgres error (code 23505) that the catch reported as a generic
-    //          500 "Failed to create student", hiding the real cause (e.g. the
-    //          roll number is already taken) from the user.
-    // BEFORE:  every error -> 500 "Failed to create student".
-    // AFTER:   23505 -> 409 with a field-specific message (from error.constraint);
-    //          all other errors still -> 500.
     if (error.code === "23505") {
       return res.status(409).json({
         message: uniqueViolationMessage(error.constraint)
       });
     }
 
-    return res.status(500).json({
-      message: "Failed to create student"
-    });
+    const { status, message } = pgErrorResponse(error, "Failed to create student");
+    return res.status(status).json({ message });
   }
 };
 
@@ -355,9 +335,8 @@ export const updateStudent = async (req, res) => {
       });
     }
 
-    return res.status(500).json({
-      message: "Failed to update student",
-    });
+    const { status, message } = pgErrorResponse(error, "Failed to update student");
+    return res.status(status).json({ message });
   }
 };
 

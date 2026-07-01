@@ -1,10 +1,27 @@
 import pool from "../config/db.js";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
+import { pgErrorResponse } from "../lib/dbError.js";
+import { sendInvitationEmail } from "../services/emailService.js";
+
+// CHANGE: only these roles can be invited by email.
+// PROBLEM: completeRegistration() only provisions a profile for role "tpc"
+//          (admin needs no extra row); there is NO spc branch - SPCs are created
+//          by promoting an existing student (tpcController.promoteSPC). Inviting
+//          an "spc" (or any other role) by email would create a user with that
+//          role but no matching profile row -> a broken account.
+// FIX:     restrict invitable roles to TPC and Admin (also enforced in the UI).
+const ALLOWED_INVITE_ROLES = ["tpc", "admin"];
 
 export const sendInvitation = async (req, res) => {
   try {
     const { email, role } = req.body;
+
+    if (!ALLOWED_INVITE_ROLES.includes(role)) {
+      return res.status(400).json({
+        message: "Only TPC and Admin can be invited by email.",
+      });
+    }
 
     // Check if user already exists
     const existingUser = await pool.query(
@@ -68,13 +85,26 @@ export const sendInvitation = async (req, res) => {
       [email, role, token]
     );
 
-    const inviteLink = `http://localhost:5173/register/${token}`;
+    // Use FRONTEND_URL (same env var the other email senders use) so the link is
+    // correct per environment; fall back to the dev origin.
+    const inviteLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/register/${token}`;
 
-    // TODO: Send email containing inviteLink
+    // CHANGE: actually send the invitation email (was a TODO). Best-effort - a
+    // Brevo failure must NOT fail invitation creation, since the invitation row
+    // already exists and the admin can still copy the returned inviteLink. So we
+    // record emailSent and return success either way.
+    let emailSent = false;
+    try {
+      await sendInvitationEmail(email, role, inviteLink);
+      emailSent = true;
+    } catch (err) {
+      console.error("Invitation email failed:", err);
+    }
 
     return res.status(201).json({
       message: "Invitation sent successfully.",
       inviteLink,
+      emailSent,
     });
 
   } catch (error) {
@@ -210,10 +240,10 @@ export const verifyInvitation = async (
       email: result.rows[0].email,
       role: result.rows[0].role,
     });
-  } catch {
-    return res.status(500).json({
-      message: "Failed to verify invitation",
-    });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to verify invitation");
+    return res.status(status).json({ message });
   }
 };
 

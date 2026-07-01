@@ -16,8 +16,7 @@ export function useProfile() {
   return useQuery<StudentRecord, ApiError>({
     queryKey: queryKeys.profile,
     queryFn: getMyProfile,
-    // A 404 here means "profile not completed yet", not a transient failure -
-    // retrying would just hit the same 404 again, so don't burn requests on it.
+    /** A 404 here means "profile not completed yet", not a transient failure - retrying would just hit the same 404 again, so don't burn requests on it. */
     retry: (failureCount, error) => {
       if (error.status !== null && error.status >= 400 && error.status < 500) {
         return false;

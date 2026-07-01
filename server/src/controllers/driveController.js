@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { pgErrorResponse } from "../lib/dbError.js";
 
 export const createDrive = async (req, res) => {
   try {
@@ -55,8 +56,10 @@ export const createDrive = async (req, res) => {
     );
 
     return res.status(201).json(result.rows[0]);
-  } catch {
-    return res.status(500).json({ message: "Failed to create drive" });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to create drive");
+    return res.status(status).json({ message });
   }
 };
 
@@ -67,8 +70,10 @@ export const getDrives = async (req, res) => {
     );
 
     return res.status(200).json(result.rows);
-  } catch {
-    return res.status(500).json({ message: "Failed to fetch drives" });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to fetch drives");
+    return res.status(status).json({ message });
   }
 };
 
@@ -86,8 +91,10 @@ export const getDriveById = async (req, res) => {
     }
 
     return res.status(200).json(result.rows[0]);
-  } catch {
-    return res.status(500).json({ message: "Failed to fetch drive" });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to fetch drive");
+    return res.status(status).json({ message });
   }
 };
 
@@ -156,10 +163,8 @@ export const updateDrive = async (req, res) => {
     return res.status(200).json(result.rows[0]);
   } catch (error) {
     console.error(error);
-
-    return res.status(500).json({
-      message: "Failed to update drive",
-    });
+    const { status, message } = pgErrorResponse(error, "Failed to update drive");
+    return res.status(status).json({ message });
   }
 };
 
@@ -167,16 +172,22 @@ export const deleteDrive = async (req, res) => {
   try {
     const { driveId } = req.params;
 
-    await pool.query(
-      `DELETE FROM drives WHERE drive_id=$1`,
+    const result = await pool.query(
+      `DELETE FROM drives WHERE drive_id=$1 RETURNING *`,
       [driveId]
     );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Drive not found" });
+    }
 
     return res.status(200).json({
       message: "Drive deleted successfully",
     });
-  } catch {
-    return res.status(500).json({ message: "Failed to delete drive" });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to delete drive");
+    return res.status(status).json({ message });
   }
 };
 
@@ -200,10 +211,10 @@ export const getAppliedStudents = async (req, res) => {
     );
 
     return res.status(200).json(result.rows);
-  } catch {
-    return res.status(500).json({
-      message: "Failed to fetch applicants",
-    });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to fetch applicants");
+    return res.status(status).json({ message });
   }
 };
 
@@ -219,11 +230,15 @@ export const approveApplication = async (req, res) => {
       [applicationId]
     );
 
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Application not found" });
+    }
+
     return res.status(200).json(result.rows[0]);
-  } catch {
-    return res.status(500).json({
-      message: "Failed to approve application",
-    });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to approve application");
+    return res.status(status).json({ message });
   }
 };
 
@@ -239,11 +254,15 @@ export const rejectApplication = async (req, res) => {
       [applicationId]
     );
 
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Application not found" });
+    }
+
     return res.status(200).json(result.rows[0]);
-  } catch {
-    return res.status(500).json({
-      message: "Failed to reject application",
-    });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to reject application");
+    return res.status(status).json({ message });
   }
 };
 
@@ -260,11 +279,15 @@ export const updateStudentRound = async (req, res) => {
       [current_round, applicationId]
     );
 
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Application not found" });
+    }
+
     return res.status(200).json(result.rows[0]);
-  } catch {
-    return res.status(500).json({
-      message: "Failed to update round",
-    });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to update round");
+    return res.status(status).json({ message });
   }
 };
 
@@ -280,11 +303,15 @@ export const markStudentSelected = async (req, res) => {
       [applicationId]
     );
 
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Application not found" });
+    }
+
     return res.status(200).json(result.rows[0]);
-  } catch {
-    return res.status(500).json({
-      message: "Failed to mark selected",
-    });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to mark selected");
+    return res.status(status).json({ message });
   }
 };
 
@@ -300,11 +327,15 @@ export const markStudentRejected = async (req, res) => {
       [applicationId]
     );
 
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Application not found" });
+    }
+
     return res.status(200).json(result.rows[0]);
-  } catch {
-    return res.status(500).json({
-      message: "Failed to mark rejected",
-    });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to mark rejected");
+    return res.status(status).json({ message });
   }
 };
 
@@ -328,9 +359,9 @@ export const getDriveResults = async (req, res) => {
     );
 
     return res.status(200).json(result.rows);
-  } catch {
-    return res.status(500).json({
-      message: "Failed to fetch results",
-    });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to fetch results");
+    return res.status(status).json({ message });
   }
 };

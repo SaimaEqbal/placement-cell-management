@@ -4,12 +4,14 @@ import type { ApiError } from "../api/apiError";
 import { applyForDrive, getStudentApplications, withdrawApplication, type ApplicationRecord, } from "../services/applicationService";
 import { queryKeys } from "./queryKeys";
 
-// Purpose: TanStack Query wrappers over the student-facing applicationService.
-//
-// REWRITE NOTE: the old hooks targeted a non-existent "/applications" resource
-// and 404'd. These match the real /application routes - apply, withdraw, and
-// list a student's applications. (The Admin/TPC review actions live in
-// useDrives.ts, since the backend mounts them under /drive.)
+/**
+ * Purpose: TanStack Query wrappers over the student-facing applicationService.
+ *
+ * REWRITE NOTE: the old hooks targeted a non-existent "/applications" resource
+ * and 404'd. These match the real /application routes - apply, withdraw, and
+ * list a student's applications. (The Admin/TPC review actions live in
+ * useDrives.ts, since the backend mounts them under /drive.)
+ */
 
 /** Purpose: GET /application/student/:studentId - a student's own applications. */
 export function useStudentApplications(studentId: number | string | undefined) {

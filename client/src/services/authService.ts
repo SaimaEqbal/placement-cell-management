@@ -1,6 +1,6 @@
 import { axiosInstance } from "../api/axiosInstance";
 
-// Purpose: every Axios call related to authentication - signup, login, email verification, password reset - lives here. Components/hooks never call Axios directly 
+/** Purpose: every Axios call related to authentication - signup, login, email verification, password reset - lives here. Components/hooks never call Axios directly. */
 
 export interface SignupPayload {
   email: string;

@@ -13,7 +13,7 @@ export function decodeAccessToken(token: string): DecodedAccessToken | null {
     const payloadSegment = token.split(".")[1];
     if (!payloadSegment) return null;
 
-    // JWTs use base64url; atob() expects standard base64, so restore the characters base64url swaps out before decoding.
+    /** JWTs use base64url; atob() expects standard base64, so restore the characters base64url swaps out before decoding. */
     const base64 = payloadSegment.replace(/-/g, "+").replace(/_/g, "/");
     const json = decodeURIComponent(atob(base64).split("").map((char) => "%" + char.charCodeAt(0).toString(16).padStart(2, "0")).join(""),);
 

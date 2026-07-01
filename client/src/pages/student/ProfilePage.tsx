@@ -57,6 +57,21 @@ export default function ProfilePage() {
     );
   }
 
+  /** Per-semester SPIs, showing only the semesters the student has filled in. */
+  const spiItems: [string, string][] = [
+    profile.sem1_spi,
+    profile.sem2_spi,
+    profile.sem3_spi,
+    profile.sem4_spi,
+    profile.sem5_spi,
+    profile.sem6_spi,
+    profile.sem7_spi,
+    profile.sem8_spi,
+  ].reduce<[string, string][]>((acc, value, i) => {
+    if (value != null && value !== "") acc.push([`Semester ${i + 1}`, String(value)]);
+    return acc;
+  }, []);
+
   return (
     <>
       <Topbar
@@ -79,12 +94,15 @@ export default function ProfilePage() {
                 ["Roll number", profile.roll_no],
                 ["Email", profile.email],
                 ["Phone", profile.phone ?? "-"],
+                ["Department", profile.department ?? "-"],
                 ["Branch", profile.branch ?? "-"],
                 [
                   "Graduation year",
                   profile.graduation_year ? String(profile.graduation_year) : "-",
                 ],
                 ["CGPA", formatCgpa(profile.cgpa)],
+                ["10th percentage", profile.tenth_percentage ?? "-"],
+                ["12th percentage", profile.twelfth_percentage ?? "-"],
                 ["Gender", profile.gender ?? "-"],
                 ["Region", profile.region ?? "-"],
                 ["Religion", profile.religion ?? "-"],
@@ -107,6 +125,19 @@ export default function ProfilePage() {
             <DocumentLink label="10th marksheet" url={profile.tenth_marksheet_url} />
             <DocumentLink label="12th marksheet" url={profile.twelfth_marksheet_url} />
             <DocumentLink label="Latest semester marksheet" url={profile.last_sem_marksheet_url} />
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <h2>Semester SPIs</h2>
+          </div>
+          <div className="panel-body">
+            {spiItems.length > 0 ? (
+              <InfoGrid items={spiItems} />
+            ) : (
+              <p style={{ fontSize: 12, color: "var(--muted)" }}>No SPIs recorded yet.</p>
+            )}
           </div>
         </section>
       </div>

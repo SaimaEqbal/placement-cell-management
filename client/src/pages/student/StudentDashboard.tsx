@@ -20,8 +20,7 @@ import "../../styles/dashboard.css";
 export default function StudentDashboard() {
   const { data: profile, isLoading, isError, error, refetch } = useProfile();
 
-  // A 404 from GET /students/me means "hasn't completed their profile yet" -
-  // route that to a call-to-action, not a scary error screen.
+  /** A 404 from GET /students/me means "hasn't completed their profile yet" - route that to a call-to-action, not a scary error screen. */
   const profileIncomplete = error?.status === 404;
 
   if (isLoading) {
@@ -77,30 +76,6 @@ export default function StudentDashboard() {
     <>
       <Topbar title={`Welcome, ${firstName}`} subtitle="" initials={initials} />
       <div className="dashboard-content">
-        <section className="welcome-card">
-          <div>
-            <div className="eyebrow light">Student profile</div>
-            <h2>Placement profile overview</h2>
-            <p>
-              Keep your academic details, marksheets, and backlog information ready for
-              placement cell review.
-            </p>
-            <div className="profile-chips">
-              <span>{profile.roll_no}</span>
-              <span>{profile.branch ?? "Branch not set"}</span>
-            </div>
-          </div>
-          <div
-            className="score-ring"
-            style={{ background: `conic-gradient(#9ed6c8 ${completion}%, #ffffff15 0)` }}
-          >
-            <div>
-              <strong>{formatCgpa(profile.cgpa)}</strong>
-              <span>CGPA</span>
-            </div>
-          </div>
-        </section>
-
         {/* Existing-but-incomplete profile: prompt the student to finish it,
             driven by the server-computed is_profile_complete bit. */}
         {!profile.is_profile_complete && (
@@ -110,38 +85,6 @@ export default function StudentDashboard() {
             </Link>
           </div>
         )}
-
-        <div className="stats-row">
-          <StatCard
-            label="Placement status"
-            value={capitalize(profile.placement_status)}
-            note="Updated by the placement cell"
-            icon={<CheckCircle2 />}
-            tone={profile.placement_status === "placed" ? "green" : "blue"}
-          />
-          <StatCard
-            label="Active backlogs"
-            value={String(profile.active_backlogs)}
-            note={`${profile.passive_backlogs} cleared previously`}
-            icon={<BookOpen />}
-            tone={profile.active_backlogs > 0 ? "amber" : "green"}
-          />
-          {/* Profile completion is no longer shown as a percentage. The server
-              computes the is_profile_complete bit (generated column) and we
-              surface it as a simple Complete/Incomplete status. */}
-          <StatCard
-            label="Profile status"
-            value={profile.is_profile_complete ? "Complete" : "Incomplete"}
-            note={
-              profile.is_profile_complete
-                ? "All required details provided"
-                : "Some required details are missing"
-            }
-            icon={<FileText />}
-            tone={profile.is_profile_complete ? "green" : "amber"}
-          />
-        </div>
-
         <div className="two-column">
           <section className="panel">
             <div className="panel-head">

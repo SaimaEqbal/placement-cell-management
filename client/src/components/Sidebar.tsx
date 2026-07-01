@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   LogOut,
   Megaphone,
+  Newspaper,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -23,9 +24,11 @@ interface NavItem {
   icon: ElementType;
 }
 
-// Purpose: which nav items show up for each role. Driven entirely by the
-// route table in src/routes/paths.ts, so adding a page there and here is the
-// only wiring a new sidebar link needs.
+/**
+ * Purpose: which nav items show up for each role. Driven entirely by the
+ * route table in src/routes/paths.ts, so adding a page there and here is the
+ * only wiring a new sidebar link needs.
+ */
 const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   student: [
     { label: "Overview", to: paths.student, icon: LayoutDashboard },
@@ -40,9 +43,6 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
   tpc: [
     { label: "Dashboard", to: paths.tpc, icon: LayoutDashboard },
-    { label: "Companies", to: paths.tpcCompanies, icon: Building2 },
-    { label: "Drives", to: paths.tpcDrives, icon: Megaphone },
-    { label: "Students", to: paths.tpcStudents, icon: Users },
     { label: "Verification queue", to: paths.tpcVerification, icon: ClipboardCheck },
   ],
   admin: [
@@ -51,6 +51,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { label: "Drives", to: paths.adminDrives, icon: Megaphone },
     { label: "Students", to: paths.adminStudents, icon: Users },
     { label: "Invitations", to: paths.adminInvitations, icon: UserPlus },
+    { label: "Posts", to: paths.adminPosts, icon: Newspaper },
   ],
 };
 

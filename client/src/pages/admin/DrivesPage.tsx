@@ -4,7 +4,6 @@ import { ArrowRight, Megaphone, Plus, X } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
 import { Badge, EmptyState, ErrorState, LoadingState } from "../../components/ui";
-import { useAuth } from "../../context/AuthContext";
 import { useCompanies } from "../../hooks/useCompanies";
 import { useCreateDrive, useDrives } from "../../hooks/useDrives";
 import { formatDate } from "../../lib/format";
@@ -108,7 +107,6 @@ function toCreatePayload(form: DriveFormState): CreateDrivePayload {
  * the backend authorizes both (requireAdminTPCSPC on POST /drive).
  */
 export default function DrivesPage() {
-  const { role } = useAuth();
   const { data: drives, isLoading, isError, error, refetch } = useDrives();
   const { data: companies } = useCompanies();
   const createMutation = useCreateDrive();
@@ -117,15 +115,14 @@ export default function DrivesPage() {
   const [form, setForm] = useState<DriveFormState>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | undefined>();
 
-  // Drives only carry company_id; map to a name for display via the cached companies list.
+  /** Drives only carry company_id; map to a name for display via the cached companies list. */
   const companyNameById = useMemo(() => {
     const map = new Map<number, string>();
     companies?.forEach((c) => map.set(c.company_id, c.company_name));
     return map;
   }, [companies]);
 
-  // Applicants pages live under whichever role's route group is active.
-  const driveBasePath = role === "tpc" ? paths.tpcDrives : paths.adminDrives;
+  const driveBasePath = paths.adminDrives;
 
   function toggleBranch(branch: string) {
     setForm((prev) => ({
@@ -428,7 +425,16 @@ export default function DrivesPage() {
                   <Badge tone={statusTone(drive.status)}>{drive.status}</Badge>
                 </div>
                 <div className="panel-body">
+                  {drive.job_description && (
+                    <p style={{ fontSize: 12, marginBottom: 12, whiteSpace: "pre-wrap" }}>
+                      {drive.job_description}
+                    </p>
+                  )}
                   <div className="info-grid">
+                    <div>
+                      <span>Drive ID</span>
+                      <b>{drive.drive_id}</b>
+                    </div>
                     <div>
                       <span>Company</span>
                       <b>
@@ -437,8 +443,20 @@ export default function DrivesPage() {
                       </b>
                     </div>
                     <div>
+                      <span>Role</span>
+                      <b>{drive.job_role ?? "-"}</b>
+                    </div>
+                    <div>
                       <span>Type</span>
                       <b>{drive.employment_type}</b>
+                    </div>
+                    <div>
+                      <span>Package (LPA)</span>
+                      <b>{drive.package_ctc ?? "-"}</b>
+                    </div>
+                    <div>
+                      <span>Min CGPA</span>
+                      <b>{drive.minimum_cgpa}</b>
                     </div>
                     <div>
                       <span>Drive date</span>
@@ -449,12 +467,28 @@ export default function DrivesPage() {
                       <b>{formatDate(drive.application_deadline)}</b>
                     </div>
                     <div>
-                      <span>Min CGPA</span>
-                      <b>{drive.minimum_cgpa}</b>
+                      <span>Max active backlogs</span>
+                      <b>{drive.max_active_backlogs}</b>
+                    </div>
+                    <div>
+                      <span>Max passive backlogs</span>
+                      <b>{drive.max_passive_backlogs}</b>
+                    </div>
+                    <div>
+                      <span>Rounds</span>
+                      <b>{drive.number_of_rounds}</b>
                     </div>
                     <div>
                       <span>Branches</span>
                       <b>{drive.allowed_branches?.join(", ") || "-"}</b>
+                    </div>
+                    <div>
+                      <span>Created</span>
+                      <b>{formatDate(drive.created_at)}</b>
+                    </div>
+                    <div>
+                      <span>Updated</span>
+                      <b>{formatDate(drive.updated_at)}</b>
                     </div>
                   </div>
                   <div className="form-actions" style={{ marginTop: 14 }}>

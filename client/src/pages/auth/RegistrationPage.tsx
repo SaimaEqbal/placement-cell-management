@@ -19,7 +19,7 @@ interface FieldErrors {
 /** Purpose: /register - create the student account via POST /auth/signup. */
 export default function RegistrationPage() {
   const signupMutation = useSignup();
-  // Lets the "Check your inbox" screen re-send the verification email without making the student go back to the login page to do it.
+  /** Lets the "Check your inbox" screen re-send the verification email without making the student go back to the login page to do it. */
   const resendMutation = useResendVerification();
 
   const [email, setEmail] = useState("");

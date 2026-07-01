@@ -77,4 +77,35 @@ export function validateConfirmPassword(password: string, confirm: string,): str
 /** Dropdown options in Complete Profile. */
 export const DEPARTMENTS = [ "Department Of Computer Engineering", "Department Of Electronics & Communication Engineering", "Department Of Electrical Engineering", "Department Of Mechanical Engineering", "Department Of Civil Engineering" ] as const;
 
+/**
+ * Department -> the branches offered within it, for the student profile form.
+ * The Branch dropdown is populated from the entry matching the chosen
+ * Department, so a branch can never be selected without its department.
+ */
+export const DEPARTMENT_BRANCHES: Record<string, readonly string[]> = {
+  "Computer Engineering": [
+    "B.Tech. Computer Engineering",
+    "B.Tech. Computer Science & Engineering (Data Sciences) (Self-financed)",
+  ],
+  "Electronics & Communication Engineering": [
+    "B.Tech. (Electronics & Communication Engineering)",
+    "B.Tech. Electronics (VLSI Design & Technology)",
+  ],
+  "Electrical Engineering": [
+    "B.Tech. (Electrical Engineering)",
+    "B.Tech. (Electrical & Computer Engineering)",
+  ],
+  "Mechanical Engineering": [
+    "B.Tech. (Mechanical Engineering)",
+    "B.Tech. (Robotics & Artificial Intelligence) (Self-Financed)",
+  ],
+  "Civil Engineering": [
+    "B.Tech. (Civil Engineering)",
+    "B.Tech. Civil Engineering (Construction Technology) (Self-Financed)",
+  ],
+};
+
+/** Department options for the student profile form (the keys of DEPARTMENT_BRANCHES). */
+export const DEPARTMENT_OPTIONS = Object.keys(DEPARTMENT_BRANCHES);
+
 export const SEMESTERS = [1, 2, 3, 4, 5, 6, 7, 8] as const;

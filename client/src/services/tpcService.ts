@@ -1,13 +1,15 @@
 import { axiosInstance } from "../api/axiosInstance";
 
-// Purpose: Axios calls under the backend's /tpc namespace
-// (server/src/routes/tpcRoutes.js) - managing TPC accounts, and promoting/
-// demoting a student to/from the SPC role.
-//
-// Not in the brief's literal service-file list, but added alongside
-// studentService.ts/spcService.ts because the TPC requirements (final
-// verification, managing the verification pipeline) map onto this distinct
-// backend route namespace, not onto plain student CRUD.
+/**
+ * Purpose: Axios calls under the backend's /tpc namespace
+ * (server/src/routes/tpcRoutes.js) - managing TPC accounts, and promoting/
+ * demoting a student to/from the SPC role.
+ *
+ * Not in the brief's literal service-file list, but added alongside
+ * studentService.ts/spcService.ts because the TPC requirements (final
+ * verification, managing the verification pipeline) map onto this distinct
+ * backend route namespace, not onto plain student CRUD.
+ */
 
 /** Shape of a row from the `tpc` table (server/src/migrations/008_create_tpc.sql). */
 export interface TpcRecord {

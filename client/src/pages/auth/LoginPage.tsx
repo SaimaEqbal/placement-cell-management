@@ -40,7 +40,7 @@ export default function LoginPage() {
     setFormError(undefined);
 
     loginMutation.mutate(
-      // Email lowercased to match the canonical form stored at signup - addresses are case-insensitive, but the DB lookup is not.
+      /** Email lowercased to match the canonical form stored at signup - addresses are case-insensitive, but the DB lookup is not. */
       { email: email.trim().toLowerCase(), password },
       {
         onSuccess: (data) => {

@@ -30,11 +30,12 @@ import DrivesPage from "../pages/admin/DrivesPage";
 import DriveApplicantsPage from "../pages/admin/DriveApplicantsPage";
 import AdminStudentsPage from "../pages/admin/AdminStudentsPage";
 import InvitationsPage from "../pages/admin/InvitationsPage";
+import CompanyPostsPage from "../pages/admin/CompanyPostsPage";
 
 import { homePathForRole, paths } from "./paths";
 import ProtectedRoute from "./ProtectedRoute";
 
-/* Purpose: the single source of truth for every route in the app - which URL renders which page, and which roles may see it. See src/routes/paths.ts for the path constants and ProtectedRoute.tsx for the access-control logic.*/
+/** Purpose: the single source of truth for every route in the app - which URL renders which page, and which roles may see it. See src/routes/paths.ts for the path constants and ProtectedRoute.tsx for the access-control logic. */
 export default function AppRoutes() {
   const { isAuthenticated, role } = useAuth();
 
@@ -106,16 +107,8 @@ export default function AppRoutes() {
       <Route element={<ProtectedRoute allowedRoles={["tpc"]} />}>
         <Route element={<AppShellLayout />}>
           <Route path={paths.tpc} element={<TpcDashboard />} />
-          {/* TPC reuses the same company/drive/student pages as Admin - the
-              backend authorizes TPC for all of them (requireAdminTPC /
-              requireAdminTPCSPC). */}
-          <Route path={paths.tpcCompanies} element={<CompaniesPage />} />
-          <Route path={paths.tpcDrives} element={<DrivesPage />} />
-          <Route
-            path={`${paths.tpcDrives}/:driveId`}
-            element={<DriveApplicantsPage />}
-          />
-          <Route path={paths.tpcStudents} element={<AdminStudentsPage />} />
+          {/* Company/drive/student management is admin-only (the backend now
+              requires admin for those writes); TPC keeps verification only. */}
           <Route
             path={paths.tpcVerification}
             element={<TpcVerificationQueuePage />}
@@ -139,6 +132,7 @@ export default function AppRoutes() {
           />
           <Route path={paths.adminStudents} element={<AdminStudentsPage />} />
           <Route path={paths.adminInvitations} element={<InvitationsPage />} />
+          <Route path={paths.adminPosts} element={<CompanyPostsPage />} />
         </Route>
       </Route>
 

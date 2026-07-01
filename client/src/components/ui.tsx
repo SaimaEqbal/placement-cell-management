@@ -172,10 +172,12 @@ export function InfoGrid({ items }: { items: string[][] }) {
   );
 }
 
-// --- Reusable loading / error / empty states --------------------------------
-// Purpose: every TanStack Query-backed page in this app (dashboards, lists,
-// review screens) needs to render these three states consistently instead
-// of each page inventing its own spinner/message markup.
+/**
+ * Reusable loading / error / empty states.
+ * Purpose: every TanStack Query-backed page in this app (dashboards, lists,
+ * review screens) needs to render these three states consistently instead
+ * of each page inventing its own spinner/message markup.
+ */
 
 /** Purpose: shown while a useQuery()/useMutation() is in flight. */
 export function LoadingState({ label = "Loading..." }: { label?: string }) {

@@ -1,11 +1,13 @@
 import { axiosInstance } from "../api/axiosInstance";
 import type { Role } from "../types";
 
-// Purpose: every Axios call for the invitation + invite-registration flow
-// (server/src/routes/invitationRoutes.js -> invitationController.js): an Admin
-// invites a TPC/Admin/SPC by email, the invitee opens the emailed link, and
-// completes their own registration. sendInvitation is auth'd (Admin only);
-// verify/complete are public so a logged-out invitee can use them.
+/**
+ * Purpose: every Axios call for the invitation + invite-registration flow
+ * (server/src/routes/invitationRoutes.js -> invitationController.js): an Admin
+ * invites a TPC/Admin/SPC by email, the invitee opens the emailed link, and
+ * completes their own registration. sendInvitation is auth'd (Admin only);
+ * verify/complete are public so a logged-out invitee can use them.
+ */
 
 /** Body accepted by POST /invite/invite. */
 export interface SendInvitationPayload {
@@ -17,6 +19,8 @@ export interface SendInvitationPayload {
 export interface SendInvitationResponse {
   message: string;
   inviteLink: string;
+  /** Whether the invitation email was actually delivered (best-effort; the link is the fallback). */
+  emailSent?: boolean;
 }
 
 /** Response from GET /invite/verify/:token - the pending invitation's email + role. */

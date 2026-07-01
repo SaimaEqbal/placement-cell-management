@@ -1,9 +1,11 @@
 import { axiosInstance } from "../api/axiosInstance";
 
-// Purpose: every Axios call for the `students` resource - profile fetch,
-// profile completion (create), profile edits, and the listing used by the
-// SPC/TPC/Admin screens - lives here. Components/hooks call these functions,
-// never axios directly.
+/**
+ * Purpose: every Axios call for the `students` resource - profile fetch,
+ * profile completion (create), profile edits, and the listing used by the
+ * SPC/TPC/Admin screens - lives here. Components/hooks call these functions,
+ * never axios directly.
+ */
 
 /** Full shape of a row from the `students` table (server/src/migrations/001_create_students.sql + 005_alter_students.sql), as returned by `SELECT *`. */
 export interface StudentRecord {
@@ -20,6 +22,7 @@ export interface StudentRecord {
   email: string;
   phone: string | null;
   branch: string | null;
+  department: string | null;
   graduation_year: number | null;
   /** Postgres NUMERIC columns come back from `pg` as strings, not numbers - use Number(student.cgpa) before formatting/math. */
   cgpa: string | null;
@@ -35,6 +38,17 @@ export interface StudentRecord {
   tenth_marksheet_url: string | null;
   twelfth_marksheet_url: string | null;
   last_sem_marksheet_url: string | null;
+  /** Postgres NUMERIC columns - returned by `pg` as strings (use Number(...) for math). */
+  tenth_percentage: string | null;
+  twelfth_percentage: string | null;
+  sem1_spi: string | null;
+  sem2_spi: string | null;
+  sem3_spi: string | null;
+  sem4_spi: string | null;
+  sem5_spi: string | null;
+  sem6_spi: string | null;
+  sem7_spi: string | null;
+  sem8_spi: string | null;
   /** Set by SPC/TPC review. NOTE: updateStudentSchema (server/src/lib/schema.js) does not currently list this field, so PUT /students/:id silently drops it - see updateStudent() below. */
   review_status: string | null;
   reviewed_at: string | null;
@@ -56,6 +70,7 @@ export interface CreateStudentPayload {
   email: string;
   phone: string;
   branch: string;
+  department: string;
   graduation_year: number;
   cgpa: number;
   gender: string;
@@ -69,6 +84,16 @@ export interface CreateStudentPayload {
   tenth_marksheet_url: string;
   twelfth_marksheet_url: string;
   last_sem_marksheet_url: string;
+  tenth_percentage: number;
+  twelfth_percentage: number;
+  sem1_spi?: number;
+  sem2_spi?: number;
+  sem3_spi?: number;
+  sem4_spi?: number;
+  sem5_spi?: number;
+  sem6_spi?: number;
+  sem7_spi?: number;
+  sem8_spi?: number;
   placement_status: "unplaced" | "shortlisted" | "placed" | "rejected";
 }
 
