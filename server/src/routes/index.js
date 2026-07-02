@@ -8,6 +8,7 @@ import driveRouter from "./driveRoutes.js";
 import applicationRouter from "./applicationRoutes.js";
 import invitationRouter from "./invitationRoutes.js";
 import companyPostRoutes from "./companyPostRoutes.js";
+import notificationRouter from "./notificationRoutes.js";
 
 const router = express.Router();
 
@@ -20,5 +21,6 @@ router.use('/drive',driveRouter);
 router.use('/application',applicationRouter);
 router.use('/invite',invitationRouter);
 router.use('/company-post',companyPostRoutes);
+router.use('/notifications',notificationRouter);
 
 export default router;
