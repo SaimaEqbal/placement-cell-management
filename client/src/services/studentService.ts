@@ -49,9 +49,22 @@ export interface StudentRecord {
   sem6_spi: string | null;
   sem7_spi: string | null;
   sem8_spi: string | null;
-  /** Set by SPC/TPC review. NOTE: updateStudentSchema (server/src/lib/schema.js) does not currently list this field, so PUT /students/:id silently drops it - see updateStudent() below. */
+  /**
+   * Set by the SPC/TPC verification flow. Values: 'pending', 'spc_verified',
+   * 'spc_rejected', 'verified' (TPC final), 'rejected' (TPC final). The generic
+   * PUT /students/:id still doesn't set this - the dedicated /spc and /tpc
+   * verify|reject endpoints do (see spcService.ts / tpcService.ts).
+   */
   review_status: string | null;
   reviewed_at: string | null;
+  /** Reason recorded when an SPC or TPC rejected the profile (migration 018). */
+  rejection_reason: string | null;
+  /** Current semester (5-8); drives which SPIs are required (migration 018). */
+  semester: number | null;
+  /** Which SPC is assigned to verify this student (migration 018); set by the TPC's assign action. */
+  assigned_spc_id: number | null;
+  /** Only present on GET /tpc/spc-verified rows: true when this student is themselves an SPC coordinator (they skip SPC review). */
+  is_spc?: boolean;
   /**
    * Server-computed profile-completion flag. Backed by a Postgres STORED
    * GENERATED column (server/src/migrations/012_add_profile_complete.sql) -
@@ -73,6 +86,7 @@ export interface CreateStudentPayload {
   department: string;
   graduation_year: number;
   cgpa: number;
+  semester: number;
   gender: string;
   region: string;
   religion: string;

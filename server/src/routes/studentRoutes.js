@@ -2,7 +2,7 @@ import express from "express";
 import { getStudents,createStudent,getStudentById,updateStudent,deleteStudent,getMyProfile } from "../controllers/studentController.js";
 import { validateCreateStudent,validateUpdateStudent } from "../middleware/studentMiddleware.js";
 import {auth} from "../middleware/authMiddleware.js";
-import { requireAdmin, requireAdminTPCSPC } from "../middleware/roleMiddleware.js";
+import { requireAdminTPC, requireAdminTPCSPC } from "../middleware/roleMiddleware.js";
 
 const router = express.Router();
 
@@ -22,6 +22,8 @@ router.put("/:id", auth, validateUpdateStudent, updateStudent);
 
 router.get("/:id", auth, requireAdminTPCSPC, getStudentById);
 
-router.delete("/:id", auth, requireAdmin, deleteStudent);
+// TPC (and admin) can delete students - used by the TPC Students section's
+// "Delete student" action. Was admin-only before.
+router.delete("/:id", auth, requireAdminTPC, deleteStudent);
 
 export default router;

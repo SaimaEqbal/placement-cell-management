@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, ClipboardCheck, Search } from "lucide-react";
+import { ArrowRight, CheckCircle2, Search } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
 import { Badge, EmptyState, ErrorState, LoadingState } from "../../components/ui";
-import { useTpcBranches, useTpcQueue } from "../../hooks/useVerification";
+import { useTpcBranches, useTpcSpcVerified } from "../../hooks/useVerification";
 import { formatCgpa, initialsFromName } from "../../lib/format";
 import { paths } from "../../routes/paths";
 
@@ -12,15 +12,16 @@ import "../../styles/dashboard.css";
 import "../../styles/data-table.css";
 
 /**
- * Purpose: /TPC/verification - students an SPC rejected (review_status =
- * 'spc_rejected'), now awaiting TPC review, with the SPC's reason shown inline.
- * Filterable by branch (branches under the TPC's department).
+ * Purpose: /TPC/spc-verified - the TPC's final-review list. Contains students
+ * an SPC verified (review_status = 'spc_verified') PLUS SPC coordinators' own
+ * profiles (they skip peer review - see the `is_spc` tag). Rows open the same
+ * verify/reject detail as the verification queue.
  */
-export default function TpcVerificationQueuePage() {
+export default function TpcSpcVerifiedPage() {
   const [branch, setBranch] = useState("");
   const [search, setSearch] = useState("");
   const { data: branches } = useTpcBranches();
-  const { data: students, isLoading, isError, error, refetch } = useTpcQueue(
+  const { data: students, isLoading, isError, error, refetch } = useTpcSpcVerified(
     branch || undefined,
   );
 
@@ -37,21 +38,21 @@ export default function TpcVerificationQueuePage() {
 
   return (
     <>
-      <Topbar title="Verification queue" subtitle="Students rejected by an SPC, awaiting your review." />
+      <Topbar title="Awaiting TPC verification" subtitle="SPC-verified students and SPC coordinators, ready for your final review." />
       <div className="dashboard-content">
-        {isLoading && <LoadingState label="Loading verification queue..." />}
+        {isLoading && <LoadingState label="Loading students..." />}
         {isError && (
-          <ErrorState message={error?.message ?? "Could not load the queue."} onRetry={refetch} />
+          <ErrorState message={error?.message ?? "Could not load students."} onRetry={refetch} />
         )}
 
         {!isLoading && !isError && (
           <section className="panel queue-panel">
             <div className="queue-head">
               <div>
-                <div className="eyebrow">TPC verification</div>
-                <h2>SPC-rejected students</h2>
+                <div className="eyebrow">TPC final review</div>
+                <h2>Awaiting TPC verification</h2>
                 <p>
-                  {(students ?? []).length} student(s) awaiting your review
+                  {(students ?? []).length} student(s) ready for final approval
                   {branch ? ` in ${branch}` : ""}.
                 </p>
               </div>
@@ -81,9 +82,9 @@ export default function TpcVerificationQueuePage() {
 
             {filtered.length === 0 ? (
               <EmptyState
-                icon={<ClipboardCheck size={28} />}
-                title="Nothing waiting for review"
-                description="No SPC-rejected students in this view."
+                icon={<CheckCircle2 size={28} />}
+                title="Nothing awaiting final review"
+                description="No SPC-verified students or coordinators in this view."
               />
             ) : (
               <div className="data-table">
@@ -101,9 +102,6 @@ export default function TpcVerificationQueuePage() {
                       <span>
                         <b>{s.name}</b>
                         <small>{s.roll_no}</small>
-                        {s.rejection_reason && (
-                          <small className="reason-line">SPC: {s.rejection_reason}</small>
-                        )}
                       </span>
                     </span>
                     <span>{s.branch ?? "-"}</span>
@@ -111,13 +109,17 @@ export default function TpcVerificationQueuePage() {
                       <b>{formatCgpa(s.cgpa)}</b>
                     </span>
                     <span>
-                      <Badge tone="red">SPC rejected</Badge>
+                      {s.is_spc ? (
+                        <Badge tone="blue">SPC coordinator</Badge>
+                      ) : (
+                        <Badge tone="green">SPC verified</Badge>
+                      )}
                     </span>
                     <span>
                       <Link
                         className="row-action"
                         to={`${paths.tpcVerification}/${s.id}`}
-                        state={{ ids, backPath: paths.tpcVerification }}
+                        state={{ ids, backPath: paths.tpcSpcVerified }}
                       >
                         Review <ArrowRight size={15} />
                       </Link>

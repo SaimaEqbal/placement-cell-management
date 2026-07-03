@@ -53,11 +53,12 @@ export function validateDepartment(value: string): string | undefined {
   return value ? undefined : "Select a department.";
 }
 
-/** Purpose: Current Semester field rule - required dropdown, values 1-8. */
+/** Purpose: Current Semester field rule - required dropdown. Placement students
+ * are in their final years, so valid values are 5-8. */
 export function validateSemester(value: string): string | undefined {
   const num = Number(value);
-  if (!value || Number.isNaN(num) || num < 1 || num > 8) {
-    return "Select a semester between 1 and 8.";
+  if (!value || Number.isNaN(num) || num < 5 || num > 8) {
+    return "Select a semester between 5 and 8.";
   }
   return undefined;
 }
@@ -108,4 +109,4 @@ export const DEPARTMENT_BRANCHES: Record<string, readonly string[]> = {
 /** Department options for the student profile form (the keys of DEPARTMENT_BRANCHES). */
 export const DEPARTMENT_OPTIONS = Object.keys(DEPARTMENT_BRANCHES);
 
-export const SEMESTERS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+export const SEMESTERS = [5, 6, 7, 8] as const;

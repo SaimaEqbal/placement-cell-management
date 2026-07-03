@@ -33,7 +33,8 @@ export interface InvitationDetails {
 export interface CompleteRegistrationPayload {
   name: string;
   phone: string;
-  branch: string;
+  /** For a TPC this is the department they oversee (stored in tpc.department). */
+  department: string;
   password: string;
 }
 

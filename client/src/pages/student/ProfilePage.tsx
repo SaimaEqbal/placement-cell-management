@@ -100,6 +100,7 @@ export default function ProfilePage() {
                   "Graduation year",
                   profile.graduation_year ? String(profile.graduation_year) : "-",
                 ],
+                ["Current semester", profile.semester ? String(profile.semester) : "-"],
                 ["CGPA", formatCgpa(profile.cgpa)],
                 ["10th percentage", profile.tenth_percentage ?? "-"],
                 ["12th percentage", profile.twelfth_percentage ?? "-"],

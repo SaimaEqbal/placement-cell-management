@@ -1,5 +1,47 @@
 import pool from "../config/db.js";
+<<<<<<< HEAD
 import { pgErrorResponse } from "../lib/dbError.js";
+=======
+import {
+  createNotification,
+  createNotificationForRole,
+} from "./notificationController.js";
+
+// Purpose: look up which user (users.id) owns a given application, plus the
+// job role and company name, so the notify* helpers below can message the
+// right student with useful context. Failures here are swallowed by the
+// callers - a notification hiccup should never break the underlying
+// approve/reject/select/round action.
+async function getApplicationContext(applicationId) {
+  const result = await pool.query(
+    `SELECT
+        s.user_id,
+        d.job_role,
+        c.company_name
+     FROM applications a
+     JOIN students s ON a.student_id = s.id
+     JOIN drives d ON a.drive_id = d.drive_id
+     JOIN companies c ON d.company_id = c.company_id
+     WHERE a.application_id = $1`,
+    [applicationId]
+  );
+
+  return result.rows[0] ?? null;
+}
+
+/** Purpose: notify the student tied to an application about a status/round change. Never throws - a failed notification must not fail the underlying action. */
+async function notifyApplicationEvent(applicationId, buildMessage) {
+  try {
+    const context = await getApplicationContext(applicationId);
+    if (!context) return;
+
+    const { title, message, tone } = buildMessage(context);
+    await createNotification(context.user_id, title, message, tone);
+  } catch (error) {
+    console.error("Failed to send application notification:", error);
+  }
+}
+>>>>>>> 83911f696eae2f6861aaf2bb9787ab8a194c5a44
 
 export const createDrive = async (req, res) => {
   try {
@@ -55,11 +97,36 @@ export const createDrive = async (req, res) => {
       ]
     );
 
+<<<<<<< HEAD
     return res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error(error);
     const { status, message } = pgErrorResponse(error, "Failed to create drive");
     return res.status(status).json({ message });
+=======
+    const drive = result.rows[0];
+
+    try {
+      const companyResult = await pool.query(
+        `SELECT company_name FROM companies WHERE company_id = $1`,
+        [company_id]
+      );
+      const companyName = companyResult.rows[0]?.company_name ?? "A company";
+
+      await createNotificationForRole(
+        "student",
+        "New placement drive announced",
+        `${companyName} is hiring for ${job_role}. Check the drive for eligibility and the application deadline.`,
+        "green"
+      );
+    } catch (error) {
+      console.error("Failed to broadcast drive notification:", error);
+    }
+
+    return res.status(201).json(drive);
+  } catch {
+    return res.status(500).json({ message: "Failed to create drive" });
+>>>>>>> 83911f696eae2f6861aaf2bb9787ab8a194c5a44
   }
 };
 
@@ -230,9 +297,17 @@ export const approveApplication = async (req, res) => {
       [applicationId]
     );
 
+<<<<<<< HEAD
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Application not found" });
     }
+=======
+    await notifyApplicationEvent(applicationId, ({ job_role, company_name }) => ({
+      title: "Application approved",
+      message: `Your application for ${job_role} at ${company_name} has moved forward to the next stage.`,
+      tone: "green",
+    }));
+>>>>>>> 83911f696eae2f6861aaf2bb9787ab8a194c5a44
 
     return res.status(200).json(result.rows[0]);
   } catch (error) {
@@ -254,9 +329,17 @@ export const rejectApplication = async (req, res) => {
       [applicationId]
     );
 
+<<<<<<< HEAD
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Application not found" });
     }
+=======
+    await notifyApplicationEvent(applicationId, ({ job_role, company_name }) => ({
+      title: "Application not selected",
+      message: `Your application for ${job_role} at ${company_name} was not moved forward this time.`,
+      tone: "red",
+    }));
+>>>>>>> 83911f696eae2f6861aaf2bb9787ab8a194c5a44
 
     return res.status(200).json(result.rows[0]);
   } catch (error) {
@@ -279,9 +362,17 @@ export const updateStudentRound = async (req, res) => {
       [current_round, applicationId]
     );
 
+<<<<<<< HEAD
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Application not found" });
     }
+=======
+    await notifyApplicationEvent(applicationId, ({ job_role, company_name }) => ({
+      title: "Interview round updated",
+      message: `You've advanced to round ${current_round} for ${job_role} at ${company_name}.`,
+      tone: "blue",
+    }));
+>>>>>>> 83911f696eae2f6861aaf2bb9787ab8a194c5a44
 
     return res.status(200).json(result.rows[0]);
   } catch (error) {
@@ -303,9 +394,17 @@ export const markStudentSelected = async (req, res) => {
       [applicationId]
     );
 
+<<<<<<< HEAD
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Application not found" });
     }
+=======
+    await notifyApplicationEvent(applicationId, ({ job_role, company_name }) => ({
+      title: "Congratulations - you're selected!",
+      message: `You've been selected for ${job_role} at ${company_name}.`,
+      tone: "green",
+    }));
+>>>>>>> 83911f696eae2f6861aaf2bb9787ab8a194c5a44
 
     return res.status(200).json(result.rows[0]);
   } catch (error) {
@@ -327,9 +426,17 @@ export const markStudentRejected = async (req, res) => {
       [applicationId]
     );
 
+<<<<<<< HEAD
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Application not found" });
     }
+=======
+    await notifyApplicationEvent(applicationId, ({ job_role, company_name }) => ({
+      title: "Application result",
+      message: `You were not selected for ${job_role} at ${company_name} this time. Keep going!`,
+      tone: "gray",
+    }));
+>>>>>>> 83911f696eae2f6861aaf2bb9787ab8a194c5a44
 
     return res.status(200).json(result.rows[0]);
   } catch (error) {

@@ -1,5 +1,22 @@
 import { z } from "zod";
 
+// Placement students are in semesters 5-8; a student in semester n must have
+// SPIs for every completed semester (1 .. n-1). sem1-sem4 are always required
+// (n >= 5); sem5/sem6/sem7 become required at semester 6/7/8. Runs only when a
+// semester value is present, so partial updates that omit it are unaffected.
+const enforceSemesterSpis = (val, ctx) => {
+  if (val.semester == null) return;
+  for (let i = 1; i < val.semester; i++) {
+    if (val[`sem${i}_spi`] == null) {
+      ctx.addIssue({
+        code: "custom",
+        path: [`sem${i}_spi`],
+        message: `Semester ${i} SPI is required for a semester ${val.semester} student.`,
+      });
+    }
+  }
+};
+
 export const createStudentSchema = z.object({
   roll_no: z.string().min(1),
   name: z.string().min(1),
@@ -10,6 +27,7 @@ export const createStudentSchema = z.object({
   department: z.string().min(1),
   graduation_year: z.number().int(),
   cgpa: z.number().min(0).max(10),
+  semester: z.number().int().min(5).max(8),
 
   gender: z.string(),
   region: z.string(),
@@ -44,7 +62,7 @@ export const createStudentSchema = z.object({
     "placed",
     "rejected"
   ]).optional()
-});
+}).superRefine(enforceSemesterSpis);
 
 export const updateStudentSchema = z.object({
   roll_no: z.string().min(1).optional(),
@@ -56,6 +74,7 @@ export const updateStudentSchema = z.object({
   department: z.string().min(1).optional(),
   graduation_year: z.number().int().optional(),
   cgpa: z.number().min(0).max(10).optional(),
+  semester: z.number().int().min(5).max(8).optional(),
 
   gender: z.string().optional(),
   region: z.string().optional(),
@@ -90,7 +109,7 @@ export const updateStudentSchema = z.object({
     "placed",
     "rejected"
   ]).optional()
-});
+}).superRefine(enforceSemesterSpis);
 
 export const createTPCSchema = z.object({
   user_id: z
@@ -109,9 +128,14 @@ export const createTPCSchema = z.object({
     .min(10, "Phone number must be at least 10 digits")
     .max(15, "Phone number cannot exceed 15 digits"),
 
+  department: z
+    .string()
+    .min(2, "Department is required"),
+
   branch: z
     .string()
-    .min(2, "Branch is required"),
+    .min(1)
+    .optional(),
 });
 
 export const updateTPCSchema = z.object({
@@ -130,9 +154,14 @@ export const updateTPCSchema = z.object({
     .max(15, "Phone number cannot exceed 15 digits")
     .optional(),
 
+  department: z
+    .string()
+    .min(2, "Department is required")
+    .optional(),
+
   branch: z
     .string()
-    .min(2, "Branch is required")
+    .min(1)
     .optional(),
 });
 

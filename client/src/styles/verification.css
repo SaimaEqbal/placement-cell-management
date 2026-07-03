@@ -426,3 +426,100 @@
     width: 100%;
   }
 }
+
+/* --- Clickable document selector (right panel) ----------------------------- */
+button.doc-select {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 8px;
+  padding: 8px;
+  color: #36443f;
+  cursor: pointer;
+}
+
+button.doc-select + button.doc-select {
+  margin-top: 2px;
+}
+
+button.doc-select > svg {
+  color: var(--green);
+  flex-shrink: 0;
+}
+
+button.doc-select:hover:not(:disabled) {
+  background: #f4f7f5;
+}
+
+button.doc-select.active {
+  border-color: var(--green);
+  background: #f1f8f5;
+}
+
+button.doc-select:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.doc-sel-text {
+  flex: 1;
+}
+
+.doc-sel-text b {
+  display: block;
+  font-size: 9px;
+}
+
+.doc-sel-text small {
+  display: block;
+  font-size: 7px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* --- Rejection reason callout ---------------------------------------------- */
+.reject-reason {
+  font-size: 9px;
+  line-height: 1.55;
+  color: #a23c34;
+  background: #fff7f5;
+  border: 1px solid #f3ded9;
+  border-radius: 7px;
+  padding: 10px;
+}
+
+/* --- "Next student" floating button (bottom-right of the document pane) ----- */
+.next-student-fab {
+  position: fixed;
+  bottom: 20px;
+  right: 460px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 15px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #36443f;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 6px 18px #213b3420;
+  cursor: pointer;
+}
+
+.next-student-fab:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (max-width: 900px) {
+  .next-student-fab {
+    right: 20px;
+    bottom: 84px;
+  }
+}

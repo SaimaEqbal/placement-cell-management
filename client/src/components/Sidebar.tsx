@@ -3,12 +3,14 @@ import { NavLink } from "react-router-dom";
 import {
   Bell,
   Building2,
+  CheckCircle2,
   ClipboardCheck,
   FileText,
   LayoutDashboard,
   LogOut,
   Megaphone,
   Newspaper,
+  UserCog,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -24,26 +26,33 @@ interface NavItem {
   icon: ElementType;
 }
 
+/** The normal student navigation. Shared by the student role and the SPC role
+ * (an SPC is also a student), so it is defined once and reused below. */
+const studentNav: NavItem[] = [
+  { label: "Overview", to: paths.student, icon: LayoutDashboard },
+  { label: "My profile", to: paths.studentProfile, icon: FileText },
+  { label: "Placement drives", to: paths.studentDrives, icon: Megaphone },
+  { label: "Notifications", to: paths.studentNotifications, icon: Bell },
+];
+
 /**
  * Purpose: which nav items show up for each role. Driven entirely by the
  * route table in src/routes/paths.ts, so adding a page there and here is the
  * only wiring a new sidebar link needs.
  */
 const NAV_BY_ROLE: Record<Role, NavItem[]> = {
-  student: [
-    { label: "Overview", to: paths.student, icon: LayoutDashboard },
-    { label: "My profile", to: paths.studentProfile, icon: FileText },
-    { label: "Placement drives", to: paths.studentDrives, icon: Megaphone },
-    { label: "Notifications", to: paths.studentNotifications, icon: Bell },
-  ],
+  student: studentNav,
+  // SPC = student pages + a single verification queue (their only extra duty).
   spc: [
-    { label: "Dashboard", to: paths.spc, icon: LayoutDashboard },
-    { label: "Students", to: paths.spcStudents, icon: Users },
+    ...studentNav,
     { label: "Verification queue", to: paths.spcVerification, icon: ClipboardCheck },
   ],
   tpc: [
     { label: "Dashboard", to: paths.tpc, icon: LayoutDashboard },
     { label: "Verification queue", to: paths.tpcVerification, icon: ClipboardCheck },
+    { label: "Awaiting TPC review", to: paths.tpcSpcVerified, icon: CheckCircle2 },
+    { label: "Students", to: paths.tpcStudents, icon: Users },
+    { label: "SPCs", to: paths.tpcSpc, icon: UserCog },
   ],
   admin: [
     { label: "Dashboard", to: paths.admin, icon: LayoutDashboard },
@@ -57,7 +66,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
 
 const ROLE_LABEL: Record<Role, string> = {
   student: "Student",
-  spc: "SPC Administrator",
+  spc: "SPC Coordinator",
   tpc: "TPC Administrator",
   admin: "Placement Cell Admin",
 };

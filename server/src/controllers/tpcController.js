@@ -9,6 +9,7 @@ export const getAllTPCs = async (req, res) => {
           name,
           email,
           phone,
+          department,
           branch,
           created_at
        FROM tpc
@@ -32,6 +33,7 @@ export const createTPC = async (req, res) => {
       name,
       email,
       phone,
+      department,
       branch,
     } = req.body;
 
@@ -55,15 +57,17 @@ export const createTPC = async (req, res) => {
         name,
         email,
         phone,
+        department,
         branch
       )
-      VALUES ($1,$2,$3,$4,$5)
+      VALUES ($1,$2,$3,$4,$5,$6)
       RETURNING *`,
       [
         user_id,
         name,
         email,
         phone,
+        department,
         branch,
       ]
     );
@@ -83,27 +87,27 @@ export const createTPC = async (req, res) => {
 export const updateTPC = async (req, res) => {
   try {
     const { tpcId } = req.params;
-    const { name, email, phone, branch } = req.body;
-
-    
+    const { name, email, phone, department, branch } = req.body;
 
     const result = await pool.query(
       `UPDATE tpc
        SET
-         name = $1,
-         email = $2,
-         phone = $3,
-         branch = $4
-       WHERE tpc_id = $5
+         name = COALESCE($1, name),
+         email = COALESCE($2, email),
+         phone = COALESCE($3, phone),
+         department = COALESCE($4, department),
+         branch = COALESCE($5, branch)
+       WHERE tpc_id = $6
        RETURNING
          tpc_id,
          user_id,
          name,
          email,
          phone,
+         department,
          branch,
          created_at`,
-      [name, email, phone, branch, tpcId]
+      [name, email, phone, department, branch, tpcId]
     );
 
     if (result.rows.length === 0) {
@@ -164,7 +168,7 @@ export const promoteSPC = async (req, res) => {
     await client.query("BEGIN");
 
     const studentResult = await client.query(
-      `SELECT user_id, name, email, phone, branch
+      `SELECT user_id, name, email, phone, department, branch
        FROM students
        WHERE id = $1`,
       [studentId]
@@ -189,13 +193,14 @@ export const promoteSPC = async (req, res) => {
 
     await client.query(
       `INSERT INTO spc
-       (user_id, name, email, phone, branch)
-       VALUES ($1, $2, $3, $4, $5)`,
+       (user_id, name, email, phone, department, branch)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         student.user_id,
         student.name,
         student.email,
         student.phone,
+        student.department,
         student.branch,
       ]
     );
@@ -269,5 +274,308 @@ export const demoteSPC = async (req, res) => {
     });
   } finally {
     client.release();
+  }
+};
+
+// ---- TPC verification pipeline -------------------------------------------
+//
+// A TPC oversees one department (tpc.department). These endpoints are all
+// scoped to that department, resolved from the authenticated user.
+
+// Resolve the department the authenticated TPC oversees (null if no tpc row).
+const getTpcDepartment = async (userId) => {
+  const r = await pool.query(
+    "SELECT department FROM tpc WHERE user_id = $1",
+    [userId]
+  );
+  return r.rows.length ? r.rows[0].department : null;
+};
+
+// GET /tpc/students?rollNo= - every student in the TPC's department (the roster
+// used for promote/demote/delete), optionally filtered by roll number.
+export const getTpcStudents = async (req, res) => {
+  try {
+    const dept = await getTpcDepartment(req.user.userId);
+    if (!dept) {
+      return res.status(404).json({ message: "TPC profile not found" });
+    }
+
+    const { rollNo } = req.query;
+    const params = [dept];
+    let sql = `SELECT st.*, (sp.spc_id IS NOT NULL) AS is_spc
+               FROM students st
+               LEFT JOIN spc sp ON sp.user_id = st.user_id
+               WHERE st.department = $1`;
+    if (rollNo) {
+      params.push(`%${rollNo}%`);
+      sql += ` AND st.roll_no ILIKE $2`;
+    }
+    sql += ` ORDER BY st.roll_no`;
+
+    const result = await pool.query(sql, params);
+    return res.status(200).json(result.rows);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to fetch students" });
+  }
+};
+
+// GET /tpc/verification-queue?branch= - students the SPC rejected, now awaiting
+// TPC review, optionally filtered to one branch under the department.
+export const getTpcQueue = async (req, res) => {
+  try {
+    const dept = await getTpcDepartment(req.user.userId);
+    if (!dept) {
+      return res.status(404).json({ message: "TPC profile not found" });
+    }
+
+    const { branch } = req.query;
+    const params = [dept];
+    let sql = `SELECT * FROM students
+               WHERE department = $1 AND review_status = 'spc_rejected'`;
+    if (branch) {
+      params.push(branch);
+      sql += ` AND branch = $2`;
+    }
+    sql += ` ORDER BY roll_no`;
+
+    const result = await pool.query(sql, params);
+    return res.status(200).json(result.rows);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to fetch verification queue" });
+  }
+};
+
+// GET /tpc/spc-verified?branch= - the TPC's final-review list: students an SPC
+// verified, PLUS SPC coordinators' own profiles (which skip SPC review, since an
+// SPC is verified only by the TPC). `is_spc` flags the latter for the UI.
+export const getTpcSpcVerified = async (req, res) => {
+  try {
+    const dept = await getTpcDepartment(req.user.userId);
+    if (!dept) {
+      return res.status(404).json({ message: "TPC profile not found" });
+    }
+
+    const { branch } = req.query;
+    const params = [dept];
+    let sql = `SELECT st.*, (sp.spc_id IS NOT NULL) AS is_spc
+               FROM students st
+               LEFT JOIN spc sp ON sp.user_id = st.user_id
+               WHERE st.department = $1
+                 AND (
+                   st.review_status = 'spc_verified'
+                   OR (sp.spc_id IS NOT NULL AND st.review_status = 'pending')
+                 )`;
+    if (branch) {
+      params.push(branch);
+      sql += ` AND st.branch = $2`;
+    }
+    sql += ` ORDER BY st.roll_no`;
+
+    const result = await pool.query(sql, params);
+    return res.status(200).json(result.rows);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to fetch SPC-verified students" });
+  }
+};
+
+// GET /tpc/branches - distinct branches present in the TPC's department. There
+// is no separate branches table, so we derive them from the students.
+export const getTpcBranches = async (req, res) => {
+  try {
+    const dept = await getTpcDepartment(req.user.userId);
+    if (!dept) {
+      return res.status(404).json({ message: "TPC profile not found" });
+    }
+
+    const result = await pool.query(
+      `SELECT DISTINCT branch
+       FROM students
+       WHERE department = $1 AND branch IS NOT NULL
+       ORDER BY branch`,
+      [dept]
+    );
+    return res.status(200).json(result.rows.map((r) => r.branch));
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to fetch branches" });
+  }
+};
+
+// GET /tpc/spcs?branch= - the SPCs in the TPC's department + given branch,
+// ordered by spc_id, with the roll number and semester from their student row.
+export const getTpcSpcs = async (req, res) => {
+  try {
+    const dept = await getTpcDepartment(req.user.userId);
+    if (!dept) {
+      return res.status(404).json({ message: "TPC profile not found" });
+    }
+
+    const { branch } = req.query;
+    if (!branch) {
+      return res.status(400).json({ message: "branch is required" });
+    }
+
+    const result = await pool.query(
+      `SELECT s.spc_id, s.name, s.email, s.department, s.branch,
+              st.roll_no, st.semester
+       FROM spc s
+       LEFT JOIN students st ON st.user_id = s.user_id
+       WHERE s.department = $1 AND s.branch = $2
+       ORDER BY s.spc_id`,
+      [dept, branch]
+    );
+    return res.status(200).json(result.rows);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to fetch SPCs" });
+  }
+};
+
+// POST /tpc/assign-spc  body { branch }
+// Divide the students of each (branch, semester) cohort evenly among the SPCs of
+// that same cohort - round-robin, ordered by spc_id - and record it on
+// students.assigned_spc_id. SPC coordinators are NEVER assigned (they are
+// verified directly by the TPC), so they are excluded from the candidate pool.
+export const assignStudentsToSpc = async (req, res) => {
+  const dept = await getTpcDepartment(req.user.userId);
+  if (!dept) {
+    return res.status(404).json({ message: "TPC profile not found" });
+  }
+
+  const { branch } = req.body;
+  if (!branch) {
+    return res.status(400).json({ message: "branch is required" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // SPCs in this dept+branch, with the semester from their own student row.
+    const spcResult = await client.query(
+      `SELECT s.spc_id, st.semester
+       FROM spc s
+       JOIN students st ON st.user_id = s.user_id
+       WHERE s.department = $1 AND s.branch = $2
+       ORDER BY s.spc_id`,
+      [dept, branch]
+    );
+
+    // Group SPC ids by semester; SPCs with no semester set can't cohort.
+    const spcsBySem = new Map();
+    for (const row of spcResult.rows) {
+      if (row.semester == null) continue;
+      if (!spcsBySem.has(row.semester)) spcsBySem.set(row.semester, []);
+      spcsBySem.get(row.semester).push(row.spc_id);
+    }
+
+    const perSpc = {};
+    for (const row of spcResult.rows) perSpc[row.spc_id] = 0;
+
+    for (const [semester, spcIds] of spcsBySem) {
+      // Candidate students: same dept/branch/semester, complete profile, and not
+      // themselves an SPC coordinator.
+      const students = await client.query(
+        `SELECT id
+         FROM students
+         WHERE department = $1
+           AND branch = $2
+           AND semester = $3
+           AND is_profile_complete = TRUE
+           AND user_id NOT IN (SELECT user_id FROM spc)
+         ORDER BY id`,
+        [dept, branch, semester]
+      );
+
+      for (let i = 0; i < students.rows.length; i++) {
+        const spcId = spcIds[i % spcIds.length];
+        await client.query(
+          `UPDATE students SET assigned_spc_id = $1 WHERE id = $2`,
+          [spcId, students.rows[i].id]
+        );
+        perSpc[spcId] = (perSpc[spcId] || 0) + 1;
+      }
+    }
+
+    await client.query("COMMIT");
+
+    const totalAssigned = Object.values(perSpc).reduce((a, b) => a + b, 0);
+    return res.status(200).json({
+      message: "Students assigned to SPCs for verification",
+      totalAssigned,
+      perSpc,
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error(error);
+    return res.status(500).json({ message: "Failed to assign students" });
+  } finally {
+    client.release();
+  }
+};
+
+// PUT /tpc/verify/:studentId - final TPC approval (department-scoped).
+export const tpcVerifyStudent = async (req, res) => {
+  try {
+    const dept = await getTpcDepartment(req.user.userId);
+    if (!dept) {
+      return res.status(404).json({ message: "TPC profile not found" });
+    }
+
+    const { studentId } = req.params;
+    const result = await pool.query(
+      `UPDATE students
+       SET review_status = 'verified',
+           reviewed_at = NOW(),
+           rejection_reason = NULL
+       WHERE id = $1 AND department = $2
+       RETURNING *`,
+      [studentId, dept]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Student not found in your department" });
+    }
+    return res.status(200).json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to verify student" });
+  }
+};
+
+// PUT /tpc/reject/:studentId  body { reason }
+export const tpcRejectStudent = async (req, res) => {
+  try {
+    const dept = await getTpcDepartment(req.user.userId);
+    if (!dept) {
+      return res.status(404).json({ message: "TPC profile not found" });
+    }
+
+    const { studentId } = req.params;
+    const { reason } = req.body;
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: "A rejection reason is required" });
+    }
+
+    const result = await pool.query(
+      `UPDATE students
+       SET review_status = 'rejected',
+           rejection_reason = $1,
+           reviewed_at = NOW()
+       WHERE id = $2 AND department = $3
+       RETURNING *`,
+      [reason.trim(), studentId, dept]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Student not found in your department" });
+    }
+    return res.status(200).json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to reject student" });
   }
 };

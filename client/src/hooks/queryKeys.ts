@@ -19,4 +19,12 @@ export const queryKeys = {
   postAttachments: (postId: number | string) =>
     ["companyPosts", "attachments", postId] as const,
   tpcs: ["tpc", "list"] as const,
+  // Verification pipeline
+  spcQueue: ["spc", "queue"] as const,
+  tpcStudents: (rollNo?: string) => ["tpc", "students", rollNo ?? ""] as const,
+  tpcQueue: (branch?: string) => ["tpc", "queue", branch ?? ""] as const,
+  tpcSpcVerified: (branch?: string) =>
+    ["tpc", "spcVerified", branch ?? ""] as const,
+  tpcBranches: ["tpc", "branches"] as const,
+  tpcSpcs: (branch: string) => ["tpc", "spcs", branch] as const,
 };

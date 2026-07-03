@@ -85,7 +85,7 @@ export default function LoginPage() {
 
             <form onSubmit={handleSubmit} noValidate>
               <label>
-                Institutional email
+                Email
                 <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username"/>
               </label>
               <label>

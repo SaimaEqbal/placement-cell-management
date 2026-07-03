@@ -16,7 +16,7 @@ import Topbar from "../../components/Topbar";
 import { useAuth } from "../../context/AuthContext";
 import { useCreateProfile, useProfile, useUpdateProfile } from "../../hooks/useProfile";
 import { capitalize, toLowerTrim, toTitleCase, toUpperTrim } from "../../lib/format";
-import { DEPARTMENT_BRANCHES, DEPARTMENT_OPTIONS } from "../../lib/validation";
+import { DEPARTMENT_BRANCHES, DEPARTMENT_OPTIONS, SEMESTERS } from "../../lib/validation";
 import { paths } from "../../routes/paths";
 import type { CreateStudentPayload } from "../../services/studentService";
 
@@ -59,6 +59,7 @@ export default function CompleteProfilePage() {
   const [phone, setPhone] = useState("");
   const [cgpa, setCgpa] = useState("");
   const [graduationYear, setGraduationYear] = useState("");
+  const [semester, setSemester] = useState("");
   const [tenthPercentage, setTenthPercentage] = useState("");
   const [twelfthPercentage, setTwelfthPercentage] = useState("");
   /** Per-semester SPI (sem1..sem8), one string per index; blanks are omitted from the payload. */
@@ -98,6 +99,7 @@ export default function CompleteProfilePage() {
       setPhone(profile.phone ?? "");
       setCgpa(profile.cgpa ?? "");
       setGraduationYear(profile.graduation_year ? String(profile.graduation_year) : "");
+      setSemester(profile.semester ? String(profile.semester) : "");
       setTenthPercentage(profile.tenth_percentage ?? "");
       setTwelfthPercentage(profile.twelfth_percentage ?? "");
       setSpi([
@@ -152,8 +154,16 @@ export default function CompleteProfilePage() {
     if (!email.trim()) missing.push("Institutional email");
     if (!department) missing.push("Department");
     if (!branch) missing.push("Branch");
+    if (!semester) missing.push("Current semester");
     if (!tenthPercentage.trim()) missing.push("10th percentage");
     if (!twelfthPercentage.trim()) missing.push("12th percentage");
+    // A student in semester n must provide SPIs for every completed semester (1..n-1).
+    const sem = Number(semester);
+    if (sem >= 5) {
+      for (let i = 1; i < sem; i++) {
+        if (!spi[i - 1]?.trim()) missing.push(`Semester ${i} SPI`);
+      }
+    }
     if (missing.length > 0) {
       setFormError(
         missing.length === 1
@@ -182,6 +192,7 @@ export default function CompleteProfilePage() {
       branch,
       department,
       graduation_year: Number(graduationYear) || new Date().getFullYear(),
+      semester: Number(semester),
       cgpa: Number(cgpa) || 0,
       tenth_percentage: Number(tenthPercentage) || 0,
       twelfth_percentage: Number(twelfthPercentage) || 0,
@@ -377,6 +388,17 @@ export default function CompleteProfilePage() {
                 />
               </label>
               <label>
+                Current semester
+                <select value={semester} onChange={(e) => setSemester(e.target.value)}>
+                  <option value="">Select semester</option>
+                  {SEMESTERS.map((s) => (
+                    <option key={s} value={s}>
+                      Semester {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 CGPA
                 <input
                   type="number"
@@ -454,26 +476,34 @@ export default function CompleteProfilePage() {
             <SectionTitle
               icon={<GraduationCap size={18} />}
               title="Semester SPIs"
-              subtitle="Your SPI for each completed semester (leave blank for semesters not yet done)."
+              subtitle="Required for every completed semester (1 to your current semester minus 1)."
             />
             <div className="form-grid">
-              {spi.map((value, index) => (
-                <label key={index}>
-                  Semester {index + 1} SPI
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="10"
-                    value={value}
-                    onChange={(e) =>
-                      setSpi((prev) =>
-                        prev.map((v, i) => (i === index ? e.target.value : v)),
-                      )
-                    }
-                  />
-                </label>
-              ))}
+              {!semester && (
+                <p className="field-hint">Select your current semester above to enter SPIs.</p>
+              )}
+              {spi.map((value, index) => {
+                const sem = Number(semester);
+                // Only completed semesters (1..n-1) are collected; hide the rest.
+                if (!sem || index + 1 >= sem) return null;
+                return (
+                  <label key={index}>
+                    Semester {index + 1} SPI
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="10"
+                      value={value}
+                      onChange={(e) =>
+                        setSpi((prev) =>
+                          prev.map((v, i) => (i === index ? e.target.value : v)),
+                        )
+                      }
+                    />
+                  </label>
+                );
+              })}
             </div>
           </section>
 

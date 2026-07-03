@@ -257,6 +257,7 @@ export const completeRegistration =
       const {
         name,
         phone,
+        department,
         branch,
         password,
       } = req.body;
@@ -298,19 +299,22 @@ export const completeRegistration =
            (
              email,
              password_hash,
-             role
+             role,
+             is_verified
            )
            VALUES
            (
              $1,
              $2,
-             $3
+             $3,
+             $4
            )
            RETURNING id`,
           [
             invite.email,
             hashedPassword,
             invite.role,
+            true,
           ]
         );
 
@@ -325,18 +329,20 @@ export const completeRegistration =
              name,
              email,
              phone,
+             department,
              branch
            )
            VALUES
            (
-             $1,$2,$3,$4,$5
+             $1,$2,$3,$4,$5,$6
            )`,
           [
             userId,
             name,
             invite.email,
             phone,
-            branch,
+            department ?? branch ?? null,
+            branch ?? null,
           ]
         );
       }

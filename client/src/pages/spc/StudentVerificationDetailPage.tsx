@@ -1,54 +1,102 @@
-import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
-  Check,
+  ArrowRight,
   CheckCircle2,
+  ExternalLink,
   FileText,
+  ShieldCheck,
+  Trash2,
+  UserMinus,
   XCircle,
 } from "lucide-react";
 
-import { Badge, DocumentItem, ErrorState, InfoGrid, LoadingState, ReviewSection } from "../../components/ui";
-import { useSpcVerifyStudent, useStudent, useUpdateStudentRecord } from "../../hooks/useStudents";
+import { Badge, ErrorState, InfoGrid, LoadingState, ReviewSection } from "../../components/ui";
+import { useStudent } from "../../hooks/useStudents";
+import {
+  useDemoteSpc,
+  usePromoteSpc,
+  useSpcReject,
+  useSpcVerify,
+  useTpcDeleteStudent,
+  useTpcReject,
+  useTpcVerify,
+} from "../../hooks/useVerification";
 import { formatCgpa, formatDate, initialsFromName } from "../../lib/format";
-import { paths } from "../../routes/paths";
+import { reviewStatusLabel, reviewStatusTone } from "../../lib/reviewStatus";
 
 import "../../styles/verification.css";
 
 /**
- * Purpose: /SPC/verification/:studentId and /TPC/verification/:studentId -
- * the two-pane document review + approve/reject screen described by the
- * brief's SPC/TPC Requirements. Shared by both roles via the `role` prop
- * (same pattern as the original prototype's VerificationPage), since the
- * layout and the underlying GET /students/:id record are identical - only
- * the workflow stage shown and which mutation fires on approve differ.
+ * Purpose: /SPC/verification/:studentId, /TPC/verification/:studentId and
+ * /TPC/students/:studentId - the shared two-pane review + action screen.
  *
- * NOTE: as documented in studentService.ts/useStudents.ts, the backend's
- * updateStudentSchema does not currently accept review_status, so the
- * approve/reject mutations below are sent but the database value will not
- * actually change until that schema gap is fixed server-side - out of scope
- * here since server/ is not to be modified.
+ * `role` selects which verify/reject endpoint fires (SPC vs TPC). `mode`
+ * selects the action set: "verify" (approve/reject, the default) or "manage"
+ * (the TPC roster's delete / promote-to-SPC / demote actions).
+ *
+ * The queue/roster pages pass `{ ids, backPath }` via router state so this page
+ * can offer a "Next student" button and return to the right list.
  */
-export default function StudentVerificationDetailPage({ role }: { role: "SPC" | "TPC" }) {
+
+type ReviewLocationState = { ids?: number[]; backPath?: string } | null;
+
+export default function StudentVerificationDetailPage({
+  role,
+  mode = "verify",
+}: {
+  role: "SPC" | "TPC";
+  mode?: "verify" | "manage";
+}) {
   const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const state = location.state as ReviewLocationState;
+
   const { data: student, isLoading, isError, error, refetch } = useStudent(studentId);
 
-  const spcVerify = useSpcVerifyStudent();
-  const genericUpdate = useUpdateStudentRecord();
-  const mutation = role === "SPC" ? spcVerify : genericUpdate;
+  // Verify-mode mutations
+  const spcVerify = useSpcVerify();
+  const spcReject = useSpcReject();
+  const tpcVerify = useTpcVerify();
+  const tpcReject = useTpcReject();
+  // Manage-mode mutations
+  const promote = usePromoteSpc();
+  const demote = useDemoteSpc();
+  const removeStudent = useTpcDeleteStudent();
 
   const [rejecting, setRejecting] = useState(false);
   const [remarks, setRemarks] = useState("");
+  const [activeDoc, setActiveDoc] = useState(0);
 
-  const backPath = role === "SPC" ? paths.spcVerification : paths.tpcVerification;
+  // The list this detail belongs to, for back + "next" navigation. detailBase is
+  // the current route minus the :studentId segment (e.g. /TPC/verification).
+  const detailBase = location.pathname.replace(/\/[^/]+$/, "");
+  const backPath = state?.backPath ?? detailBase;
+  const ids = state?.ids ?? [];
 
-  function handleApprove() {
+  const nextId = useMemo(() => {
+    if (!studentId || ids.length === 0) return undefined;
+    const idx = ids.indexOf(Number(studentId));
+    return idx >= 0 && idx < ids.length - 1 ? ids[idx + 1] : undefined;
+  }, [ids, studentId]);
+
+  const verifyMutation = role === "SPC" ? spcVerify : tpcVerify;
+  const rejectMutation = role === "SPC" ? spcReject : tpcReject;
+
+  function goToNext() {
+    if (nextId !== undefined) navigate(`${detailBase}/${nextId}`, { state });
+  }
+
+  function afterAction() {
+    if (nextId !== undefined) navigate(`${detailBase}/${nextId}`, { state });
+    else navigate(backPath);
+  }
+
+  function handleVerify() {
     if (!studentId) return;
-    mutation.mutate(
-      { id: studentId, payload: { review_status: role === "SPC" ? "spc_verified" : "verified" } },
-      { onSuccess: () => navigate(backPath) },
-    );
+    verifyMutation.mutate(studentId, { onSuccess: afterAction });
   }
 
   function handleReject() {
@@ -57,10 +105,26 @@ export default function StudentVerificationDetailPage({ role }: { role: "SPC" | 
       setRejecting(true);
       return;
     }
-    mutation.mutate(
-      { id: studentId, payload: { review_status: "rejected" } },
-      { onSuccess: () => navigate(backPath) },
-    );
+    if (!remarks.trim()) return;
+    rejectMutation.mutate({ id: studentId, reason: remarks.trim() }, { onSuccess: afterAction });
+  }
+
+  function handleDelete() {
+    if (!studentId) return;
+    if (!window.confirm("Delete this student permanently? This cannot be undone.")) return;
+    removeStudent.mutate(studentId, { onSuccess: () => navigate(backPath) });
+  }
+
+  function handlePromote() {
+    if (!studentId) return;
+    if (!window.confirm("Promote this student to SPC?")) return;
+    promote.mutate(studentId, { onSuccess: () => navigate(backPath) });
+  }
+
+  function handleDemote() {
+    if (!studentId) return;
+    if (!window.confirm("Demote this SPC back to a student?")) return;
+    demote.mutate(studentId, { onSuccess: () => navigate(backPath) });
   }
 
   if (isLoading) {
@@ -85,7 +149,16 @@ export default function StudentVerificationDetailPage({ role }: { role: "SPC" | 
     { label: "12th marksheet", url: student.twelfth_marksheet_url },
     { label: "Latest semester marksheet", url: student.last_sem_marksheet_url },
   ];
-  const activeDocument = documents.find((doc) => doc.url) ?? documents[0];
+  const active = documents[activeDoc] ?? documents[0];
+
+  const busy =
+    verifyMutation.isPending ||
+    rejectMutation.isPending ||
+    promote.isPending ||
+    demote.isPending ||
+    removeStudent.isPending;
+
+  const manageError = promote.error ?? demote.error ?? removeStudent.error;
 
   return (
     <>
@@ -94,7 +167,7 @@ export default function StudentVerificationDetailPage({ role }: { role: "SPC" | 
           <ArrowLeft size={18} />
         </button>
         <div>
-          <h1>Review student record</h1>
+          <h1>{mode === "manage" ? "Student details" : "Review student record"}</h1>
           <p>{student.roll_no}</p>
         </div>
       </header>
@@ -104,14 +177,19 @@ export default function StudentVerificationDetailPage({ role }: { role: "SPC" | 
           <div className="viewer-bar">
             <div>
               <FileText size={17} />
-              <b>{activeDocument.label}</b>
+              <b>{active.label}</b>
             </div>
+            {active.url && (
+              <a className="row-action" href={active.url} target="_blank" rel="noreferrer">
+                Open in new tab <ExternalLink size={13} />
+              </a>
+            )}
           </div>
           <div className="viewer-canvas">
-            {activeDocument.url ? (
+            {active.url ? (
               <iframe
-                title={activeDocument.label}
-                src={activeDocument.url}
+                title={active.label}
+                src={active.url}
                 style={{ width: 580, minHeight: 760, border: "none", background: "#fff" }}
               />
             ) : (
@@ -131,27 +209,18 @@ export default function StudentVerificationDetailPage({ role }: { role: "SPC" | 
                 {student.roll_no} · {student.branch ?? "Branch not set"}
               </p>
             </div>
-            <Badge tone={role === "TPC" ? "green" : "amber"}>
-              {role === "TPC" ? "Pending final approval" : "Awaiting review"}
+            <Badge tone={reviewStatusTone(student.review_status)}>
+              {reviewStatusLabel(student.review_status)}
             </Badge>
           </div>
-
-          {role === "TPC" && (
-            <div className="mini-workflow">
-              {["Submitted", "SPC verified", "TPC review", "Approved"].map((stage, i) => (
-                <div className={i < 2 ? "done" : i === 2 ? "current" : ""} key={stage}>
-                  <span>{i < 2 ? <Check size={12} /> : i + 1}</span>
-                  <small>{stage}</small>
-                </div>
-              ))}
-            </div>
-          )}
 
           <ReviewSection title="Academic details">
             <InfoGrid
               items={[
                 ["Roll number", student.roll_no],
-                ["Department", student.branch ?? "-"],
+                ["Department", student.department ?? "-"],
+                ["Branch", student.branch ?? "-"],
+                ["Semester", student.semester ? String(student.semester) : "-"],
                 ["Graduation year", student.graduation_year ? String(student.graduation_year) : "-"],
                 ["CGPA", formatCgpa(student.cgpa)],
                 ["Contact", student.phone ?? "-"],
@@ -164,65 +233,107 @@ export default function StudentVerificationDetailPage({ role }: { role: "SPC" | 
             title="Backlog details"
             badge={student.active_backlogs > 0 ? `${student.active_backlogs} active` : undefined}
           >
-            {student.active_backlogs > 0 ? (
-              <div className="backlog-card">
-                <div>
-                  <b>{student.active_backlogs} active backlog(s)</b>
-                  <span>{student.passive_backlogs} cleared previously</span>
-                </div>
-                <Badge tone="red">Active backlog</Badge>
+            <div className="backlog-card">
+              <div>
+                <b>
+                  {student.active_backlogs > 0
+                    ? `${student.active_backlogs} active backlog(s)`
+                    : "No active backlogs"}
+                </b>
+                <span>{student.passive_backlogs} cleared previously</span>
               </div>
-            ) : (
-              <div className="backlog-card">
-                <div>
-                  <b>No active backlogs</b>
-                  <span>{student.passive_backlogs} cleared previously</span>
-                </div>
-                <Badge tone="green">Clear</Badge>
-              </div>
-            )}
+              <Badge tone={student.active_backlogs > 0 ? "red" : "green"}>
+                {student.active_backlogs > 0 ? "Active backlog" : "Clear"}
+              </Badge>
+            </div>
           </ReviewSection>
 
+          {student.rejection_reason && (
+            <ReviewSection title="Rejection reason">
+              <p className="reject-reason">{student.rejection_reason}</p>
+            </ReviewSection>
+          )}
+
           <ReviewSection title="Documents">
-            {documents.map((doc) => (
-              <DocumentItem
+            {documents.map((doc, i) => (
+              <button
                 key={doc.label}
-                sem=""
-                name={doc.label}
-                meta={doc.url ? "Uploaded" : "Not uploaded yet"}
-                tone={doc.url ? "green" : "gray"}
-                status={doc.url ? "View" : "Missing"}
-              />
+                type="button"
+                className={`doc-select ${i === activeDoc ? "active" : ""}`}
+                onClick={() => doc.url && setActiveDoc(i)}
+                disabled={!doc.url}
+              >
+                <FileText size={15} />
+                <span className="doc-sel-text">
+                  <b>{doc.label}</b>
+                  <small>{doc.url ? "Click to view on the left" : "Not uploaded"}</small>
+                </span>
+                <Badge tone={doc.url ? "green" : "gray"}>{doc.url ? "View" : "Missing"}</Badge>
+              </button>
             ))}
           </ReviewSection>
 
-          {rejecting && (
-            <textarea
-              className="remarks"
-              placeholder="Add rejection remarks for the student..."
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              autoFocus
-            />
+          {mode === "verify" ? (
+            <>
+              {rejecting && (
+                <textarea
+                  className="remarks"
+                  placeholder="Add a reason for rejecting this profile..."
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  autoFocus
+                />
+              )}
+              {(verifyMutation.isError || rejectMutation.isError) && (
+                <span className="field-error" style={{ padding: "0 20px" }}>
+                  {(verifyMutation.error ?? rejectMutation.error)?.message}
+                </span>
+              )}
+              <div className="verification-actions">
+                <button className="danger" type="button" onClick={handleReject} disabled={busy}>
+                  <XCircle size={17} /> {rejecting ? "Confirm reject" : "Reject"}
+                </button>
+                <button className="primary" type="button" onClick={handleVerify} disabled={busy}>
+                  <CheckCircle2 size={17} />
+                  {verifyMutation.isPending
+                    ? "Saving..."
+                    : role === "SPC"
+                      ? "Verify (SPC)"
+                      : "Verify (final)"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {manageError && (
+                <span className="field-error" style={{ padding: "0 20px" }}>
+                  {manageError.message}
+                </span>
+              )}
+              <div className="verification-actions">
+                <button className="danger" type="button" onClick={handleDelete} disabled={busy}>
+                  <Trash2 size={16} /> Delete
+                </button>
+                {student.is_spc ? (
+                  <button className="secondary" type="button" onClick={handleDemote} disabled={busy}>
+                    <UserMinus size={16} /> Demote from SPC
+                  </button>
+                ) : (
+                  <button className="primary" type="button" onClick={handlePromote} disabled={busy}>
+                    <ShieldCheck size={16} /> Promote to SPC
+                  </button>
+                )}
+              </div>
+            </>
           )}
-
-          {mutation.isError && <span className="field-error">{mutation.error.message}</span>}
-
-          <div className="verification-actions">
-            <button className="danger" type="button" onClick={handleReject} disabled={mutation.isPending}>
-              <XCircle size={17} /> {rejecting ? "Confirm reject" : "Reject"}
-            </button>
-            <button className="primary" type="button" onClick={handleApprove} disabled={mutation.isPending}>
-              <CheckCircle2 size={17} />
-              {mutation.isPending
-                ? "Saving..."
-                : role === "SPC"
-                  ? "Verify SPC level"
-                  : "Final approve"}
-            </button>
-          </div>
         </aside>
       </div>
+
+      {nextId !== undefined && (
+        <button type="button" className="next-student-fab" onClick={goToNext} disabled={busy}>
+          Next student <ArrowRight size={15} />
+        </button>
+      )}
     </>
   );
 }

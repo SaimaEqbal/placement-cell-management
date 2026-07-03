@@ -41,6 +41,7 @@ export const createStudent = async (req, res) => {
       last_sem_marksheet_url,
 
       placement_status,
+      semester,
     } = req.body;
 
     const userId = req.user.userId;
@@ -76,6 +77,7 @@ export const createStudent = async (req, res) => {
       twelfth_marksheet_url,
       last_sem_marksheet_url,
       placement_status,
+      semester,
       user_id
   )
   VALUES (
@@ -83,7 +85,7 @@ export const createStudent = async (req, res) => {
       $9,$10,$11,$12,$13,$14,
       $15,$16,$17,$18,$19,$20,
       $21,$22,$23,$24,$25,$26,
-      $27,$28,$29,$30
+      $27,$28,$29,$30,$31
   )
   RETURNING *`,
   [
@@ -116,6 +118,7 @@ export const createStudent = async (req, res) => {
     twelfth_marksheet_url,
     last_sem_marksheet_url,
     placement_status,
+    semester,
     userId
   ]
 );
@@ -205,6 +208,7 @@ export const updateStudent = async (req, res) => {
       last_sem_marksheet_url,
 
       placement_status,
+      semester,
     } = req.body;
 
     // Fetch current student
@@ -286,8 +290,9 @@ export const updateStudent = async (req, res) => {
            last_sem_marksheet_url = $28,
            placement_status = $29,
            review_status = $30,
-           reviewed_at = $31
-       WHERE id = $32
+           reviewed_at = $31,
+           semester = $32
+       WHERE id = $33
        RETURNING *`,
       [
         roll_no,
@@ -321,6 +326,7 @@ export const updateStudent = async (req, res) => {
         placement_status,
         reviewStatus,
         reviewedAt,
+        semester,
         id,
       ]
     );
@@ -372,7 +378,10 @@ export const getStudentById = async (req, res) => {
     const { id } = req.params;
 
     const result = await pool.query(
-      "SELECT * FROM students WHERE id = $1",
+      `SELECT st.*, (sp.spc_id IS NOT NULL) AS is_spc
+       FROM students st
+       LEFT JOIN spc sp ON sp.user_id = st.user_id
+       WHERE st.id = $1`,
       [id]
     );
 

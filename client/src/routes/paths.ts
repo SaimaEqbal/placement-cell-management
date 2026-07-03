@@ -25,12 +25,13 @@ export const paths = {
   studentDrives: "/Student/drives",
   studentNotifications: "/Student/notifications",
 
-  spc: "/SPC",
-  spcStudents: "/SPC/students",
   spcVerification: "/SPC/verification",
 
   tpc: "/TPC",
   tpcVerification: "/TPC/verification",
+  tpcSpcVerified: "/TPC/spc-verified",
+  tpcStudents: "/TPC/students",
+  tpcSpc: "/TPC/coordinators",
 
   admin: "/Admin",
   adminCompanies: "/Admin/companies",
@@ -46,7 +47,9 @@ export function homePathForRole(role: Role | null): string {
     case "student":
       return paths.student;
     case "spc":
-      return paths.spc;
+      // An SPC is also a student: they land on the student dashboard and reach
+      // their verification queue from the sidebar.
+      return paths.student;
     case "tpc":
       return paths.tpc;
     case "admin":

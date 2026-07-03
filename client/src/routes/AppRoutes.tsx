@@ -16,13 +16,14 @@ import CompleteProfilePage from "../pages/student/CompleteProfilePage";
 import PlacementDrivesPage from "../pages/student/PlacementDrivesPage";
 import NotificationsPage from "../pages/student/NotificationsPage";
 
-import SpcDashboard from "../pages/spc/SpcDashboard";
-import SpcStudentsPage from "../pages/spc/SpcStudentsPage";
 import SpcVerificationQueuePage from "../pages/spc/SpcVerificationQueuePage";
 import StudentVerificationDetailPage from "../pages/spc/StudentVerificationDetailPage";
 
 import TpcDashboard from "../pages/tpc/TpcDashboard";
 import TpcVerificationQueuePage from "../pages/tpc/TpcVerificationQueuePage";
+import TpcSpcVerifiedPage from "../pages/tpc/TpcSpcVerifiedPage";
+import TpcStudentsPage from "../pages/tpc/TpcStudentsPage";
+import TpcSpcPage from "../pages/tpc/TpcSpcPage";
 
 import AdminDashboard from "../pages/admin/AdminDashboard";
 import CompaniesPage from "../pages/admin/CompaniesPage";
@@ -70,8 +71,9 @@ export default function AppRoutes() {
       <Route path={paths.forgotPassword} element={<ForgotPasswordPage />} />
       <Route path={paths.resetPassword} element={<ResetPasswordPage />} />
 
-      {/* Student routes */}
-      <Route element={<ProtectedRoute allowedRoles={["student"]} />}>
+      {/* Student routes. An SPC is also a student, so "spc" is allowed here too -
+          they see all the normal student pages plus their SPC verification queue. */}
+      <Route element={<ProtectedRoute allowedRoles={["student", "spc"]} />}>
         <Route element={<AppShellLayout />}>
           <Route path={paths.student} element={<StudentDashboard />} />
           <Route path={paths.studentProfile} element={<ProfilePage />} />
@@ -87,11 +89,10 @@ export default function AppRoutes() {
         </Route>
       </Route>
 
-      {/*  SPC routes */}
+      {/* SPC routes: the SPC-only verification queue + review detail. (The SPC
+          dashboard/roster were removed - an SPC uses the student pages above.) */}
       <Route element={<ProtectedRoute allowedRoles={["spc"]} />}>
         <Route element={<AppShellLayout />}>
-          <Route path={paths.spc} element={<SpcDashboard />} />
-          <Route path={paths.spcStudents} element={<SpcStudentsPage />} />
           <Route
             path={paths.spcVerification}
             element={<SpcVerificationQueuePage />}
@@ -103,12 +104,12 @@ export default function AppRoutes() {
         </Route>
       </Route>
 
-      {/*TPC routes */}
+      {/* TPC routes */}
       <Route element={<ProtectedRoute allowedRoles={["tpc"]} />}>
         <Route element={<AppShellLayout />}>
           <Route path={paths.tpc} element={<TpcDashboard />} />
-          {/* Company/drive/student management is admin-only (the backend now
-              requires admin for those writes); TPC keeps verification only. */}
+
+          {/* Verification queue: students the SPC rejected (spc_rejected). */}
           <Route
             path={paths.tpcVerification}
             element={<TpcVerificationQueuePage />}
@@ -117,6 +118,19 @@ export default function AppRoutes() {
             path={`${paths.tpcVerification}/:studentId`}
             element={<StudentVerificationDetailPage role="TPC" />}
           />
+
+          {/* Awaiting TPC verification: SPC-verified students + SPC coordinators. */}
+          <Route path={paths.tpcSpcVerified} element={<TpcSpcVerifiedPage />} />
+
+          {/* Department roster: promote/demote/delete management. */}
+          <Route path={paths.tpcStudents} element={<TpcStudentsPage />} />
+          <Route
+            path={`${paths.tpcStudents}/:studentId`}
+            element={<StudentVerificationDetailPage role="TPC" mode="manage" />}
+          />
+
+          {/* SPC management + assignment. */}
+          <Route path={paths.tpcSpc} element={<TpcSpcPage />} />
         </Route>
       </Route>
 
