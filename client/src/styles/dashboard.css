@@ -479,6 +479,34 @@
   margin-top: 4px;
 }
 
+/* Purpose: unread notifications (NotificationsPage) get a highlight + are
+   clickable to mark themselves read; read ones are plain and inert. */
+.activity.is-unread {
+  background: #f7fbf9;
+  border-radius: 8px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.activity.is-unread b::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.activity-clickable {
+  cursor: pointer;
+}
+
+.activity-clickable:hover {
+  background: #f0f5f2;
+}
+
 @media (max-width: 900px) {
   .stats-row,
   .stats-row.admin,
