@@ -19,7 +19,8 @@ export default function VerifyEmailPage() {
     if (hasRunRef.current || !token) return;
     hasRunRef.current = true;
     verifyMutation.mutate(token);
-    // verifyMutation is stable (TanStack Query) - only `token` should re-run this. eslint-disable-next-line react-hooks/exhaustive-deps
+    /** verifyMutation is stable (TanStack Query) - only `token` should re-run this. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   return (

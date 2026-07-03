@@ -15,14 +15,16 @@ import ProfilePage from "../pages/student/ProfilePage";
 import CompleteProfilePage from "../pages/student/CompleteProfilePage";
 import PlacementDrivesPage from "../pages/student/PlacementDrivesPage";
 import NotificationsPage from "../pages/student/NotificationsPage";
+import AnnouncementsPage from "../pages/student/AnnouncementsPage";
 
-import SpcDashboard from "../pages/spc/SpcDashboard";
-import SpcStudentsPage from "../pages/spc/SpcStudentsPage";
 import SpcVerificationQueuePage from "../pages/spc/SpcVerificationQueuePage";
 import StudentVerificationDetailPage from "../pages/spc/StudentVerificationDetailPage";
 
 import TpcDashboard from "../pages/tpc/TpcDashboard";
 import TpcVerificationQueuePage from "../pages/tpc/TpcVerificationQueuePage";
+import TpcSpcVerifiedPage from "../pages/tpc/TpcSpcVerifiedPage";
+import TpcStudentsPage from "../pages/tpc/TpcStudentsPage";
+import TpcSpcPage from "../pages/tpc/TpcSpcPage";
 
 import AdminDashboard from "../pages/admin/AdminDashboard";
 import CompaniesPage from "../pages/admin/CompaniesPage";
@@ -30,11 +32,12 @@ import DrivesPage from "../pages/admin/DrivesPage";
 import DriveApplicantsPage from "../pages/admin/DriveApplicantsPage";
 import AdminStudentsPage from "../pages/admin/AdminStudentsPage";
 import InvitationsPage from "../pages/admin/InvitationsPage";
+import CompanyPostsPage from "../pages/admin/CompanyPostsPage";
 
 import { homePathForRole, paths } from "./paths";
 import ProtectedRoute from "./ProtectedRoute";
 
-/* Purpose: the single source of truth for every route in the app - which URL renders which page, and which roles may see it. See src/routes/paths.ts for the path constants and ProtectedRoute.tsx for the access-control logic.*/
+/** Purpose: the single source of truth for every route in the app - which URL renders which page, and which roles may see it. See src/routes/paths.ts for the path constants and ProtectedRoute.tsx for the access-control logic. */
 export default function AppRoutes() {
   const { isAuthenticated, role } = useAuth();
 
@@ -69,8 +72,9 @@ export default function AppRoutes() {
       <Route path={paths.forgotPassword} element={<ForgotPasswordPage />} />
       <Route path={paths.resetPassword} element={<ResetPasswordPage />} />
 
-      {/* Student routes */}
-      <Route element={<ProtectedRoute allowedRoles={["student"]} />}>
+      {/* Student routes. An SPC is also a student, so "spc" is allowed here too -
+          they see all the normal student pages plus their SPC verification queue. */}
+      <Route element={<ProtectedRoute allowedRoles={["student", "spc"]} />}>
         <Route element={<AppShellLayout />}>
           <Route path={paths.student} element={<StudentDashboard />} />
           <Route path={paths.studentProfile} element={<ProfilePage />} />
@@ -83,14 +87,17 @@ export default function AppRoutes() {
             path={paths.studentNotifications}
             element={<NotificationsPage />}
           />
+          <Route
+            path={paths.studentAnnouncements}
+            element={<AnnouncementsPage />}
+          />
         </Route>
       </Route>
 
-      {/*  SPC routes */}
+      {/* SPC routes: the SPC-only verification queue + review detail. (The SPC
+          dashboard/roster were removed - an SPC uses the student pages above.) */}
       <Route element={<ProtectedRoute allowedRoles={["spc"]} />}>
         <Route element={<AppShellLayout />}>
-          <Route path={paths.spc} element={<SpcDashboard />} />
-          <Route path={paths.spcStudents} element={<SpcStudentsPage />} />
           <Route
             path={paths.spcVerification}
             element={<SpcVerificationQueuePage />}
@@ -102,20 +109,12 @@ export default function AppRoutes() {
         </Route>
       </Route>
 
-      {/*TPC routes */}
+      {/* TPC routes */}
       <Route element={<ProtectedRoute allowedRoles={["tpc"]} />}>
         <Route element={<AppShellLayout />}>
           <Route path={paths.tpc} element={<TpcDashboard />} />
-          {/* TPC reuses the same company/drive/student pages as Admin - the
-              backend authorizes TPC for all of them (requireAdminTPC /
-              requireAdminTPCSPC). */}
-          <Route path={paths.tpcCompanies} element={<CompaniesPage />} />
-          <Route path={paths.tpcDrives} element={<DrivesPage />} />
-          <Route
-            path={`${paths.tpcDrives}/:driveId`}
-            element={<DriveApplicantsPage />}
-          />
-          <Route path={paths.tpcStudents} element={<AdminStudentsPage />} />
+
+          {/* Verification queue: students the SPC rejected (spc_rejected). */}
           <Route
             path={paths.tpcVerification}
             element={<TpcVerificationQueuePage />}
@@ -124,6 +123,19 @@ export default function AppRoutes() {
             path={`${paths.tpcVerification}/:studentId`}
             element={<StudentVerificationDetailPage role="TPC" />}
           />
+
+          {/* Awaiting TPC verification: SPC-verified students + SPC coordinators. */}
+          <Route path={paths.tpcSpcVerified} element={<TpcSpcVerifiedPage />} />
+
+          {/* Department roster: promote/demote/delete management. */}
+          <Route path={paths.tpcStudents} element={<TpcStudentsPage />} />
+          <Route
+            path={`${paths.tpcStudents}/:studentId`}
+            element={<StudentVerificationDetailPage role="TPC" mode="manage" />}
+          />
+
+          {/* SPC management + assignment. */}
+          <Route path={paths.tpcSpc} element={<TpcSpcPage />} />
         </Route>
       </Route>
 
@@ -139,6 +151,7 @@ export default function AppRoutes() {
           />
           <Route path={paths.adminStudents} element={<AdminStudentsPage />} />
           <Route path={paths.adminInvitations} element={<InvitationsPage />} />
+          <Route path={paths.adminPosts} element={<CompanyPostsPage />} />
         </Route>
       </Route>
 

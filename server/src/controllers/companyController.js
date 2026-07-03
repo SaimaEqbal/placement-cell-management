@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { pgErrorResponse } from "../lib/dbError.js";
 
 export const createCompany = async (req, res) => {
   try {
@@ -38,10 +39,8 @@ export const createCompany = async (req, res) => {
     return res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error(error);
-
-    return res.status(500).json({
-      message: "Failed to create company",
-    });
+    const { status, message } = pgErrorResponse(error, "Failed to create company");
+    return res.status(status).json({ message });
   }
 };
 
@@ -56,21 +55,14 @@ export const getCompanies = async (req, res) => {
 
     return res.status(200).json(result.rows);
   } catch (error) {
-    return res.status(500).json({
-      message: "Failed to fetch companies",
-    });
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to fetch companies");
+    return res.status(status).json({ message });
   }
 };
 
 export const getCompanyById = async (req, res) => {
   try {
-    // CHANGE: read req.params.id instead of req.params.companyId.
-    // PROBLEM: companyRoutes.js defines this route as "/:id", so
-    //          req.params.companyId was always undefined -> the SELECT below
-    //          matched 0 rows -> every company detail fetch returned
-    //          404 "Company not found".
-    // BEFORE:  const { companyId } = req.params;
-    // AFTER:   const { id: companyId } = req.params; // keep the local name, read the correct param
     const { id: companyId } = req.params;
 
     const result = await pool.query(
@@ -88,21 +80,14 @@ export const getCompanyById = async (req, res) => {
 
     return res.status(200).json(result.rows[0]);
   } catch (error) {
-    return res.status(500).json({
-      message: "Failed to fetch company",
-    });
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to fetch company");
+    return res.status(status).json({ message });
   }
 };
 
 export const updateCompany = async (req, res) => {
   try {
-    // CHANGE: read req.params.id instead of req.params.companyId.
-    // PROBLEM: companyRoutes.js defines this route as "/:id", so
-    //          req.params.companyId was always undefined -> the UPDATE below
-    //          matched 0 rows -> every company edit returned
-    //          404 "Company not found".
-    // BEFORE:  const { companyId } = req.params;
-    // AFTER:   const { id: companyId } = req.params; // keep the local name, read the correct param
     const { id: companyId } = req.params;
 
     const {
@@ -143,21 +128,14 @@ export const updateCompany = async (req, res) => {
 
     return res.status(200).json(result.rows[0]);
   } catch (error) {
-    return res.status(500).json({
-      message: "Failed to update company",
-    });
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to update company");
+    return res.status(status).json({ message });
   }
 };
 
 export const deleteCompany = async (req, res) => {
   try {
-    // CHANGE: read req.params.id instead of req.params.companyId.
-    // PROBLEM: companyRoutes.js defines this route as "/:id", so
-    //          req.params.companyId was always undefined -> the DELETE below
-    //          matched 0 rows -> every company delete returned
-    //          404 "Company not found".
-    // BEFORE:  const { companyId } = req.params;
-    // AFTER:   const { id: companyId } = req.params; // keep the local name, read the correct param
     const { id: companyId } = req.params;
 
     const result = await pool.query(
@@ -177,8 +155,8 @@ export const deleteCompany = async (req, res) => {
       message: "Company deleted successfully",
     });
   } catch (error) {
-    return res.status(500).json({
-      message: "Failed to delete company",
-    });
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to delete company");
+    return res.status(status).json({ message });
   }
 };

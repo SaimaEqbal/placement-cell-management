@@ -11,7 +11,7 @@ import {
   type SendInvitationResponse,
 } from "../services/invitationService";
 
-// Purpose: TanStack Query wrappers over invitationService.ts. None of these share a list cache (the backend has no "list invitations" endpoint), so they're plain mutations plus a single-token verification query.
+/** Purpose: TanStack Query wrappers over invitationService.ts. None of these share a list cache (the backend has no "list invitations" endpoint), so they're plain mutations plus a single-token verification query. */
 
 /** Purpose: POST /invite/invite - Admin invites a TPC/Admin/SPC by email. */
 export function useSendInvitation() {

@@ -1,10 +1,12 @@
 import { axiosInstance } from "../api/axiosInstance";
 
-// Purpose: every Axios call for the `drives` resource and its application-
-// management sub-routes. The backend mounts all of these under /drive
-// (server/src/routes/driveRoutes.js -> driveController.js), including the
-// approve/reject/round/select endpoints that operate on a drive's
-// applications - so they live here rather than in applicationService.ts.
+/**
+ * Purpose: every Axios call for the `drives` resource and its application-
+ * management sub-routes. The backend mounts all of these under /drive
+ * (server/src/routes/driveRoutes.js -> driveController.js), including the
+ * approve/reject/round/select endpoints that operate on a drive's
+ * applications - so they live here rather than in applicationService.ts.
+ */
 
 /** Employment types accepted by createDriveSchema (server/src/lib/schema.js). */
 export type EmploymentType = "FTE" | "Internship" | "Internship + PPO";

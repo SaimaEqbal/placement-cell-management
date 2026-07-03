@@ -1,6 +1,10 @@
 import { axiosInstance } from "../api/axiosInstance";
 
-// Purpose: every Axios call for the `companies` resource - listing companies for the Placement Drives page, and the UPC/Admin company-management CRUD lives here.
+/**
+ * Purpose: every Axios call for the `companies` resource - listing companies
+ * and the Admin company-management CRUD. Companies are a distinct resource from
+ * drives (see driveService.ts); listing one never returns the other.
+ */
 
 /** Shape of a row from the `companies` table (server/src/migrations/002_create_companies.sql). */
 export interface CompanyRecord {
@@ -28,7 +32,7 @@ export interface CreateCompanyPayload {
 /** Body accepted by PUT /companies/:id (updateCompanySchema) - every field optional. */
 export type UpdateCompanyPayload = Partial<CreateCompanyPayload>;
 
-/** Purpose: GET /companies - list companies/placement drives (any authenticated role). */
+/** Purpose: GET /companies - list companies (any authenticated role). */
 export function getCompanies() {
   return axiosInstance.get<CompanyRecord[]>("/companies").then((res) => res.data);
 }
@@ -40,21 +44,21 @@ export function getCompanyById(id: number | string) {
     .then((res) => res.data);
 }
 
-/** Purpose: POST /companies - add a company/drive (UPC/Admin or TPC only, per requireAdminTPC). */
+/** Purpose: POST /companies - create a company (Admin only, per requireAdmin). */
 export function createCompany(payload: CreateCompanyPayload) {
   return axiosInstance
     .post<CompanyRecord>("/companies", payload)
     .then((res) => res.data);
 }
 
-/** Purpose: PUT /companies/:id - edit a company/drive (UPC/Admin or TPC only). */
+/** Purpose: PUT /companies/:id - edit a company (Admin only). */
 export function updateCompany(id: number | string, payload: UpdateCompanyPayload) {
   return axiosInstance
     .put<CompanyRecord>(`/companies/${id}`, payload)
     .then((res) => res.data);
 }
 
-/** Purpose: DELETE /companies/:id - remove a company/drive (UPC/Admin or TPC only). */
+/** Purpose: DELETE /companies/:id - remove a company (Admin only). */
 export function deleteCompany(id: number | string) {
   return axiosInstance
     .delete<{ message: string }>(`/companies/${id}`)

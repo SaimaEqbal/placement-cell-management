@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { pgErrorResponse } from "../lib/dbError.js";
 
 export const applyForDrive = async (req, res) => {
   try {
@@ -31,9 +32,9 @@ export const applyForDrive = async (req, res) => {
 
     return res.status(201).json(result.rows[0]);
   } catch (error) {
-    return res.status(500).json({
-      message: "Failed to apply",
-    });
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to apply");
+    return res.status(status).json({ message });
   }
 };
 
@@ -106,9 +107,9 @@ export const getMyApplications = async (
     );
 
     return res.status(200).json(result.rows);
-  } catch {
-    return res.status(500).json({
-      message: "Failed to fetch applications",
-    });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to fetch applications");
+    return res.status(status).json({ message });
   }
 };

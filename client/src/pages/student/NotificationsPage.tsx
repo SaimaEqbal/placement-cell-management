@@ -2,24 +2,28 @@ import { Bell, CheckCheck } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
 import { Activity, Badge, EmptyState, LoadingState } from "../../components/ui";
-import { useMarkAllNotificationsRead,
+import {
+  useMarkAllNotificationsRead,
   useMarkNotificationRead,
-  useNotifications,} from "../../hooks/useNotifications";
+  useNotifications,
+} from "../../hooks/useNotifications";
 import { formatDate } from "../../lib/format";
 
 import "../../styles/dashboard.css";
 
 /**
- * Purpose: /Student/notifications - lists the signed-in student's
- * notifications via useNotifications() (currently mock data per the brief -
- * "Mock data is acceptable initially" - see notificationService.ts).
+ * Purpose: /Student/notifications - the signed-in user's personal notification
+ * feed (opened from the topbar bell). Backed by useNotifications() + the
+ * /notifications API; supports per-item and bulk "mark as read". Company
+ * announcements live on the separate Announcements page (AnnouncementsPage.tsx).
  */
 export default function NotificationsPage() {
   const { data: notifications, isLoading } = useNotifications();
-const markRead = useMarkNotificationRead();
+  const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
-    const unreadCount = notifications?.filter((n) => !n.read).length ?? 0;
-   return (
+  const unreadCount = notifications?.filter((n) => !n.read).length ?? 0;
+
+  return (
     <>
       <Topbar title="Notifications" subtitle="Updates about your profile and placement drives." />
       <div className="dashboard-content">
@@ -60,9 +64,7 @@ const markRead = useMarkNotificationRead();
                   tone={notification.tone}
                   className={notification.read ? undefined : "is-unread"}
                   onClick={
-                    notification.read
-                      ? undefined
-                      : () => markRead.mutate(notification.id)
+                    notification.read ? undefined : () => markRead.mutate(notification.id)
                   }
                 />
               ))}

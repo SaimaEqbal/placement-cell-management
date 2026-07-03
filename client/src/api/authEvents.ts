@@ -1,10 +1,12 @@
-// Minimal publish/subscribe channel used to announce that the current
-// session is no longer valid (expired/invalid JWT -> 401 from the API).
-//
-// Purpose: kept separate from React (no Context/hooks here) so the plain
-// Axios response interceptor in axiosInstance.ts can notify the rest of the
-// app without importing AuthContext or React Router, which would create a
-// circular dependency between src/api and src/context/src/routes.
+/**
+ * Minimal publish/subscribe channel used to announce that the current
+ * session is no longer valid (expired/invalid JWT -> 401 from the API).
+ *
+ * Purpose: kept separate from React (no Context/hooks here) so the plain
+ * Axios response interceptor in axiosInstance.ts can notify the rest of the
+ * app without importing AuthContext or React Router, which would create a
+ * circular dependency between src/api and src/context/src/routes.
+ */
 
 type UnauthorizedListener = () => void;
 

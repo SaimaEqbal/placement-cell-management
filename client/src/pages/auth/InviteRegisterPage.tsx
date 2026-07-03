@@ -5,12 +5,12 @@ import { ArrowRight, CheckCircle2, Eye, EyeOff, ShieldX, UserPlus } from "lucide
 import Brand from "../../components/Brand";
 import { LoadingState, SectionTitle } from "../../components/ui";
 import { useCompleteRegistration, useVerifyInvitation } from "../../hooks/useInvitations";
-import { DEPARTMENTS, validateConfirmPassword, validateFullName, validatePassword, validatePhone } from "../../lib/validation";
+import { DEPARTMENT_OPTIONS, validateConfirmPassword, validateFullName, validatePassword, validatePhone } from "../../lib/validation";
 import { paths } from "../../routes/paths";
 
 import "../../styles/form-wizard.css";
 
-interface FieldErrors { name?: string; phone?: string; branch?: string; password?: string; confirmPassword?: string; }
+interface FieldErrors { name?: string; phone?: string; department?: string; password?: string; confirmPassword?: string; }
 
 /** Purpose: /register/:token - the invite-acceptance page. Verifies the token (GET /invite/verify/:token), shows the invited email + role read-only, and lets the invitee set their name/phone/branch/password to finish registration (POST /invite/complete/:token). The backend returns no token on completion, so on success we send them to /login to sign in normally.*/
 export default function InviteRegisterPage() {
@@ -20,7 +20,7 @@ export default function InviteRegisterPage() {
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [branch, setBranch] = useState("");
+  const [department, setDepartment] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -33,7 +33,7 @@ export default function InviteRegisterPage() {
     const nextErrors: FieldErrors = {
       name: validateFullName(name),
       phone: validatePhone(phone),
-      branch: branch ? undefined : "Select a branch.",
+      department: department ? undefined : "Select a department.",
       password: validatePassword(password),
       confirmPassword: validateConfirmPassword(password, confirmPassword),
     };
@@ -42,7 +42,7 @@ export default function InviteRegisterPage() {
 
     complete.mutate({
       token,
-      payload: { name: name.trim(), phone: phone.trim(), branch, password },
+      payload: { name: name.trim(), phone: phone.trim(), department, password },
     });
   }
 
@@ -132,12 +132,12 @@ export default function InviteRegisterPage() {
                 {errors.phone && (<span className="field-error">{errors.phone}</span>)}
               </label>
               <label>
-                Branch
-                <select value={branch} onChange={(e) => setBranch(e.target.value)}>
-                  <option value="">Select your Department...</option>
-                  {DEPARTMENTS.map((dept) => (<option key={dept} value={dept}> {dept} </option>))}
+                Department
+                <select value={department} onChange={(e) => setDepartment(e.target.value)}>
+                  <option value="">Select your department...</option>
+                  {DEPARTMENT_OPTIONS.map((dept) => (<option key={dept} value={dept}> {dept} </option>))}
                 </select>
-                {errors.branch && (<span className="field-error">{errors.branch}</span>)}
+                {errors.department && (<span className="field-error">{errors.department}</span>)}
               </label>
               <span />
               <label>

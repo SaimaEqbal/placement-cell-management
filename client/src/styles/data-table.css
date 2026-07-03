@@ -155,3 +155,24 @@
   color: #fff;
   border-color: var(--green);
 }
+
+/* Branch/other dropdown filter sitting beside a .searchbox in .table-tools. */
+.filter-select {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 10px;
+  height: 34px;
+  font-size: 10px;
+  color: #48544f;
+  background: #fff;
+  min-width: 160px;
+}
+
+/* Secondary line under a student's name/roll - e.g. the SPC's rejection reason. */
+.student-cell small.reason-line {
+  color: #b4544c;
+  margin-top: 4px;
+  max-width: 260px;
+  white-space: normal;
+  line-height: 1.4;
+}

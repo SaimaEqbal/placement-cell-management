@@ -51,45 +51,10 @@ export default function AdminDashboard() {
       </>
     );
   }
-
-  const studentList = students.data ?? [];
-  const placedCount = studentList.filter((s) => s.placement_status === "placed").length;
-
   return (
     <>
       <Topbar title="Placement cell overview" subtitle="Companies, drives, and student placement at a glance." />
       <div className="dashboard-content">
-        <div className="stats-row admin">
-          <StatCard
-            label="Total students"
-            value={String(studentList.length)}
-            note="Across all departments"
-            icon={<Users />}
-            tone="blue"
-          />
-          <StatCard
-            label="Placed"
-            value={String(placedCount)}
-            note={`${studentList.length ? Math.round((placedCount / studentList.length) * 100) : 0}% of students`}
-            icon={<CheckCircle2 />}
-            tone="green"
-          />
-          <StatCard
-            label="Companies engaged"
-            value={String(companies.data?.length ?? 0)}
-            note="Currently on file"
-            icon={<Building2 />}
-            tone="amber"
-          />
-          <StatCard
-            label="Active drives"
-            value={String(drives.data?.length ?? 0)}
-            note="Drives on record"
-            icon={<Megaphone />}
-            tone="gray"
-          />
-        </div>
-
         <section className="panel">
           <div className="panel-head">
             <h2>Quick links</h2>
