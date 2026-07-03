@@ -15,6 +15,7 @@ import ProfilePage from "../pages/student/ProfilePage";
 import CompleteProfilePage from "../pages/student/CompleteProfilePage";
 import PlacementDrivesPage from "../pages/student/PlacementDrivesPage";
 import NotificationsPage from "../pages/student/NotificationsPage";
+import AnnouncementsPage from "../pages/student/AnnouncementsPage";
 
 import SpcVerificationQueuePage from "../pages/spc/SpcVerificationQueuePage";
 import StudentVerificationDetailPage from "../pages/spc/StudentVerificationDetailPage";
@@ -85,6 +86,10 @@ export default function AppRoutes() {
           <Route
             path={paths.studentNotifications}
             element={<NotificationsPage />}
+          />
+          <Route
+            path={paths.studentAnnouncements}
+            element={<AnnouncementsPage />}
           />
         </Route>
       </Route>

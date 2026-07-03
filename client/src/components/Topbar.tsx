@@ -1,4 +1,4 @@
-import { Bell, Search } from "lucide-react";
+import { Bell } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -28,11 +28,13 @@ export default function Topbar({
   // useNotifications shares its react-query cache/key with NotificationsPage,
   // so this doesn't add an extra network request when both are mounted -
   // it's disabled entirely for roles without a notifications route yet.
-  const { data: notifications } = useNotifications({ enabled: role === "student" });
+  // An SPC is also a student, so both roles have a notifications page + bell.
+  const canSeeNotifications = role === "student" || role === "spc";
+  const { data: notifications } = useNotifications({ enabled: canSeeNotifications });
   const hasUnread = (notifications?.some((n) => !n.read)) ?? false;
 
   const handleBellClick = () => {
-    if (role === "student") {
+    if (canSeeNotifications) {
       navigate(paths.studentNotifications);
     }
   };
@@ -44,15 +46,12 @@ export default function Topbar({
         <p>{subtitle}</p>
       </div>
       <div className="top-actions">
-        <button type="button" className="icon-btn" aria-label="Search">
-          <Search size={18} />
-        </button>
         <button
           type="button"
           className={`icon-btn${hasUnread ? " dot" : ""}`}
           aria-label="Notifications"
           onClick={handleBellClick}
-          disabled={role !== "student"}
+          disabled={!canSeeNotifications}
         >
           <Bell size={18} />
         </button>

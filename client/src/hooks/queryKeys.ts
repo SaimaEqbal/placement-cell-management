@@ -14,6 +14,7 @@ export const queryKeys = {
   applications: ["applications", "list"] as const,
   studentApplications: (studentId: number | string) =>
     ["applications", "student", studentId] as const,
+  notifications: ["notifications", "list"] as const,
   companyPosts: ["companyPosts", "list"] as const,
   companyPost: (id: number | string) => ["companyPosts", "detail", id] as const,
   postAttachments: (postId: number | string) =>

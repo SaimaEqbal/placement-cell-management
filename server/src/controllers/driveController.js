@@ -1,7 +1,5 @@
 import pool from "../config/db.js";
-<<<<<<< HEAD
 import { pgErrorResponse } from "../lib/dbError.js";
-=======
 import {
   createNotification,
   createNotificationForRole,
@@ -41,7 +39,6 @@ async function notifyApplicationEvent(applicationId, buildMessage) {
     console.error("Failed to send application notification:", error);
   }
 }
->>>>>>> 83911f696eae2f6861aaf2bb9787ab8a194c5a44
 
 export const createDrive = async (req, res) => {
   try {
@@ -97,13 +94,6 @@ export const createDrive = async (req, res) => {
       ]
     );
 
-<<<<<<< HEAD
-    return res.status(201).json(result.rows[0]);
-  } catch (error) {
-    console.error(error);
-    const { status, message } = pgErrorResponse(error, "Failed to create drive");
-    return res.status(status).json({ message });
-=======
     const drive = result.rows[0];
 
     try {
@@ -124,9 +114,10 @@ export const createDrive = async (req, res) => {
     }
 
     return res.status(201).json(drive);
-  } catch {
-    return res.status(500).json({ message: "Failed to create drive" });
->>>>>>> 83911f696eae2f6861aaf2bb9787ab8a194c5a44
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to create drive");
+    return res.status(status).json({ message });
   }
 };
 
@@ -297,17 +288,15 @@ export const approveApplication = async (req, res) => {
       [applicationId]
     );
 
-<<<<<<< HEAD
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Application not found" });
     }
-=======
+
     await notifyApplicationEvent(applicationId, ({ job_role, company_name }) => ({
       title: "Application approved",
       message: `Your application for ${job_role} at ${company_name} has moved forward to the next stage.`,
       tone: "green",
     }));
->>>>>>> 83911f696eae2f6861aaf2bb9787ab8a194c5a44
 
     return res.status(200).json(result.rows[0]);
   } catch (error) {
@@ -329,17 +318,15 @@ export const rejectApplication = async (req, res) => {
       [applicationId]
     );
 
-<<<<<<< HEAD
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Application not found" });
     }
-=======
+
     await notifyApplicationEvent(applicationId, ({ job_role, company_name }) => ({
       title: "Application not selected",
       message: `Your application for ${job_role} at ${company_name} was not moved forward this time.`,
       tone: "red",
     }));
->>>>>>> 83911f696eae2f6861aaf2bb9787ab8a194c5a44
 
     return res.status(200).json(result.rows[0]);
   } catch (error) {
@@ -362,17 +349,15 @@ export const updateStudentRound = async (req, res) => {
       [current_round, applicationId]
     );
 
-<<<<<<< HEAD
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Application not found" });
     }
-=======
+
     await notifyApplicationEvent(applicationId, ({ job_role, company_name }) => ({
       title: "Interview round updated",
       message: `You've advanced to round ${current_round} for ${job_role} at ${company_name}.`,
       tone: "blue",
     }));
->>>>>>> 83911f696eae2f6861aaf2bb9787ab8a194c5a44
 
     return res.status(200).json(result.rows[0]);
   } catch (error) {
@@ -394,17 +379,15 @@ export const markStudentSelected = async (req, res) => {
       [applicationId]
     );
 
-<<<<<<< HEAD
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Application not found" });
     }
-=======
+
     await notifyApplicationEvent(applicationId, ({ job_role, company_name }) => ({
       title: "Congratulations - you're selected!",
       message: `You've been selected for ${job_role} at ${company_name}.`,
       tone: "green",
     }));
->>>>>>> 83911f696eae2f6861aaf2bb9787ab8a194c5a44
 
     return res.status(200).json(result.rows[0]);
   } catch (error) {
@@ -426,17 +409,15 @@ export const markStudentRejected = async (req, res) => {
       [applicationId]
     );
 
-<<<<<<< HEAD
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Application not found" });
     }
-=======
+
     await notifyApplicationEvent(applicationId, ({ job_role, company_name }) => ({
       title: "Application result",
       message: `You were not selected for ${job_role} at ${company_name} this time. Keep going!`,
       tone: "gray",
     }));
->>>>>>> 83911f696eae2f6861aaf2bb9787ab8a194c5a44
 
     return res.status(200).json(result.rows[0]);
   } catch (error) {

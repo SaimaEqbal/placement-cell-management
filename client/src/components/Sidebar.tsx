@@ -1,7 +1,6 @@
 import { type ElementType } from "react";
 import { NavLink } from "react-router-dom";
 import {
-  Bell,
   Building2,
   CheckCircle2,
   ClipboardCheck,
@@ -32,7 +31,7 @@ const studentNav: NavItem[] = [
   { label: "Overview", to: paths.student, icon: LayoutDashboard },
   { label: "My profile", to: paths.studentProfile, icon: FileText },
   { label: "Placement drives", to: paths.studentDrives, icon: Megaphone },
-  { label: "Notifications", to: paths.studentNotifications, icon: Bell },
+  { label: "Announcements", to: paths.studentAnnouncements, icon: Newspaper },
 ];
 
 /**

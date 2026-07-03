@@ -24,6 +24,7 @@ export const paths = {
   studentCompleteProfile: "/Student/complete-profile",
   studentDrives: "/Student/drives",
   studentNotifications: "/Student/notifications",
+  studentAnnouncements: "/Student/announcements",
 
   spcVerification: "/SPC/verification",
 
