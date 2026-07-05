@@ -40,6 +40,39 @@ async function notifyApplicationEvent(applicationId, buildMessage) {
   }
 }
 
+async function getEligibleStudentsForDrive(drive) {
+  const result = await pool.query(
+    `SELECT
+        id,
+        roll_no,
+        name,
+        email,
+        phone,
+        branch,
+        department,
+        cgpa,
+        active_backlogs,
+        passive_backlogs
+     FROM students
+     WHERE
+        review_status = 'verified'
+        AND placement_status = 'unplaced'
+        AND cgpa >= $1
+        AND active_backlogs <= $2
+        AND passive_backlogs <= $3
+        AND branch = ANY($4)
+     ORDER BY cgpa DESC`,
+    [
+      drive.minimum_cgpa,
+      drive.max_active_backlogs,
+      drive.max_passive_backlogs,
+      drive.allowed_branches,
+    ]
+  );
+
+  return result.rows;
+}
+
 export const createDrive = async (req, res) => {
   try {
     const {
@@ -96,28 +129,15 @@ export const createDrive = async (req, res) => {
 
     const drive = result.rows[0];
 
-    try {
-      const companyResult = await pool.query(
-        `SELECT company_name FROM companies WHERE company_id = $1`,
-        [company_id]
-      );
-      const companyName = companyResult.rows[0]?.company_name ?? "A company";
+    const eligibleStudents =
+      await getEligibleStudentsForDrive(drive);
 
-      await createNotificationForRole(
-        "student",
-        "New placement drive announced",
-        `${companyName} is hiring for ${job_role}. Check the drive for eligibility and the application deadline.`,
-        "green"
-      );
-    } catch (error) {
-      console.error("Failed to broadcast drive notification:", error);
-    }
-
-    return res.status(201).json(drive);
-  } catch (error) {
-    console.error(error);
-    const { status, message } = pgErrorResponse(error, "Failed to create drive");
-    return res.status(status).json({ message });
+    return res.status(201).json({
+      drive,
+      eligibleStudents,
+    });
+  } catch {
+    return res.status(500).json({ message: "Failed to create drive" });
   }
 };
 
@@ -218,7 +238,24 @@ export const updateDrive = async (req, res) => {
       });
     }
 
-    return res.status(200).json(result.rows[0]);
+    const drive = result.rows[0];
+    await pool.query(
+      `DELETE FROM drive_students
+      WHERE drive_id = $1`,
+      [drive.drive_id]
+    );
+
+    const eligibleStudents =
+      await getEligibleStudentsForDrive(drive);
+
+    return res.status(200).json({
+      message:
+        "Drive updated. Previous shortlist removed.",
+
+      drive,
+
+      eligibleStudents,
+    });
   } catch (error) {
     console.error(error);
     const { status, message } = pgErrorResponse(error, "Failed to update drive");
@@ -249,207 +286,443 @@ export const deleteDrive = async (req, res) => {
   }
 };
 
-export const getAppliedStudents = async (req, res) => {
+// export const getAppliedStudents = async (req, res) => {
+//   try {
+//     const { driveId } = req.params;
+
+//     const result = await pool.query(
+//       `SELECT
+//           a.*,
+//           s.name,
+//           s.email,
+//           s.roll_no,
+//           s.branch,
+//           s.cgpa
+//        FROM applications a
+//        JOIN students s
+//        ON a.student_id = s.id
+//        WHERE a.drive_id = $1`,
+//       [driveId]
+//     );
+
+//     return res.status(200).json(result.rows);
+//   } catch {
+//     return res.status(500).json({
+//       message: "Failed to fetch applicants",
+//     });
+//   }
+// };
+
+// export const approveApplication = async (req, res) => {
+//   try {
+//     const { applicationId } = req.params;
+
+//     const result = await pool.query(
+//       `UPDATE applications
+//        SET status='approved'
+//        WHERE application_id=$1
+//        RETURNING *`,
+//       [applicationId]
+//     );
+
+//     return res.status(200).json(result.rows[0]);
+//   } catch {
+//     return res.status(500).json({
+//       message: "Failed to approve application",
+//     });
+//   }
+// };
+
+// export const rejectApplication = async (req, res) => {
+//   try {
+//     const { applicationId } = req.params;
+
+//     const result = await pool.query(
+//       `UPDATE applications
+//        SET status='rejected'
+//        WHERE application_id=$1
+//        RETURNING *`,
+//       [applicationId]
+//     );
+
+//     return res.status(200).json(result.rows[0]);
+//   } catch {
+//     return res.status(500).json({
+//       message: "Failed to reject application",
+//     });
+//   }
+// };
+
+// export const markStudentSelected = async (req, res) => {
+//   try {
+//     const { applicationId } = req.params;
+
+//     const result = await pool.query(
+//       `UPDATE applications
+//        SET status='selected'
+//        WHERE application_id=$1
+//        RETURNING *`,
+//       [applicationId]
+//     );
+
+//     return res.status(200).json(result.rows[0]);
+//   } catch {
+//     return res.status(500).json({
+//       message: "Failed to mark selected",
+//     });
+//   }
+// };
+
+// export const markStudentRejected = async (req, res) => {
+//   try {
+//     const { applicationId } = req.params;
+
+//     const result = await pool.query(
+//       `UPDATE applications
+//        SET status='not_selected'
+//        WHERE application_id=$1
+//        RETURNING *`,
+//       [applicationId]
+//     );
+
+//     return res.status(200).json(result.rows[0]);
+//   } catch {
+//     return res.status(500).json({
+//       message: "Failed to mark rejected",
+//     });
+//   }
+// };
+
+// export const getDriveResults = async (req, res) => {
+//   try {
+//     const { driveId } = req.params;
+
+//     const result = await pool.query(
+//       `SELECT
+//           s.name,
+//           s.roll_no,
+//           s.branch,
+//           a.current_round,
+//           a.status
+//        FROM applications a
+//        JOIN students s
+//        ON a.student_id = s.id
+//        WHERE a.drive_id = $1
+//        ORDER BY s.name`,
+//       [driveId]
+//     );
+
+//     return res.status(200).json(result.rows);
+//   } catch {
+//     return res.status(500).json({
+//       message: "Failed to fetch results",
+//     });
+//   }
+// };
+
+export const confirmStudents = async (
+  req,
+  res
+) => {
+
+  const client = await pool.connect();
+
   try {
+
     const { driveId } = req.params;
 
-    const result = await pool.query(
-      `SELECT
-          a.*,
-          s.name,
-          s.email,
-          s.roll_no,
-          s.branch,
-          s.cgpa
-       FROM applications a
-       JOIN students s
-       ON a.student_id = s.id
-       WHERE a.drive_id = $1`,
-      [driveId]
-    );
+    const { studentIds } = req.body;
 
-    return res.status(200).json(result.rows);
-  } catch (error) {
-    console.error(error);
-    const { status, message } = pgErrorResponse(error, "Failed to fetch applicants");
-    return res.status(status).json({ message });
-  }
-};
+    await client.query("BEGIN");
 
-export const approveApplication = async (req, res) => {
-  try {
-    const { applicationId } = req.params;
+    for (const studentId of studentIds) {
 
-    const result = await pool.query(
-      `UPDATE applications
-       SET status='approved'
-       WHERE application_id=$1
-       RETURNING *`,
-      [applicationId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Application not found" });
+      await client.query(
+        `INSERT INTO drive_students
+        (
+            drive_id,
+            student_id,
+            added_by
+        )
+        VALUES
+        ($1,$2,$3)`,
+        [
+          driveId,
+          studentId,
+          req.user.userId,
+        ]
+      );
     }
 
-    await notifyApplicationEvent(applicationId, ({ job_role, company_name }) => ({
-      title: "Application approved",
-      message: `Your application for ${job_role} at ${company_name} has moved forward to the next stage.`,
-      tone: "green",
-    }));
+    await client.query("COMMIT");
 
-    return res.status(200).json(result.rows[0]);
+    return res.status(201).json({
+      message:
+        "Students confirmed successfully",
+    });
+
   } catch (error) {
+
+    await client.query("ROLLBACK");
+
     console.error(error);
-    const { status, message } = pgErrorResponse(error, "Failed to approve application");
-    return res.status(status).json({ message });
+
+    return res.status(500).json({
+      message:
+        "Failed to confirm students",
+    });
+
+  } finally {
+
+    client.release();
+
   }
 };
 
-export const rejectApplication = async (req, res) => {
+export const getDriveStudents = async (
+  req,
+  res
+) => {
+
   try {
-    const { applicationId } = req.params;
 
-    const result = await pool.query(
-      `UPDATE applications
-       SET status='rejected'
-       WHERE application_id=$1
-       RETURNING *`,
-      [applicationId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Application not found" });
-    }
-
-    await notifyApplicationEvent(applicationId, ({ job_role, company_name }) => ({
-      title: "Application not selected",
-      message: `Your application for ${job_role} at ${company_name} was not moved forward this time.`,
-      tone: "red",
-    }));
-
-    return res.status(200).json(result.rows[0]);
-  } catch (error) {
-    console.error(error);
-    const { status, message } = pgErrorResponse(error, "Failed to reject application");
-    return res.status(status).json({ message });
-  }
-};
-
-export const updateStudentRound = async (req, res) => {
-  try {
-    const { applicationId } = req.params;
-    const { current_round } = req.body;
-
-    const result = await pool.query(
-      `UPDATE applications
-       SET current_round=$1
-       WHERE application_id=$2
-       RETURNING *`,
-      [current_round, applicationId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Application not found" });
-    }
-
-    await notifyApplicationEvent(applicationId, ({ job_role, company_name }) => ({
-      title: "Interview round updated",
-      message: `You've advanced to round ${current_round} for ${job_role} at ${company_name}.`,
-      tone: "blue",
-    }));
-
-    return res.status(200).json(result.rows[0]);
-  } catch (error) {
-    console.error(error);
-    const { status, message } = pgErrorResponse(error, "Failed to update round");
-    return res.status(status).json({ message });
-  }
-};
-
-export const markStudentSelected = async (req, res) => {
-  try {
-    const { applicationId } = req.params;
-
-    const result = await pool.query(
-      `UPDATE applications
-       SET status='selected'
-       WHERE application_id=$1
-       RETURNING *`,
-      [applicationId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Application not found" });
-    }
-
-    await notifyApplicationEvent(applicationId, ({ job_role, company_name }) => ({
-      title: "Congratulations - you're selected!",
-      message: `You've been selected for ${job_role} at ${company_name}.`,
-      tone: "green",
-    }));
-
-    return res.status(200).json(result.rows[0]);
-  } catch (error) {
-    console.error(error);
-    const { status, message } = pgErrorResponse(error, "Failed to mark selected");
-    return res.status(status).json({ message });
-  }
-};
-
-export const markStudentRejected = async (req, res) => {
-  try {
-    const { applicationId } = req.params;
-
-    const result = await pool.query(
-      `UPDATE applications
-       SET status='not_selected'
-       WHERE application_id=$1
-       RETURNING *`,
-      [applicationId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Application not found" });
-    }
-
-    await notifyApplicationEvent(applicationId, ({ job_role, company_name }) => ({
-      title: "Application result",
-      message: `You were not selected for ${job_role} at ${company_name} this time. Keep going!`,
-      tone: "gray",
-    }));
-
-    return res.status(200).json(result.rows[0]);
-  } catch (error) {
-    console.error(error);
-    const { status, message } = pgErrorResponse(error, "Failed to mark rejected");
-    return res.status(status).json({ message });
-  }
-};
-
-export const getDriveResults = async (req, res) => {
-  try {
     const { driveId } = req.params;
 
-    const result = await pool.query(
-      `SELECT
-          s.name,
-          s.roll_no,
-          s.branch,
-          a.current_round,
-          a.status
-       FROM applications a
-       JOIN students s
-       ON a.student_id = s.id
-       WHERE a.drive_id = $1
-       ORDER BY s.name`,
-      [driveId]
+    const result =
+      await pool.query(
+        `SELECT
+            ds.drive_student_id,
+            ds.current_round,
+            ds.status,
+            ds.remarks,
+
+            s.id,
+            s.roll_no,
+            s.name,
+            s.email,
+            s.branch,
+            s.cgpa
+
+        FROM drive_students ds
+
+        JOIN students s
+        ON ds.student_id=s.id
+
+        WHERE ds.drive_id=$1
+
+        ORDER BY s.cgpa DESC`,
+        [driveId]
+      );
+
+    return res.status(200).json(
+      result.rows
     );
 
-    return res.status(200).json(result.rows);
   } catch (error) {
+
     console.error(error);
-    const { status, message } = pgErrorResponse(error, "Failed to fetch results");
-    return res.status(status).json({ message });
+
+    return res.status(500).json({
+      message:
+        "Failed to fetch drive students",
+    });
+
   }
+
 };
+
+export const updateStudentRound =
+  async (req, res) => {
+
+    try {
+
+      const { driveStudentId } = req.params;
+
+      const { current_round } = req.body;
+
+      const result = await pool.query(
+
+        `UPDATE drive_students
+
+SET current_round=$1
+
+WHERE drive_student_id=$2
+
+RETURNING *`,
+
+        [current_round, driveStudentId]
+
+      );
+
+      if (result.rows.length === 0) {
+
+        return res.status(404).json({
+
+          message: "Student not found"
+
+        });
+
+      }
+
+      return res.status(200).json(result.rows[0]);
+
+    } catch (error) {
+
+      console.error(error);
+
+      return res.status(500).json({
+
+        message: "Failed to update round"
+
+      });
+
+    }
+
+  };
+
+export const markSelected =
+  async (req, res) => {
+
+    try {
+
+      const { driveStudentId } = req.params;
+
+      const result = await pool.query(
+
+        `UPDATE drive_students
+
+SET status='selected'
+
+WHERE drive_student_id=$1
+
+RETURNING *`,
+
+        [driveStudentId]
+
+      );
+
+      if (result.rows.length === 0) {
+
+        return res.status(404).json({
+
+          message: "Student not found"
+
+        });
+
+      }
+
+      return res.status(200).json(result.rows[0]);
+
+    } catch (error) {
+
+      console.error(error);
+
+      return res.status(500).json({
+
+        message: "Failed to update status"
+
+      });
+
+    }
+
+  };
+
+export const markRejected =
+  async (req, res) => {
+
+    try {
+
+      const { driveStudentId } = req.params;
+
+      const result = await pool.query(
+
+        `UPDATE drive_students
+
+SET status='not_selected'
+
+WHERE drive_student_id=$1
+
+RETURNING *`,
+
+        [driveStudentId]
+
+      );
+
+      if (result.rows.length === 0) {
+
+        return res.status(404).json({
+
+          message: "Student not found"
+
+        });
+
+      }
+
+      return res.status(200).json(result.rows[0]);
+
+    } catch (error) {
+
+      console.error(error);
+
+      return res.status(500).json({
+
+        message: "Failed to update status"
+
+      });
+
+    }
+
+  };
+
+export const removeStudent =
+  async (req, res) => {
+
+    try {
+
+      const { driveStudentId } = req.params;
+
+      const result = await pool.query(
+
+        `DELETE FROM drive_students
+
+WHERE drive_student_id=$1
+
+RETURNING *`,
+
+        [driveStudentId]
+
+      );
+
+      if (result.rows.length === 0) {
+
+        return res.status(404).json({
+
+          message: "Student not found"
+
+        });
+
+      }
+
+      return res.status(200).json({
+
+        message:
+
+          "Student removed successfully"
+
+      });
+
+    } catch (error) {
+
+      console.error(error);
+
+      return res.status(500).json({
+
+        message:
+
+          "Failed to remove student"
+
+      });
+
+    }
+
+  };
