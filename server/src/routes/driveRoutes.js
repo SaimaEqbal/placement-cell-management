@@ -19,13 +19,12 @@ import {
   getDriveById,
   updateDrive,
   deleteDrive,
-  getAppliedStudents,
-  approveApplication,
-  rejectApplication,
+  getDriveStudents,
+  confirmStudents,
+  markRejected,
+  markSelected,
+  removeStudent,
   updateStudentRound,
-  markStudentSelected,
-  markStudentRejected,
-  getDriveResults,
 } from "../controllers/driveController.js";
 
 const router = express.Router();
@@ -66,53 +65,96 @@ router.delete(
 );
 
 router.get(
-  "/:driveId/applications",
+  "/:driveId/students",
   auth,
-  requireAdminTPCSPC,
-  getAppliedStudents
+  getDriveStudents
 );
 
-router.put(
-  "/applications/:applicationId/approve",
+router.post(
+  "/:driveId/confirm-students",
   auth,
-  requireAdminTPC,
-  approveApplication
+  requireAdmin,
+  confirmStudents
 );
 
-router.put(
-  "/applications/:applicationId/reject",
+router.patch(
+  "/students/:driveStudentId/round",
   auth,
-  requireAdminTPC,
-  rejectApplication
-);
-
-router.put(
-  "/applications/:applicationId/round",
-  auth,
-  requireAdminTPCSPC,
-  validateUpdateStudentRound,
+  requireAdmin,
   updateStudentRound
 );
 
-router.put(
-  "/applications/:applicationId/select",
+router.patch(
+  "/students/:driveStudentId/select",
   auth,
-  requireAdminTPC,
-  markStudentSelected
+  requireAdmin,
+  markSelected
 );
 
-router.put(
-  "/applications/:applicationId/not-select",
+router.patch(
+  "/students/:driveStudentId/reject",
   auth,
-  requireAdminTPC,
-  markStudentRejected
+  requireAdmin,
+  markRejected
 );
 
-router.get(
-  "/:driveId/results",
+router.delete(
+  "/students/:driveStudentId",
   auth,
-  requireAdminTPCSPC,
-  getDriveResults
+  requireAdmin,
+  removeStudent
 );
 
 export default router;
+
+// router.get(
+//   "/:driveId/applications",
+//   auth,
+//   requireAdminTPCSPC,
+//   getAppliedStudents
+// );
+
+// router.put(
+//   "/applications/:applicationId/approve",
+//   auth,
+//   requireAdminTPC,
+//   approveApplication
+// );
+
+// router.put(
+//   "/applications/:applicationId/reject",
+//   auth,
+//   requireAdminTPC,
+//   rejectApplication
+// );
+
+// router.put(
+//   "/applications/:applicationId/round",
+//   auth,
+//   requireAdminTPCSPC,
+//   validateUpdateStudentRound,
+//   updateStudentRound
+// );
+
+// router.put(
+//   "/applications/:applicationId/select",
+//   auth,
+//   requireAdminTPC,
+//   markStudentSelected
+// );
+
+// router.put(
+//   "/applications/:applicationId/not-select",
+//   auth,
+//   requireAdminTPC,
+//   markStudentRejected
+// );
+
+// router.get(
+//   "/:driveId/results",
+//   auth,
+//   requireAdminTPCSPC,
+//   getDriveResults
+// );
+
+
