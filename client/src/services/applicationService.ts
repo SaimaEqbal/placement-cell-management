@@ -1,6 +1,6 @@
 import { axiosInstance } from "../api/axiosInstance";
 
-/*
+/**
  * Purpose: the student-facing side of the placement-application workflow
  * (server/src/routes/applicationRoutes.js -> applicationController.js):
  * applying to a drive, withdrawing, and listing a student's applications.
@@ -35,7 +35,11 @@ export function applyForDrive(
 ) {
   return axiosInstance
     .post<ApplicationRecord>(`/application/apply/${driveId}`, {
-      student_id: studentId,
+      // students.id is a bigint, which node-pg serialises as a string - so
+      // profile.id / student.id arrive here as strings. The backend's
+      // applyForDriveSchema requires a real number (z.number()), so coerce
+      // before sending or the apply 400s on validation.
+      student_id: Number(studentId),
     })
     .then((res) => res.data);
 }

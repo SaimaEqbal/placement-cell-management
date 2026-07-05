@@ -50,6 +50,53 @@ export const sendVerificationEmail = async (
   return data;
 };
 
+export const sendInvitationEmail = async (
+  email,
+  role,
+  inviteLink
+) => {
+  // Logged like the other senders so the link is visible in dev if Brevo is unconfigured.
+  console.log(inviteLink);
+  const response = await fetch(
+    "https://api.brevo.com/v3/smtp/email",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": process.env.BREVO_API_KEY,
+      },
+      body: JSON.stringify({
+        sender: {
+          name: "UPC Placement Cell",
+          email: process.env.BREVO_SENDER_EMAIL,
+        },
+        to: [{ email }],
+        subject: `You're invited to the Placement Cell (${role.toUpperCase()})`,
+        htmlContent: `
+          <h2>You're invited</h2>
+          <p>You've been invited to join the Placement Cell portal as
+            <b>${role.toUpperCase()}</b>.</p>
+          <p>Click the link below to set your password and complete your registration:</p>
+          <a href="${inviteLink}">Complete your registration</a>
+          <p>This invitation expires in 7 days.</p>
+        `,
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error("Brevo Error:", data);
+
+    throw new Error(
+      data.message || "Failed to send invitation email"
+    );
+  }
+
+  return data;
+};
+
 export const sendPasswordResetEmail = async (
   email,
   resetToken

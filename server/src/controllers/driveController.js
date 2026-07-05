@@ -1,4 +1,44 @@
 import pool from "../config/db.js";
+import { pgErrorResponse } from "../lib/dbError.js";
+import {
+  createNotification,
+  createNotificationForRole,
+} from "./notificationController.js";
+
+// Purpose: look up which user (users.id) owns a given application, plus the
+// job role and company name, so the notify* helpers below can message the
+// right student with useful context. Failures here are swallowed by the
+// callers - a notification hiccup should never break the underlying
+// approve/reject/select/round action.
+async function getApplicationContext(applicationId) {
+  const result = await pool.query(
+    `SELECT
+        s.user_id,
+        d.job_role,
+        c.company_name
+     FROM applications a
+     JOIN students s ON a.student_id = s.id
+     JOIN drives d ON a.drive_id = d.drive_id
+     JOIN companies c ON d.company_id = c.company_id
+     WHERE a.application_id = $1`,
+    [applicationId]
+  );
+
+  return result.rows[0] ?? null;
+}
+
+/** Purpose: notify the student tied to an application about a status/round change. Never throws - a failed notification must not fail the underlying action. */
+async function notifyApplicationEvent(applicationId, buildMessage) {
+  try {
+    const context = await getApplicationContext(applicationId);
+    if (!context) return;
+
+    const { title, message, tone } = buildMessage(context);
+    await createNotification(context.user_id, title, message, tone);
+  } catch (error) {
+    console.error("Failed to send application notification:", error);
+  }
+}
 
 async function getEligibleStudentsForDrive(drive) {
   const result = await pool.query(
@@ -108,8 +148,10 @@ export const getDrives = async (req, res) => {
     );
 
     return res.status(200).json(result.rows);
-  } catch {
-    return res.status(500).json({ message: "Failed to fetch drives" });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to fetch drives");
+    return res.status(status).json({ message });
   }
 };
 
@@ -127,8 +169,10 @@ export const getDriveById = async (req, res) => {
     }
 
     return res.status(200).json(result.rows[0]);
-  } catch {
-    return res.status(500).json({ message: "Failed to fetch drive" });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to fetch drive");
+    return res.status(status).json({ message });
   }
 };
 
@@ -214,10 +258,8 @@ export const updateDrive = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-
-    return res.status(500).json({
-      message: "Failed to update drive",
-    });
+    const { status, message } = pgErrorResponse(error, "Failed to update drive");
+    return res.status(status).json({ message });
   }
 };
 
@@ -225,16 +267,22 @@ export const deleteDrive = async (req, res) => {
   try {
     const { driveId } = req.params;
 
-    await pool.query(
-      `DELETE FROM drives WHERE drive_id=$1`,
+    const result = await pool.query(
+      `DELETE FROM drives WHERE drive_id=$1 RETURNING *`,
       [driveId]
     );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Drive not found" });
+    }
 
     return res.status(200).json({
       message: "Drive deleted successfully",
     });
-  } catch {
-    return res.status(500).json({ message: "Failed to delete drive" });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to delete drive");
+    return res.status(status).json({ message });
   }
 };
 

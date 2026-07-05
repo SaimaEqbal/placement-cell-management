@@ -40,7 +40,7 @@ export default function LoginPage() {
     setFormError(undefined);
 
     loginMutation.mutate(
-      // Email lowercased to match the canonical form stored at signup - addresses are case-insensitive, but the DB lookup is not.
+      /** Email lowercased to match the canonical form stored at signup - addresses are case-insensitive, but the DB lookup is not. */
       { email: email.trim().toLowerCase(), password },
       {
         onSuccess: (data) => {
@@ -85,7 +85,7 @@ export default function LoginPage() {
 
             <form onSubmit={handleSubmit} noValidate>
               <label>
-                Institutional email
+                Email
                 <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username"/>
               </label>
               <label>

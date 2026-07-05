@@ -56,7 +56,7 @@ export default function PlacementDrivesPage() {
     return map;
   }, [companies]);
 
-  // drive_id -> the student's existing application, so we can show status/withdraw.
+  /** drive_id -> the student's existing application, so we can show status/withdraw. */
   const applicationByDrive = useMemo(() => {
     const map = new Map<number, ApplicationRecord>();
     applications?.forEach((a) => map.set(a.drive_id, a));
@@ -148,6 +148,26 @@ export default function PlacementDrivesPage() {
                           <CalendarClock size={11} /> Deadline
                         </span>
                         <b>{formatDate(drive.application_deadline)}</b>
+                      </div>
+                      <div>
+                        <span>Role</span>
+                        <b>{drive.job_role ?? "-"}</b>
+                      </div>
+                      <div>
+                        <span>Drive date</span>
+                        <b>{formatDate(drive.drive_date)}</b>
+                      </div>
+                      <div>
+                        <span>Rounds</span>
+                        <b>{drive.number_of_rounds}</b>
+                      </div>
+                      <div>
+                        <span>Max active backlogs</span>
+                        <b>{drive.max_active_backlogs}</b>
+                      </div>
+                      <div>
+                        <span>Max passive backlogs</span>
+                        <b>{drive.max_passive_backlogs}</b>
                       </div>
                       <div>
                         <span>Branches</span>

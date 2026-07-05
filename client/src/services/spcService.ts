@@ -1,27 +1,33 @@
 import { axiosInstance } from "../api/axiosInstance";
-import type { StudentRecord, UpdateStudentPayload } from "./studentService";
-
-// Purpose: Axios calls under the backend's /spc namespace
-// (server/src/routes/spcRoutes.js). Only one route exists there today - the
-// SPC-gated student update used for the SPC verification step - so this
-// file is small by design, not an oversight.
-//
-// Not in the brief's literal service-file list, but added alongside
-// studentService.ts/tpcService.ts because the backend genuinely exposes a
-// distinct, role-gated /spc route namespace that student CRUD calls cannot
-// reach.
+import type { StudentRecord } from "./studentService";
 
 /**
- * Purpose: PUT /spc/:id - SPC-only update of a student record (e.g.
- * recording SPC-level verification). Requires an authenticated SPC JWT
- * (requireSPC middleware). Functionally identical to updateStudent() in
- * studentService.ts, just gated behind the SPC role instead of being open.
+ * Purpose: Axios calls under the backend's /spc namespace
+ * (server/src/routes/spcRoutes.js). An SPC is otherwise a normal student; their
+ * only extra duty is verifying the students the TPC assigned to them.
+ *
+ * - getSpcQueue:  students assigned to this SPC that are still pending review.
+ * - spcVerify:    approve at SPC level (-> review_status 'spc_verified').
+ * - spcReject:    reject with a reason (-> 'spc_rejected', routed to the TPC).
  */
-export function spcUpdateStudent(
-  id: number | string,
-  payload: UpdateStudentPayload,
-) {
+
+/** Purpose: GET /spc/verification-queue - this SPC's assigned + pending students. */
+export function getSpcQueue() {
   return axiosInstance
-    .put<StudentRecord>(`/spc/${id}`, payload)
+    .get<StudentRecord[]>("/spc/verification-queue")
+    .then((res) => res.data);
+}
+
+/** Purpose: PUT /spc/verify/:studentId - SPC-level approval. */
+export function spcVerifyStudent(id: number | string) {
+  return axiosInstance
+    .put<StudentRecord>(`/spc/verify/${id}`)
+    .then((res) => res.data);
+}
+
+/** Purpose: PUT /spc/reject/:studentId - SPC-level rejection with a reason. */
+export function spcRejectStudent(id: number | string, reason: string) {
+  return axiosInstance
+    .put<StudentRecord>(`/spc/reject/${id}`, { reason })
     .then((res) => res.data);
 }

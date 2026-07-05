@@ -9,7 +9,6 @@ import {
   type StudentRecord,
   type UpdateStudentPayload,
 } from "../services/studentService";
-import { spcUpdateStudent } from "../services/spcService";
 import { queryKeys } from "./queryKeys";
 
 /**Purpose: GET /students - list every student record, for the SPC/TPC/Admin dashboards. Filtering/searching (department, status, roll number) happens client-side over this one cached list - see those pages - rather than as separate queries per filter combination.*/
@@ -39,23 +38,6 @@ export function useUpdateStudentRecord() {
     { id: number | string; payload: UpdateStudentPayload }
   >({
     mutationFn: ({ id, payload }) => updateStudent(id, payload),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.students() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.student(variables.id) });
-    },
-  });
-}
-
-/** Purpose: PUT /spc/:id - the SPC-only verification update (requireSPC middleware). Same cache invalidation as useUpdateStudentRecord(). NOTE: server/src/lib/schema.js's updateStudentSchema does not list `review_status`/`reviewed_at` among its accepted fields, so a payload of `{ review_status: "spc_verified" }` is accepted (200 OK) but silently stripped before the SQL UPDATE runs - the student row's review_status does not actually change yet. This hook still sends the semantically correct payload; the gap is server-side and documented in studentService.ts.*/
-export function useSpcVerifyStudent() {
-  const queryClient = useQueryClient();
-
-  return useMutation<
-    StudentRecord,
-    ApiError,
-    { id: number | string; payload: UpdateStudentPayload }
-  >({
-    mutationFn: ({ id, payload }) => spcUpdateStudent(id, payload),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.students() });
       queryClient.invalidateQueries({ queryKey: queryKeys.student(variables.id) });

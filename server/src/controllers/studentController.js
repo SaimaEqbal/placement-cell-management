@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { pgErrorResponse } from "../lib/dbError.js";
 
 export const createStudent = async (req, res) => {
 
@@ -40,19 +41,8 @@ export const createStudent = async (req, res) => {
       last_sem_marksheet_url,
 
       placement_status,
+      semester,
     } = req.body;
-
-    // CHANGE: Link the new students row to the signed-in account.
-    // PROBLEM: createStudent never inserted user_id, so every profile created
-    //          via POST /students had user_id = NULL. As a result the row was
-    //          not tied to the users account: GET /students/me (WHERE user_id
-    //          = $1) could never find it, the dashboard always showed "profile
-    //          incomplete", and the client kept re-POSTing (hitting UNIQUE
-    //          violations) instead of updating. The profile effectively only
-    //          "existed" in the users table from the app's point of view.
-    // BEFORE:  INSERT INTO students (roll_no, ..., placement_status) with no user_id.
-    // AFTER:   user_id = req.user.userId is inserted (auth middleware now runs
-    //          on this route, so req.user is guaranteed to be present).
 
     const userId = req.user.userId;
 
@@ -87,6 +77,7 @@ export const createStudent = async (req, res) => {
       twelfth_marksheet_url,
       last_sem_marksheet_url,
       placement_status,
+      semester,
       user_id
   )
   VALUES (
@@ -94,7 +85,7 @@ export const createStudent = async (req, res) => {
       $9,$10,$11,$12,$13,$14,
       $15,$16,$17,$18,$19,$20,
       $21,$22,$23,$24,$25,$26,
-      $27,$28,$29,$30
+      $27,$28,$29,$30,$31
   )
   RETURNING *`,
   [
@@ -127,6 +118,7 @@ export const createStudent = async (req, res) => {
     twelfth_marksheet_url,
     last_sem_marksheet_url,
     placement_status,
+    semester,
     userId
   ]
 );
@@ -134,23 +126,14 @@ export const createStudent = async (req, res) => {
   } catch (error) {
     console.log(error);
 
-    // CHANGE: Return a clear 409 on a unique-constraint violation.
-    // PROBLEM: roll_no / email / user_id are UNIQUE. A duplicate threw a
-    //          Postgres error (code 23505) that the catch reported as a generic
-    //          500 "Failed to create student", hiding the real cause (e.g. the
-    //          roll number is already taken) from the user.
-    // BEFORE:  every error -> 500 "Failed to create student".
-    // AFTER:   23505 -> 409 with a field-specific message (from error.constraint);
-    //          all other errors still -> 500.
     if (error.code === "23505") {
       return res.status(409).json({
         message: uniqueViolationMessage(error.constraint)
       });
     }
 
-    return res.status(500).json({
-      message: "Failed to create student"
-    });
+    const { status, message } = pgErrorResponse(error, "Failed to create student");
+    return res.status(status).json({ message });
   }
 };
 
@@ -225,6 +208,7 @@ export const updateStudent = async (req, res) => {
       last_sem_marksheet_url,
 
       placement_status,
+      semester,
     } = req.body;
 
     // Fetch current student
@@ -306,8 +290,9 @@ export const updateStudent = async (req, res) => {
            last_sem_marksheet_url = $28,
            placement_status = $29,
            review_status = $30,
-           reviewed_at = $31
-       WHERE id = $32
+           reviewed_at = $31,
+           semester = $32
+       WHERE id = $33
        RETURNING *`,
       [
         roll_no,
@@ -341,6 +326,7 @@ export const updateStudent = async (req, res) => {
         placement_status,
         reviewStatus,
         reviewedAt,
+        semester,
         id,
       ]
     );
@@ -355,9 +341,8 @@ export const updateStudent = async (req, res) => {
       });
     }
 
-    return res.status(500).json({
-      message: "Failed to update student",
-    });
+    const { status, message } = pgErrorResponse(error, "Failed to update student");
+    return res.status(status).json({ message });
   }
 };
 
@@ -393,7 +378,10 @@ export const getStudentById = async (req, res) => {
     const { id } = req.params;
 
     const result = await pool.query(
-      "SELECT * FROM students WHERE id = $1",
+      `SELECT st.*, (sp.spc_id IS NOT NULL) AS is_spc
+       FROM students st
+       LEFT JOIN spc sp ON sp.user_id = st.user_id
+       WHERE st.id = $1`,
       [id]
     );
 

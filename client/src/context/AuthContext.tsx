@@ -13,9 +13,11 @@ import { onUnauthorized } from "../api/authEvents";
 import { decodeAccessToken, isTokenExpired } from "../lib/jwt";
 import type { Role } from "../types";
 
-// Per project rules, Context is ONLY for authentication state and
-// multi-step-workflow state - never server data (that's TanStack Query's
-// job, see src/hooks/). This file is the authentication half.
+/**
+ * Per project rules, Context is ONLY for authentication state and
+ * multi-step-workflow state - never server data (that's TanStack Query's
+ * job, see src/hooks/). This file is the authentication half.
+ */
 
 /** Minimal identity decoded from the JWT - see src/lib/jwt.ts for why this is decode-only, not verified. */
 export interface AuthUser {
@@ -75,10 +77,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ user: null, role: null, token: null, isAuthenticated: false });
   }, []);
 
-  // Purpose: react to a 401 raised anywhere in the app (see
-  // src/api/axiosInstance.ts's response interceptor) by dropping the local
-  // session - e.g. when the token expires mid-session - so ProtectedRoute
-  // redirects to /login on the next render.
+  /**
+   * Purpose: react to a 401 raised anywhere in the app (see
+   * src/api/axiosInstance.ts's response interceptor) by dropping the local
+   * session - e.g. when the token expires mid-session - so ProtectedRoute
+   * redirects to /login on the next render.
+   */
   useEffect(() => onUnauthorized(logout), [logout]);
 
   const value = useMemo<AuthContextValue>(

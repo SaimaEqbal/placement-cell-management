@@ -121,13 +121,24 @@ export function Activity({
   title,
   meta,
   tone,
+    onClick,
+  className,
 }: {
   title: string;
   meta: string;
   tone: StatusTone;
+   /** Optional - e.g. NotificationsPage passes this to mark an unread item as read on click. */
+  onClick?: () => void;
+  /** Optional extra class(es) appended to "activity", e.g. "is-unread" for visual distinction. */
+  className?: string;
 }) {
-  return (
-    <div className="activity">
+return (
+    <div
+      className={`activity${className ? ` ${className}` : ""}${onClick ? " activity-clickable" : ""}`}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+    >
       <i className={tone}>
         {tone === "green" ? <Check size={14} /> : tone === "amber" ? <Minus size={14} /> : <FileText size={14} />}
       </i>
@@ -172,10 +183,12 @@ export function InfoGrid({ items }: { items: string[][] }) {
   );
 }
 
-// --- Reusable loading / error / empty states --------------------------------
-// Purpose: every TanStack Query-backed page in this app (dashboards, lists,
-// review screens) needs to render these three states consistently instead
-// of each page inventing its own spinner/message markup.
+/**
+ * Reusable loading / error / empty states.
+ * Purpose: every TanStack Query-backed page in this app (dashboards, lists,
+ * review screens) needs to render these three states consistently instead
+ * of each page inventing its own spinner/message markup.
+ */
 
 /** Purpose: shown while a useQuery()/useMutation() is in flight. */
 export function LoadingState({ label = "Loading..." }: { label?: string }) {

@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { pgErrorResponse } from "../lib/dbError.js";
 
 export const createPost = async (req, res) => {
   try {
@@ -26,9 +27,8 @@ export const createPost = async (req, res) => {
   } catch (error) {
     console.error(error);
 
-    return res.status(500).json({
-      message: "Failed to create post",
-    });
+    const { status, message } = pgErrorResponse(error, "Failed to create post");
+    return res.status(status).json({ message });
   }
 };
 
@@ -44,9 +44,8 @@ export const getPosts = async (req, res) => {
   } catch (error) {
     console.error(error);
 
-    return res.status(500).json({
-      message: "Failed to fetch posts",
-    });
+    const { status, message } = pgErrorResponse(error, "Failed to fetch posts");
+    return res.status(status).json({ message });
   }
 };
 
@@ -71,9 +70,8 @@ export const getPostById = async (req, res) => {
   } catch (error) {
     console.error(error);
 
-    return res.status(500).json({
-      message: "Failed to fetch post",
-    });
+    const { status, message } = pgErrorResponse(error, "Failed to fetch post");
+    return res.status(status).json({ message });
   }
 };
 
@@ -114,9 +112,8 @@ export const updatePost = async (req, res) => {
   } catch (error) {
     console.error(error);
 
-    return res.status(500).json({
-      message: "Failed to update post",
-    });
+    const { status, message } = pgErrorResponse(error, "Failed to update post");
+    return res.status(status).json({ message });
   }
 };
 
@@ -143,9 +140,8 @@ export const deletePost = async (req, res) => {
   } catch (error) {
     console.error(error);
 
-    return res.status(500).json({
-      message: "Failed to delete post",
-    });
+    const { status, message } = pgErrorResponse(error, "Failed to delete post");
+    return res.status(status).json({ message });
   }
 };
 
@@ -165,9 +161,8 @@ export const getAttachmentsByPost = async (req, res) => {
   } catch (error) {
     console.error(error);
 
-    return res.status(500).json({
-      message: "Failed to fetch attachments",
-    });
+    const { status, message } = pgErrorResponse(error, "Failed to fetch attachments");
+    return res.status(status).json({ message });
   }
 };
 
@@ -208,9 +203,8 @@ export const uploadAttachments = async (req, res) => {
   } catch (error) {
     console.error(error);
 
-    return res.status(500).json({
-      message: "Failed to upload attachments",
-    });
+    const { status, message } = pgErrorResponse(error, "Failed to upload attachments");
+    return res.status(status).json({ message });
   }
 };
 
@@ -237,8 +231,7 @@ export const deleteAttachment = async (req, res) => {
   } catch (error) {
     console.error(error);
 
-    return res.status(500).json({
-      message: "Failed to delete attachment",
-    });
+    const { status, message } = pgErrorResponse(error, "Failed to delete attachment");
+    return res.status(status).json({ message });
   }
 };

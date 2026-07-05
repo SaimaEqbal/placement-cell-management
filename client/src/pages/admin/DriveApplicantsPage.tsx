@@ -16,7 +16,6 @@ import {
   ErrorState,
   LoadingState,
 } from "../../components/ui";
-import { useAuth } from "../../context/AuthContext";
 import { useCompanies } from "../../hooks/useCompanies";
 import {
   useApproveApplication,
@@ -28,16 +27,18 @@ import {
   useRejectApplication,
   useUpdateApplicationRound,
 } from "../../hooks/useDrives";
-import { formatCgpa, initialsFromName } from "../../lib/format";
+import { formatCgpa, formatDate, initialsFromName } from "../../lib/format";
 import { paths } from "../../routes/paths";
 import type { StatusTone } from "../../types";
 
 import "../../styles/dashboard.css";
 import "../../styles/data-table.css";
 
-// The shared .data-row grid in data-table.css is a fixed 5 columns; this page's
-// applicants table has 6 (it adds a Round column and a wide Actions cell), so
-// it sets its own template inline to keep the header and rows aligned.
+/**
+ * The shared .data-row grid in data-table.css is a fixed 5 columns; this page's
+ * applicants table has 6 (it adds a Round column and a wide Actions cell), so
+ * it sets its own template inline to keep the header and rows aligned.
+ */
 const APPLICANT_COLS = "1.6fr 1fr 0.6fr 0.6fr 0.9fr 2.4fr";
 
 /** Purpose: tone for an application's workflow status. */
@@ -56,6 +57,20 @@ function statusTone(status: string): StatusTone {
   }
 }
 
+/** Purpose: tone for a drive's lifecycle status. */
+function driveStatusTone(status: string): StatusTone {
+  switch (status) {
+    case "ongoing":
+      return "amber";
+    case "completed":
+      return "green";
+    case "cancelled":
+      return "red";
+    default:
+      return "blue";
+  }
+}
+
 /**
  * Purpose: /Admin/drives/:driveId and /TPC/drives/:driveId - the application
  * review pipeline for one drive. Lists applicants (GET /drive/:driveId/
@@ -66,14 +81,13 @@ function statusTone(status: string): StatusTone {
  */
 export default function DriveApplicantsPage() {
   const { driveId } = useParams<{ driveId: string }>();
-  const { role } = useAuth();
 
   const drive = useDrive(driveId);
   const { data: companies } = useCompanies();
   const applicants = useDriveApplicants(driveId);
   const results = useDriveResults(driveId);
 
-  // driveId is guaranteed by the route, but keep the hooks happy with a fallback.
+  /** driveId is guaranteed by the route, but keep the hooks happy with a fallback. */
   const id = driveId ?? "";
   const approve = useApproveApplication(id);
   const reject = useRejectApplication(id);
@@ -81,7 +95,7 @@ export default function DriveApplicantsPage() {
   const select = useMarkSelected(id);
   const notSelect = useMarkNotSelected(id);
 
-  // Track which row triggered a mutation so only that row's buttons disable.
+  /** Track which row triggered a mutation so only that row's buttons disable. */
   const [busyId, setBusyId] = useState<number | null>(null);
 
   const anyPending =
@@ -91,7 +105,7 @@ export default function DriveApplicantsPage() {
     select.isPending ||
     notSelect.isPending;
 
-  const backTo = role === "tpc" ? paths.tpcDrives : paths.adminDrives;
+  const backTo = paths.adminDrives;
   const companyName = drive.data
     ? companies?.find((c) => c.company_id === drive.data!.company_id)
         ?.company_name
@@ -113,6 +127,82 @@ export default function DriveApplicantsPage() {
         >
           <ArrowLeft size={15} /> Back to drives
         </Link>
+
+        {drive.data && (
+          <section className="panel" style={{ marginBottom: 16 }}>
+            <div className="panel-head">
+              <h2>Drive details</h2>
+              <Badge tone={driveStatusTone(drive.data.status)}>
+                {drive.data.status}
+              </Badge>
+            </div>
+            <div className="panel-body">
+              {drive.data.job_description && (
+                <p style={{ fontSize: 12, marginBottom: 12, whiteSpace: "pre-wrap" }}>
+                  {drive.data.job_description}
+                </p>
+              )}
+              <div className="info-grid">
+                <div>
+                  <span>Drive ID</span>
+                  <b>{drive.data.drive_id}</b>
+                </div>
+                <div>
+                  <span>Company</span>
+                  <b>{companyName ?? `#${drive.data.company_id}`}</b>
+                </div>
+                <div>
+                  <span>Role</span>
+                  <b>{drive.data.job_role ?? "-"}</b>
+                </div>
+                <div>
+                  <span>Type</span>
+                  <b>{drive.data.employment_type}</b>
+                </div>
+                <div>
+                  <span>Package (LPA)</span>
+                  <b>{drive.data.package_ctc ?? "-"}</b>
+                </div>
+                <div>
+                  <span>Min CGPA</span>
+                  <b>{drive.data.minimum_cgpa}</b>
+                </div>
+                <div>
+                  <span>Drive date</span>
+                  <b>{formatDate(drive.data.drive_date)}</b>
+                </div>
+                <div>
+                  <span>Deadline</span>
+                  <b>{formatDate(drive.data.application_deadline)}</b>
+                </div>
+                <div>
+                  <span>Max active backlogs</span>
+                  <b>{drive.data.max_active_backlogs}</b>
+                </div>
+                <div>
+                  <span>Max passive backlogs</span>
+                  <b>{drive.data.max_passive_backlogs}</b>
+                </div>
+                <div>
+                  <span>Rounds</span>
+                  <b>{drive.data.number_of_rounds}</b>
+                </div>
+                <div>
+                  <span>Branches</span>
+                  <b>{drive.data.allowed_branches?.join(", ") || "-"}</b>
+                </div>
+                <div>
+                  <span>Created</span>
+                  <b>{formatDate(drive.data.created_at)}</b>
+                </div>
+                <div>
+                  <span>Updated</span>
+                  <b>{formatDate(drive.data.updated_at)}</b>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
 
         {applicants.isLoading && <LoadingState label="Loading applicants..." />}
         {applicants.isError && (

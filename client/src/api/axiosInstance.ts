@@ -4,10 +4,10 @@ import { clearStoredToken, getStoredToken } from "./tokenStorage";
 import { emitUnauthorized } from "./authEvents";
 import type { ApiError } from "./apiError";
 
-// Backend base URL.
+/** Backend base URL. */
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api";
 
-/* The one and only Axios instance for this app. Components/pages never call Axios directly - every request goes through a file in src/services/, and every service goes through this instance, so auth headers and error shapes stay consistent everywhere. */
+/** The one and only Axios instance for this app. Components/pages never call Axios directly - every request goes through a file in src/services/, and every service goes through this instance, so auth headers and error shapes stay consistent everywhere. */
 
 export const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -16,7 +16,7 @@ export const axiosInstance = axios.create({
   },
 });
 
-/*Request interceptor: attach the JWT. Purpose: every protected backend route (see server/src/middleware/authMiddleware.js) expects `Authorization: Bearer <token>`. Attaching it here means services never have to remember to do it themselves.*/
+/** Request interceptor: attach the JWT. Purpose: every protected backend route (see server/src/middleware/authMiddleware.js) expects `Authorization: Bearer <token>`. Attaching it here means services never have to remember to do it themselves. */
 
 axiosInstance.interceptors.request.use((config) => {
   const token = getStoredToken();
@@ -26,7 +26,7 @@ axiosInstance.interceptors.request.use((config) => {
   return config;
 });
 
-/* Response interceptor. Runs after every backend response. Successful responses are passed through unchanged. Failed responses are normalised into the application's ApiError shape so components and TanStack Query can handle errors consistently. If the backend returns 401 Unauthorized (expired, invalid or missing JWT), the stored access token is cleared and the rest of the application is notified that the session has ended. This keeps authentication state in sync with the backend and prevents the UI from continuing to act as if the user is logged in. */
+/** Response interceptor. Runs after every backend response. Successful responses are passed through unchanged. Failed responses are normalised into the application's ApiError shape so components and TanStack Query can handle errors consistently. If the backend returns 401 Unauthorized (expired, invalid or missing JWT), the stored access token is cleared and the rest of the application is notified that the session has ended. This keeps authentication state in sync with the backend and prevents the UI from continuing to act as if the user is logged in. */
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
@@ -42,7 +42,10 @@ axiosInstance.interceptors.response.use(
 );
 
 /**
- * Purpose: turn whatever Axios/Express handed back into the single ApiError shape the rest of the app relies on. Real backend bug found while wiring this up, documented here rather than fixed (per project rules, server/ is not to be touched): server/src/middleware/authMiddleware.js references `jwt` and `pool` but never imports them, so *every* route behind the `auth` middleware (GET /students/me, the write routes on /companies, all of /spc and /tpc) currently throws a ReferenceError, and Express's default error handler returns a plain-text/HTML 500 body instead of JSON.This function defends against that (and any other non-JSON error body) so the UI shows a sane message instead of crashing on `error.response.data.message`.
+ * Purpose: turn whatever Axios/Express handed back into the single ApiError
+ * shape the rest of the app relies on. Also defends against non-JSON error
+ * bodies (e.g. an HTML 500 page) so the UI shows a sane message instead of
+ * crashing on `error.response.data.message`.
  */
 function toApiError(error: AxiosError): ApiError {
   const status = error.response?.status ?? null;
@@ -51,10 +54,12 @@ function toApiError(error: AxiosError): ApiError {
     | string
     | undefined;
 
-  // The Zod-backed validation middlewares (see server/src/middleware/*.js)
-  // reply with either `{ errors: ZodIssue[] }` (from schema.parse()) or
-  // `{ errors: { field: string[] } }` (from schema.safeParse().flatten()).
-  // Normalise both shapes into a single field -> messages map.
+  /**
+   * The Zod-backed validation middlewares (see server/src/middleware/*.js)
+   * reply with either `{ errors: ZodIssue[] }` (from schema.parse()) or
+   * `{ errors: { field: string[] } }` (from schema.safeParse().flatten()).
+   * Normalise both shapes into a single field -> messages map.
+   */
   let fieldErrors: Record<string, string[]> | undefined;
   if (data && typeof data === "object" && data.errors) {
     if (Array.isArray(data.errors)) {

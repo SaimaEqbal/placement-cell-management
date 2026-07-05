@@ -450,13 +450,6 @@ export const resendVerification = async (req, res) => {
       });
     }
 
-    // CHANGE: Added email field to resendVerification token payload.
-    // PROBLEM: verifyEmail() was patched to match by email (WHERE email = $1
-    //          using payload.email), but resendVerification tokens only stored
-    //          userId, so payload.email was undefined for re-sent links, making
-    //          re-sent verification links always return 404 "User not found".
-    // BEFORE:  jwt.sign({ userId: user.id, purpose: "email_verification" }, ...)
-    // AFTER:   jwt.sign({ userId: user.id, email: user.email, purpose: "email_verification" }, ...)
     const verificationToken = jwt.sign(
       {
         userId: user.id,
@@ -522,14 +515,6 @@ export const login = async (req, res) => {
       });
     }
 
-    // CHANGE: Added email to the access-token payload.
-    // PROBLEM: The login token carried only { userId, role }. The signed-in
-    //          user's email was therefore unavailable to the frontend (the JWT
-    //          is its only post-login identity source), forcing the Complete
-    //          Profile page to re-ask for the institutional email that was
-    //          already provided at registration/login.
-    // BEFORE:  jwt.sign({ userId: user.id, role: user.role }, ...)
-    // AFTER:   email is included so the client can pre-fill + lock it.
     const accessToken = jwt.sign(
       {
         userId: user.id,
@@ -603,13 +588,6 @@ export const forgotPassword = async (req, res) => {
   }
 };
 
-// CHANGE: Wrapped resetPassword in try/catch and added input guard.
-// PROBLEM: resetPassword had no try/catch. jwt.verify() throws on invalid/
-//          expired tokens (and on missing token param), which caused an
-//          unhandled exception that Express returned as an HTML 500 instead of
-//          a clean JSON error. Also added a guard for missing token/password.
-// BEFORE:  no try/catch; jwt.verify() crash returned unformatted 500.
-// AFTER:   caught errors return 400 JSON; missing fields return 400 JSON.
 export const resetPassword = async (req, res) => {
   try {
     const { token, password } = req.body;

@@ -11,6 +11,7 @@ import {
 } from "../../hooks/useCompanies";
 import type { ApiError } from "../../api/apiError";
 import type { CompanyRecord, CreateCompanyPayload } from "../../services/companyService";
+import { formatDate } from "../../lib/format";
 
 import "../../styles/dashboard.css";
 import "../../styles/form-wizard.css";
@@ -82,8 +83,7 @@ export default function CompaniesPage() {
     const industry = form.industry.trim();
     const description = form.description.trim();
 
-    // Mirror the backend's createCompanySchema so the user gets an inline message
-    // instead of a round-trip 400.
+    /** Mirror the backend's createCompanySchema so the user gets an inline message instead of a round-trip 400. */
     if (company_name.length < 2)
       return setFormError("Company name must be at least 2 characters.");
     if (industry.length < 2) return setFormError("Industry is required.");
@@ -94,9 +94,11 @@ export default function CompaniesPage() {
 
     setFormError(undefined);
 
-    // Omit optional HR fields when blank: the backend's Zod schema treats an
-    // empty string as an invalid value (fails min-length / email), not as
-    // "absent". Sending "" for an unfilled HR field is what was causing the 400.
+    /**
+     * Omit optional HR fields when blank: the backend's Zod schema treats an
+     * empty string as an invalid value (fails min-length / email), not as
+     * "absent". Sending "" for an unfilled HR field is what was causing the 400.
+     */
     const payload: CreateCompanyPayload = { company_name, industry, description };
     if (form.hr_name?.trim()) payload.hr_name = form.hr_name.trim();
     if (form.hr_email?.trim()) payload.hr_email = form.hr_email.trim();
@@ -226,7 +228,14 @@ export default function CompaniesPage() {
                   </div>
                 </div>
                 <div className="panel-body">
+                  <p style={{ fontSize: 12, marginBottom: 12, whiteSpace: "pre-wrap" }}>
+                    {company.description ?? "No description provided."}
+                  </p>
                   <div className="info-grid">
+                    <div>
+                      <span>Company ID</span>
+                      <b>{company.company_id}</b>
+                    </div>
                     <div>
                       <span>Industry</span>
                       <b>{company.industry ?? "-"}</b>
@@ -242,6 +251,14 @@ export default function CompaniesPage() {
                     <div>
                       <span>HR phone</span>
                       <b>{company.hr_phone ?? "-"}</b>
+                    </div>
+                    <div>
+                      <span>Created</span>
+                      <b>{formatDate(company.created_at)}</b>
+                    </div>
+                    <div>
+                      <span>Created by</span>
+                      <b>{company.created_by ?? "-"}</b>
                     </div>
                   </div>
                 </div>

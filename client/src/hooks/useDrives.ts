@@ -22,7 +22,7 @@ import {
 } from "../services/driveService";
 import { queryKeys } from "./queryKeys";
 
-// Purpose: TanStack Query wrappers over driveService.ts - drive CRUD plus the Admin/TPC application-review pipeline. Mirrors useCompanies.ts: one shared cache per resource, and every mutation invalidates the keys it affects.
+/** Purpose: TanStack Query wrappers over driveService.ts - drive CRUD plus the Admin/TPC application-review pipeline. Mirrors useCompanies.ts: one shared cache per resource, and every mutation invalidates the keys it affects. */
 
 /** Purpose: GET /drive - list all drives. Shared by student/Admin/TPC drive pages. */
 export function useDrives() {
@@ -100,7 +100,7 @@ export function useDriveResults(driveId: number | string | undefined) {
   });
 }
 
-/* The five mutations below all act on a single application within a drive. They take the driveId only so onSuccess can refresh that drive's applicant and results caches; it is not sent to the backend (the endpoints key off applicationId). */
+/** The five mutations below all act on a single application within a drive. They take the driveId only so onSuccess can refresh that drive's applicant and results caches; it is not sent to the backend (the endpoints key off applicationId). */
 
 /** Purpose: PUT /drive/applications/:applicationId/approve. */
 export function useApproveApplication(driveId: number | string) {
