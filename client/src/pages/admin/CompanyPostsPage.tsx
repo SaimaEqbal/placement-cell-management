@@ -1,8 +1,35 @@
 import { useState, type FormEvent } from "react";
-import { Megaphone, Paperclip, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Megaphone, Paperclip, Pencil, Plus, Trash2 } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { Badge, EmptyState, ErrorState, LoadingState } from "../../components/ui";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { Field } from "@/components/dashboard/Field";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import type { ApiError } from "../../api/apiError";
 import {
   useCompanyPosts,
@@ -18,9 +45,6 @@ import type {
   CreatePostPayload,
   PostType,
 } from "../../services/companyPostService";
-
-import "../../styles/dashboard.css";
-import "../../styles/form-wizard.css";
 
 const POST_TYPES: PostType[] = ["announcement", "email"];
 
@@ -51,41 +75,50 @@ function PostAttachmentsPanel({ postId }: { postId: number }) {
   if (isLoading) return <LoadingState label="Loading attachments..." />;
   if (isError) {
     return (
-      <p className="field-error">{error?.message ?? "Could not load attachments."}</p>
+      <p className="text-sm text-destructive">
+        {error?.message ?? "Could not load attachments."}
+      </p>
     );
   }
 
   return (
-    <div style={{ marginTop: 10 }}>
-      <p style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>
-        <Paperclip size={12} /> Attachments (upload isn't available yet)
+    <div className="flex flex-col gap-2 border-t pt-3">
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Paperclip className="size-3.5" /> Attachments (upload isn't available yet)
       </p>
       {!attachments || attachments.length === 0 ? (
-        <p style={{ fontSize: 11, color: "var(--muted)" }}>No attachments.</p>
+        <p className="text-sm text-muted-foreground">No attachments.</p>
       ) : (
         attachments.map((a) => (
-          <div className="activity" key={a.attachment_id}>
-            <i className="blue">
-              <Paperclip size={14} />
-            </i>
-            <div>
-              <b>
-                <a href={a.file_url} target="_blank" rel="noreferrer">
-                  {a.file_name ?? "attachment"}
-                </a>
-              </b>
-              <span>
+          <div
+            key={a.attachment_id}
+            className="flex items-center gap-3 rounded-lg border p-2.5"
+          >
+            <Paperclip className="size-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <a
+                href={a.file_url}
+                target="_blank"
+                rel="noreferrer"
+                className="truncate text-sm font-medium underline-offset-4 hover:underline"
+              >
+                {a.file_name ?? "attachment"}
+              </a>
+              <div className="text-xs text-muted-foreground">
                 {(a.mime_type ?? "file")} · {formatDate(a.uploaded_at)}
-              </span>
+              </div>
             </div>
-            <button
-              className="icon-btn"
+            <Button
+              variant="ghost"
+              size="icon"
               type="button"
+              aria-label="Delete attachment"
+              className="text-muted-foreground hover:text-destructive"
               disabled={deleteAttachment.isPending}
               onClick={() => deleteAttachment.mutate(a.attachment_id)}
             >
-              <Trash2 size={14} />
-            </button>
+              <Trash2 />
+            </Button>
           </div>
         ))
       )}
@@ -104,7 +137,7 @@ export default function CompanyPostsPage() {
   const updateMutation = useUpdatePost();
   const deleteMutation = useDeletePost();
 
-  const [showForm, setShowForm] = useState(false);
+  const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<CreatePostPayload>(EMPTY_FORM);
   const [formError, setFormError] = useState<string>();
@@ -116,7 +149,7 @@ export default function CompanyPostsPage() {
     setEditingId(null);
     setForm(EMPTY_FORM);
     setFormError(undefined);
-    setShowForm(true);
+    setOpen(true);
   }
 
   function openEdit(post: CompanyPostRecord) {
@@ -127,7 +160,7 @@ export default function CompanyPostsPage() {
       post_type: post.post_type ?? "announcement",
     });
     setFormError(undefined);
-    setShowForm(true);
+    setOpen(true);
   }
 
   function handleSubmit(event: FormEvent) {
@@ -143,183 +176,167 @@ export default function CompanyPostsPage() {
     if (editingId !== null) {
       updateMutation.mutate(
         { id: editingId, payload },
-        { onSuccess: () => setShowForm(false) },
+        { onSuccess: () => setOpen(false) },
       );
     } else {
-      createMutation.mutate(payload, { onSuccess: () => setShowForm(false) });
+      createMutation.mutate(payload, { onSuccess: () => setOpen(false) });
     }
   }
 
   return (
     <>
-      <Topbar
-        title="Posts"
-        subtitle="Publish announcements and emails to students."
-      />
-      <div className="dashboard-content">
-        <section className="panel" style={{ marginBottom: 16 }}>
-          <div className="panel-head">
-            <h2>
-              {showForm ? (editingId !== null ? "Edit post" : "New post") : "Posts"}
-            </h2>
-            <button
-              className="secondary"
-              type="button"
-              onClick={() => (showForm ? setShowForm(false) : openCreate())}
-            >
-              {showForm ? <X size={15} /> : <Plus size={15} />}
-              {showForm ? "Cancel" : "New post"}
-            </button>
-          </div>
-
-          {showForm && (
-            <div className="panel-body">
-              <form onSubmit={handleSubmit} noValidate>
-                <div className="form-grid">
-                  <label>
-                    Title
-                    <input
-                      value={form.title}
-                      onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Type
-                    <select
-                      value={form.post_type}
-                      onChange={(e) =>
-                        setForm({ ...form, post_type: e.target.value as PostType })
-                      }
-                    >
-                      {POST_TYPES.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    margin: "4px 0 18px",
-                  }}
-                >
-                  Content
-                  <textarea
-                    style={{
-                      width: "100%",
-                      minHeight: 110,
-                      border: "1px solid var(--line)",
-                      borderRadius: 8,
-                      padding: "12px 13px",
-                      marginTop: 7,
-                      font: "inherit",
-                      resize: "vertical",
-                    }}
-                    value={form.content}
-                    onChange={(e) => setForm({ ...form, content: e.target.value })}
-                  />
-                </label>
-
-                {(formError || mutation.isError) && (
-                  <span className="field-error">
-                    {formError ??
-                      (mutation.error
-                        ? fieldErrorText(mutation.error) ?? mutation.error.message
-                        : undefined)}
-                  </span>
-                )}
-                <div className="form-actions">
-                  <p />
-                  <button
-                    className="primary"
-                    type="submit"
-                    disabled={mutation.isPending}
-                  >
-                    {mutation.isPending
-                      ? "Saving..."
-                      : editingId !== null
-                        ? "Save changes"
-                        : "Publish post"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-        </section>
+      <Topbar title="Posts" subtitle="Publish announcements and emails to students." />
+      <PageContainer>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold tracking-tight">Posts</h2>
+          <Button type="button" onClick={openCreate}>
+            <Plus /> New post
+          </Button>
+        </div>
 
         {isLoading && <LoadingState label="Loading posts..." />}
         {isError && (
-          <ErrorState
-            message={error?.message ?? "Could not load posts."}
-            onRetry={refetch}
-          />
+          <ErrorState message={error?.message ?? "Could not load posts."} onRetry={refetch} />
         )}
 
         {!isLoading && !isError && (!posts || posts.length === 0) && (
           <EmptyState
-            icon={<Megaphone size={28} />}
+            icon={<Megaphone />}
             title="No posts yet"
             description="Publish an announcement or email to get started."
           />
         )}
 
         {!isLoading && !isError && posts && posts.length > 0 && (
-          <div className="two-column">
+          <div className="grid gap-4 lg:grid-cols-2">
             {posts.map((post) => (
-              <section className="panel" key={post.post_id}>
-                <div className="panel-head">
-                  <h2>{post.title}</h2>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <Badge tone={post.post_type === "email" ? "gray" : "blue"}>
+              <Card key={post.post_id}>
+                <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+                  <CardTitle className="min-w-0 truncate text-base">
+                    {post.title}
+                  </CardTitle>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <StatusBadge tone={post.post_type === "email" ? "gray" : "blue"}>
                       {post.post_type ?? "announcement"}
-                    </Badge>
-                    <button
-                      className="icon-btn"
+                    </StatusBadge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       type="button"
+                      aria-label="Edit post"
                       onClick={() => openEdit(post)}
                     >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      className="icon-btn"
+                      <Pencil />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       type="button"
+                      aria-label="Delete post"
+                      className="text-muted-foreground hover:text-destructive"
                       disabled={deleteMutation.isPending}
                       onClick={() => deleteMutation.mutate(post.post_id)}
                     >
-                      <Trash2 size={14} />
-                    </button>
+                      <Trash2 />
+                    </Button>
                   </div>
-                </div>
-                <div className="panel-body">
-                  <p style={{ fontSize: 12, marginBottom: 10, whiteSpace: "pre-wrap" }}>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  <p className="whitespace-pre-wrap text-sm text-muted-foreground">
                     {post.content}
                   </p>
-                  <p style={{ fontSize: 10, color: "var(--muted)" }}>
+                  <p className="text-xs text-muted-foreground">
                     Posted {formatDate(post.created_at)}
                   </p>
-                  <button
-                    className="text-btn"
-                    type="button"
-                    onClick={() =>
-                      setExpandedId(expandedId === post.post_id ? null : post.post_id)
-                    }
-                  >
-                    <Paperclip size={14} />
-                    {expandedId === post.post_id ? "Hide attachments" : "Attachments"}
-                  </button>
+                  <div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      onClick={() =>
+                        setExpandedId(expandedId === post.post_id ? null : post.post_id)
+                      }
+                    >
+                      <Paperclip />
+                      {expandedId === post.post_id ? "Hide attachments" : "Attachments"}
+                    </Button>
+                  </div>
                   {expandedId === post.post_id && (
                     <PostAttachmentsPanel postId={post.post_id} />
                   )}
-                </div>
-              </section>
+                </CardContent>
+              </Card>
             ))}
           </div>
         )}
-      </div>
+      </PageContainer>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingId !== null ? "Edit post" : "New post"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Title" htmlFor="post-title">
+                <Input
+                  id="post-title"
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                />
+              </Field>
+              <Field label="Type" htmlFor="post-type">
+                <Select
+                  value={form.post_type}
+                  onValueChange={(value) =>
+                    setForm({ ...form, post_type: value as PostType })
+                  }
+                >
+                  <SelectTrigger id="post-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {POST_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+            <Field label="Content" htmlFor="post-content">
+              <Textarea
+                id="post-content"
+                className="min-h-28"
+                value={form.content}
+                onChange={(e) => setForm({ ...form, content: e.target.value })}
+              />
+            </Field>
+
+            {(formError || mutation.isError) && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {formError ??
+                    (mutation.error
+                      ? fieldErrorText(mutation.error) ?? mutation.error.message
+                      : undefined)}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <DialogFooter>
+              <Button type="submit" disabled={mutation.isPending}>
+                {mutation.isPending
+                  ? "Saving..."
+                  : editingId !== null
+                    ? "Save changes"
+                    : "Publish post"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

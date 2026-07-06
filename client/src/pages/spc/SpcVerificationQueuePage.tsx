@@ -1,15 +1,17 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, ClipboardCheck, Search } from "lucide-react";
+import { ArrowRight, ClipboardCheck } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { Badge, EmptyState, ErrorState, LoadingState } from "../../components/ui";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { ListCard } from "@/components/dashboard/ListCard";
+import { SearchInput } from "@/components/dashboard/SearchInput";
+import { StudentTable } from "@/components/dashboard/StudentTable";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
+import { Button } from "@/components/ui/button";
 import { useSpcQueue } from "../../hooks/useVerification";
-import { formatCgpa, initialsFromName } from "../../lib/format";
 import { paths } from "../../routes/paths";
-
-import "../../styles/dashboard.css";
-import "../../styles/data-table.css";
 
 /**
  * Purpose: /SPC/verification - the students the TPC assigned to this SPC that
@@ -36,7 +38,7 @@ export default function SpcVerificationQueuePage() {
   return (
     <>
       <Topbar title="Verification queue" subtitle="Students assigned to you, awaiting SPC review." />
-      <div className="dashboard-content">
+      <PageContainer>
         {isLoading && <LoadingState label="Loading verification queue..." />}
         {isError && (
           <ErrorState message={error?.message ?? "Could not load your queue."} onRetry={refetch} />
@@ -44,70 +46,51 @@ export default function SpcVerificationQueuePage() {
 
         {!isLoading && !isError && total === 0 && (
           <EmptyState
-            icon={<ClipboardCheck size={28} />}
+            icon={<ClipboardCheck />}
             title="No students assigned yet"
             description="Your TPC hasn't assigned students to you for verification, or you've reviewed them all."
           />
         )}
 
         {!isLoading && !isError && total > 0 && (
-          <section className="panel queue-panel">
-            <div className="queue-head">
-              <div>
-                <div className="eyebrow">SPC verification</div>
-                <h2>Student verification queue</h2>
-                <p>{total} student(s) assigned to you.</p>
-              </div>
+          <ListCard
+            eyebrow="SPC verification"
+            title="Student verification queue"
+            description={`${total} student(s) assigned to you.`}
+          >
+            <div className="flex">
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder="Search name or roll number..."
+              />
             </div>
-            <div className="table-tools">
-              <div className="searchbox">
-                <Search size={17} />
-                <input
-                  placeholder="Search name or roll number..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="data-table">
-              <div className="data-row data-head">
-                <span>Student</span>
-                <span>Branch</span>
-                <span>CGPA</span>
-                <span>Status</span>
-                <span>Action</span>
-              </div>
-              {filtered.map((s) => (
-                <div className="data-row" key={s.id}>
-                  <span className="student-cell">
-                    <i>{initialsFromName(s.name)}</i>
-                    <span>
-                      <b>{s.name}</b>
-                      <small>{s.roll_no}</small>
-                    </span>
-                  </span>
-                  <span>{s.branch ?? "-"}</span>
-                  <span>
-                    <b>{formatCgpa(s.cgpa)}</b>
-                  </span>
-                  <span>
-                    <Badge tone="amber">Awaiting review</Badge>
-                  </span>
-                  <span>
+
+            {filtered.length === 0 ? (
+              <EmptyState
+                icon={<ClipboardCheck />}
+                title="No matches"
+                description="No assigned students match your search."
+              />
+            ) : (
+              <StudentTable
+                students={filtered}
+                renderStatus={() => <StatusBadge tone="amber">Awaiting review</StatusBadge>}
+                renderAction={(s) => (
+                  <Button asChild variant="outline" size="sm">
                     <Link
-                      className="row-action"
                       to={`${paths.spcVerification}/${s.id}`}
                       state={{ ids, backPath: paths.spcVerification }}
                     >
-                      Review <ArrowRight size={15} />
+                      Review <ArrowRight />
                     </Link>
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
+                  </Button>
+                )}
+              />
+            )}
+          </ListCard>
         )}
-      </div>
+      </PageContainer>
     </>
   );
 }

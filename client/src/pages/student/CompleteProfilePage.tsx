@@ -7,21 +7,29 @@ import {
   GraduationCap,
   Plus,
   Trash2,
-  Upload,
   User,
 } from "lucide-react";
 
-import { SectionTitle } from "../../components/ui";
 import Topbar from "../../components/Topbar";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { FormSection } from "@/components/dashboard/FormSection";
+import { Field } from "@/components/dashboard/Field";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "../../context/AuthContext";
 import { useCreateProfile, useProfile, useUpdateProfile } from "../../hooks/useProfile";
 import { capitalize, toLowerTrim, toTitleCase, toUpperTrim } from "../../lib/format";
 import { DEPARTMENT_BRANCHES, DEPARTMENT_OPTIONS, SEMESTERS } from "../../lib/validation";
 import { paths } from "../../routes/paths";
 import type { CreateStudentPayload } from "../../services/studentService";
-
-import "../../styles/form-wizard.css";
-import "../../styles/dashboard.css";
 
 interface BacklogRow {
   subject: string;
@@ -40,9 +48,7 @@ interface BacklogRow {
  * The brief's "Backlogs" field is modelled here as a small editable table
  * (subject + semester + active/cleared) purely for data entry; since the
  * `students` table only stores aggregate active_backlogs/passive_backlogs
- * counts (server/src/migrations/001_create_students.sql,
- * 005_alter_students.sql - no per-subject backlog table exists), the table
- * rows are reduced to those two counts before submitting.
+ * counts, the table rows are reduced to those two counts before submitting.
  */
 export default function CompleteProfilePage() {
   const navigate = useNavigate();
@@ -79,15 +85,14 @@ export default function CompleteProfilePage() {
    * The institutional email is the ONLY identity field the backend reliably
    * knows post-login: signup persists just email+password, and the login token
    * carries only { userId, role, email }. So email is the only field locked
-   * here (pre-filled from the existing profile or the JWT); everything else -
-   * name, roll number, department, etc. - is entered here and freely editable.
+   * here (pre-filled from the existing profile or the JWT); everything else is
+   * entered here and freely editable.
    */
   const emailLocked = Boolean(profile?.email || user?.email);
 
   /**
-   * Purpose: pre-fill the form once from the existing profile (if any); on a
-   * first visit always seed email from the JWT so it isn't re-collected here.
-   * Plain useState is correct for single-page local form state.
+   * Pre-fill the form once from the existing profile (if any); on a first visit
+   * always seed email from the JWT so it isn't re-collected here.
    */
   useEffect(() => {
     if (profile) {
@@ -145,8 +150,7 @@ export default function CompleteProfilePage() {
 
     /**
      * Per-field required check so the error names the EXACT missing field
-     * instead of lumping all four together (which made it impossible to tell
-     * which one React saw as empty).
+     * instead of lumping all four together.
      */
     const missing: string[] = [];
     if (!name.trim()) missing.push("Full name");
@@ -181,8 +185,6 @@ export default function CompleteProfilePage() {
      * Normalise free-text identity fields into a consistent stored format:
      * name -> Title Case, roll number -> UPPERCASE, email -> lowercase,
      * region/religion -> UPPERCASE. (gender is already a Male/Female select.)
-     * Applied here too - not just on blur - so the saved value is always
-     * normalised even if a field never lost focus.
      */
     const payload: CreateStudentPayload = {
       roll_no: toUpperTrim(rollNo),
@@ -228,12 +230,15 @@ export default function CompleteProfilePage() {
   }
 
   const mutation = profile ? updateMutation : createMutation;
+  const sem = Number(semester);
 
   if (isLoading) {
     return (
       <>
         <Topbar title="Complete your profile" subtitle="" />
-        <div className="dashboard-content">Loading...</div>
+        <PageContainer>
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </PageContainer>
       </>
     );
   }
@@ -244,163 +249,166 @@ export default function CompleteProfilePage() {
         title={profile ? "Edit your profile" : "Complete your profile"}
         subtitle="Add your academic details and documents for placement review."
       />
-      <div className="dashboard-content">
+      <PageContainer>
         {/* autoComplete="off" disables browser autofill for the whole form so a
-            field can never be silently populated in the DOM without React state
-            (which produced a "looks filled but flagged required" mismatch). */}
-        <form onSubmit={handleSubmit} noValidate autoComplete="off">
-          <section className="form-section">
-            <SectionTitle
-              icon={<User size={18} />}
-              title="Personal information"
-              subtitle="Your basic identity and contact details."
-            />
-            <div className="form-grid">
-              <label>
-                Full name
-                {/* onBlur prettifies to Title Case so the student sees the
-                    normalised value immediately, without fighting their typing. */}
-                <input
+            field can never be silently populated in the DOM without React state. */}
+        <form onSubmit={handleSubmit} noValidate autoComplete="off" className="flex flex-col gap-6">
+          <FormSection
+            icon={<User />}
+            title="Personal information"
+            subtitle="Your basic identity and contact details."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Full name" htmlFor="name">
+                <Input
+                  id="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   onBlur={() => setName((v) => toTitleCase(v))}
                   autoComplete="off"
                 />
-              </label>
-              <label>
-                Roll number
-                {/* onBlur normalises to UPPERCASE. */}
-                <input
+              </Field>
+              <Field label="Roll number" htmlFor="rollNo">
+                <Input
+                  id="rollNo"
                   value={rollNo}
                   onChange={(e) => setRollNo(e.target.value)}
                   onBlur={() => setRollNo((v) => toUpperTrim(v))}
                   autoComplete="off"
                 />
-              </label>
-              <label>
-                Institutional email
-                {/* Email is the only field known from the session, so it's the
-                    only one locked here. */}
-                <input
+              </Field>
+              <Field
+                label="Institutional email"
+                htmlFor="email"
+                hint={emailLocked ? "From your account — cannot be changed" : undefined}
+              >
+                <Input
+                  id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   onBlur={() => setEmail((v) => toLowerTrim(v))}
                   readOnly={emailLocked}
                   autoComplete="off"
+                  className={emailLocked ? "bg-muted text-muted-foreground" : undefined}
                 />
-                {emailLocked && (
-                  <span className="field-hint">From your account - cannot be changed</span>
-                )}
-              </label>
-              <label>
-                Contact number
-                <input
+              </Field>
+              <Field label="Contact number" htmlFor="phone">
+                <Input
+                  id="phone"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   autoComplete="off"
                 />
-              </label>
-              <label>
-                Date of birth
-                <input
+              </Field>
+              <Field label="Date of birth" htmlFor="dob">
+                <Input
+                  id="dob"
                   type="date"
                   value={dateOfBirth}
                   onChange={(e) => setDateOfBirth(e.target.value)}
                 />
-              </label>
-              <label>
-                Gender
-                {/* Binary Male/Female, stored capitalised. */}
-                <select value={gender} onChange={(e) => setGender(e.target.value)}>
-                  <option value="">Select</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                </select>
-              </label>
-              <label>
-                Region
-                {/* onBlur normalises to UPPERCASE. */}
-                <input
+              </Field>
+              <Field label="Gender" htmlFor="gender">
+                <Select value={gender} onValueChange={setGender}>
+                  <SelectTrigger id="gender">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Region" htmlFor="region">
+                <Input
+                  id="region"
                   value={region}
                   onChange={(e) => setRegion(e.target.value)}
                   onBlur={() => setRegion((v) => toUpperTrim(v))}
                   autoComplete="off"
                 />
-              </label>
-              <label>
-                Religion
-                {/* onBlur normalises to UPPERCASE. */}
-                <input
+              </Field>
+              <Field label="Religion" htmlFor="religion">
+                <Input
+                  id="religion"
                   value={religion}
                   onChange={(e) => setReligion(e.target.value)}
                   onBlur={() => setReligion((v) => toUpperTrim(v))}
                   autoComplete="off"
                 />
-              </label>
+              </Field>
             </div>
-          </section>
+          </FormSection>
 
-          <section className="form-section">
-            <SectionTitle
-              icon={<GraduationCap size={18} />}
-              title="Academic information"
-              subtitle="Branch, CGPA, and graduation details."
-            />
-            <div className="form-grid">
-              <label>
-                Department
-                <select
+          <FormSection
+            icon={<GraduationCap />}
+            title="Academic information"
+            subtitle="Branch, CGPA, and graduation details."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Department" htmlFor="department">
+                <Select
                   value={department}
-                  onChange={(e) => {
-                    setDepartment(e.target.value);
+                  onValueChange={(value) => {
+                    setDepartment(value);
                     /** Changing the department clears the branch - the old branch may not belong to the new department. */
                     setBranch("");
                   }}
                 >
-                  <option value="">Select department</option>
-                  {DEPARTMENT_OPTIONS.map((dept) => (
-                    <option key={dept} value={dept}>
-                      {dept}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {department && (
-                <label>
-                  Branch
-                  <select value={branch} onChange={(e) => setBranch(e.target.value)}>
-                    <option value="">Select branch</option>
-                    {(DEPARTMENT_BRANCHES[department] ?? []).map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
+                  <SelectTrigger id="department">
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEPARTMENT_OPTIONS.map((dept) => (
+                      <SelectItem key={dept} value={dept}>
+                        {dept}
+                      </SelectItem>
                     ))}
-                  </select>
-                </label>
+                  </SelectContent>
+                </Select>
+              </Field>
+              {department && (
+                <Field label="Branch" htmlFor="branch">
+                  <Select value={branch} onValueChange={setBranch}>
+                    <SelectTrigger id="branch">
+                      <SelectValue placeholder="Select branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(DEPARTMENT_BRANCHES[department] ?? []).map((b) => (
+                        <SelectItem key={b} value={b}>
+                          {b}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
               )}
-              <label>
-                Graduation year
-                <input
+              <Field label="Graduation year" htmlFor="gradYear">
+                <Input
+                  id="gradYear"
                   type="number"
                   value={graduationYear}
                   onChange={(e) => setGraduationYear(e.target.value)}
                 />
-              </label>
-              <label>
-                Current semester
-                <select value={semester} onChange={(e) => setSemester(e.target.value)}>
-                  <option value="">Select semester</option>
-                  {SEMESTERS.map((s) => (
-                    <option key={s} value={s}>
-                      Semester {s}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                CGPA
-                <input
+              </Field>
+              <Field label="Current semester" htmlFor="semester">
+                <Select value={semester} onValueChange={setSemester}>
+                  <SelectTrigger id="semester">
+                    <SelectValue placeholder="Select semester" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SEMESTERS.map((s) => (
+                      <SelectItem key={s} value={String(s)}>
+                        Semester {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="CGPA" htmlFor="cgpa">
+                <Input
+                  id="cgpa"
                   type="number"
                   step="0.01"
                   min="0"
@@ -408,10 +416,10 @@ export default function CompleteProfilePage() {
                   value={cgpa}
                   onChange={(e) => setCgpa(e.target.value)}
                 />
-              </label>
-              <label>
-                10th percentage
-                <input
+              </Field>
+              <Field label="10th percentage" htmlFor="tenth">
+                <Input
+                  id="tenth"
                   type="number"
                   step="0.01"
                   min="0"
@@ -419,10 +427,10 @@ export default function CompleteProfilePage() {
                   value={tenthPercentage}
                   onChange={(e) => setTenthPercentage(e.target.value)}
                 />
-              </label>
-              <label>
-                12th percentage
-                <input
+              </Field>
+              <Field label="12th percentage" htmlFor="twelfth">
+                <Input
+                  id="twelfth"
                   type="number"
                   step="0.01"
                   min="0"
@@ -430,123 +438,140 @@ export default function CompleteProfilePage() {
                   value={twelfthPercentage}
                   onChange={(e) => setTwelfthPercentage(e.target.value)}
                 />
-              </label>
+              </Field>
             </div>
 
-            <div className="editable-table">
-              <div className="table-head">
-                <span>Subject</span>
-                <span>Semester</span>
-                <span>Status</span>
-                <span />
-              </div>
+            <div className="mt-6 flex flex-col gap-3">
+              <div className="text-sm font-medium">Backlogs</div>
+              {backlogs.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No backlogs added. Add a row for each active or cleared backlog.
+                </p>
+              )}
               {backlogs.map((row, index) => (
-                <div className="table-edit-row" key={index}>
-                  <input
+                <div
+                  key={index}
+                  className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_140px_150px_auto] sm:items-center sm:gap-3"
+                >
+                  <Input
                     placeholder="Subject"
                     value={row.subject}
                     onChange={(e) => updateBacklogRow(index, { subject: e.target.value })}
                   />
-                  <input
+                  <Input
                     placeholder="Semester"
                     value={row.semester}
                     onChange={(e) => updateBacklogRow(index, { semester: e.target.value })}
                   />
-                  <select
+                  <Select
                     value={row.status}
-                    onChange={(e) =>
-                      updateBacklogRow(index, { status: e.target.value as BacklogRow["status"] })
+                    onValueChange={(value) =>
+                      updateBacklogRow(index, { status: value as BacklogRow["status"] })
                     }
                   >
-                    <option value="active">Active</option>
-                    <option value="cleared">Cleared</option>
-                  </select>
-                  <button type="button" onClick={() => removeBacklogRow(index)}>
-                    <Trash2 size={14} />
-                  </button>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="cleared">Cleared</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeBacklogRow(index)}
+                    aria-label="Remove backlog row"
+                    className="justify-self-end text-muted-foreground"
+                  >
+                    <Trash2 />
+                  </Button>
                 </div>
               ))}
+              <div>
+                <Button type="button" variant="outline" size="sm" onClick={addBacklogRow}>
+                  <Plus /> Add backlog row
+                </Button>
+              </div>
             </div>
-            <button type="button" className="secondary" onClick={addBacklogRow} style={{ marginTop: 12 }}>
-              <Plus size={14} /> Add backlog row
-            </button>
-          </section>
+          </FormSection>
 
-          <section className="form-section">
-            <SectionTitle
-              icon={<GraduationCap size={18} />}
-              title="Semester SPIs"
-              subtitle="Required for every completed semester (1 to your current semester minus 1)."
-            />
-            <div className="form-grid">
-              {!semester && (
-                <p className="field-hint">Select your current semester above to enter SPIs.</p>
-              )}
-              {spi.map((value, index) => {
-                const sem = Number(semester);
-                // Only completed semesters (1..n-1) are collected; hide the rest.
-                if (!sem || index + 1 >= sem) return null;
-                return (
-                  <label key={index}>
-                    Semester {index + 1} SPI
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="10"
-                      value={value}
-                      onChange={(e) =>
-                        setSpi((prev) =>
-                          prev.map((v, i) => (i === index ? e.target.value : v)),
-                        )
-                      }
-                    />
-                  </label>
-                );
-              })}
+          <FormSection
+            icon={<GraduationCap />}
+            title="Semester SPIs"
+            subtitle="Required for every completed semester (1 to your current semester minus 1)."
+          >
+            {!semester ? (
+              <p className="text-sm text-muted-foreground">
+                Select your current semester above to enter SPIs.
+              </p>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {spi.map((value, index) => {
+                  // Only completed semesters (1..n-1) are collected; hide the rest.
+                  if (!sem || index + 1 >= sem) return null;
+                  return (
+                    <Field key={index} label={`Semester ${index + 1} SPI`} htmlFor={`spi-${index}`}>
+                      <Input
+                        id={`spi-${index}`}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="10"
+                        value={value}
+                        onChange={(e) =>
+                          setSpi((prev) => prev.map((v, i) => (i === index ? e.target.value : v)))
+                        }
+                      />
+                    </Field>
+                  );
+                })}
+              </div>
+            )}
+          </FormSection>
+
+          <FormSection
+            icon={<ClipboardList />}
+            title="Documents"
+            subtitle="Paste a hosted URL for each document (e.g. a cloud storage link)."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Resume URL" htmlFor="resumeUrl">
+                <Input id="resumeUrl" value={resumeUrl} onChange={(e) => setResumeUrl(e.target.value)} autoComplete="off" />
+              </Field>
+              <Field label="10th marksheet URL" htmlFor="tenthUrl">
+                <Input id="tenthUrl" value={tenthUrl} onChange={(e) => setTenthUrl(e.target.value)} autoComplete="off" />
+              </Field>
+              <Field label="12th marksheet URL" htmlFor="twelfthUrl">
+                <Input id="twelfthUrl" value={twelfthUrl} onChange={(e) => setTwelfthUrl(e.target.value)} autoComplete="off" />
+              </Field>
+              <Field label="Latest semester marksheet URL" htmlFor="lastSemUrl">
+                <Input id="lastSemUrl" value={lastSemUrl} onChange={(e) => setLastSemUrl(e.target.value)} autoComplete="off" />
+              </Field>
             </div>
-          </section>
+          </FormSection>
 
-          <section className="form-section">
-            <SectionTitle
-              icon={<ClipboardList size={18} />}
-              title="Documents"
-              subtitle="Paste a hosted URL for each document (e.g. a cloud storage link)."
-            />
-            <div className="form-grid">
-              <label>
-                Resume URL
-                <input value={resumeUrl} onChange={(e) => setResumeUrl(e.target.value)} autoComplete="off" />
-              </label>
-              <label>
-                10th marksheet URL
-                <input value={tenthUrl} onChange={(e) => setTenthUrl(e.target.value)} autoComplete="off" />
-              </label>
-              <label>
-                12th marksheet URL
-                <input value={twelfthUrl} onChange={(e) => setTwelfthUrl(e.target.value)} autoComplete="off" />
-              </label>
-              <label>
-                Latest semester marksheet URL
-                <input value={lastSemUrl} onChange={(e) => setLastSemUrl(e.target.value)} autoComplete="off" />
-              </label>
-            </div>
-          </section>
+          {(formError || mutation.isError) && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                {formError ?? mutation.error?.message}
+              </AlertDescription>
+            </Alert>
+          )}
 
-          {formError && <span className="field-error">{formError}</span>}
-          {mutation.isError && <span className="field-error">{mutation.error.message}</span>}
-
-          <div className="form-actions">
-            <p>
-              <FileText size={14} /> All fields can be edited again later from this page.
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <FileText className="size-4" /> All fields can be edited again later
+              from this page.
             </p>
-            <button className="primary" type="submit" disabled={mutation.isPending}>
-              <CheckCircle2 size={16} />
+            <Button type="submit" size="lg" disabled={mutation.isPending}>
+              <CheckCircle2 />
               {mutation.isPending ? "Saving..." : "Save profile"}
-            </button>
+            </Button>
           </div>
         </form>
-      </div>
+      </PageContainer>
     </>
   );
 }

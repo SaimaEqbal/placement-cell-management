@@ -1,9 +1,39 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Megaphone, Plus, X } from "lucide-react";
+import { ArrowRight, Megaphone, Plus } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { Badge, EmptyState, ErrorState, LoadingState } from "../../components/ui";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { InfoGrid } from "@/components/dashboard/InfoGrid";
+import { Field } from "@/components/dashboard/Field";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useCompanies } from "../../hooks/useCompanies";
 import { useCreateDrive, useDrives } from "../../hooks/useDrives";
 import { formatDate } from "../../lib/format";
@@ -16,14 +46,7 @@ import type {
 } from "../../services/driveService";
 import type { StatusTone } from "../../types";
 
-import "../../styles/dashboard.css";
-import "../../styles/form-wizard.css";
-
-const EMPLOYMENT_TYPES: EmploymentType[] = [
-  "FTE",
-  "Internship",
-  "Internship + PPO",
-];
+const EMPLOYMENT_TYPES: EmploymentType[] = ["FTE", "Internship", "Internship + PPO"];
 
 /** Local form state - all inputs are strings/arrays and get coerced to the API's number/array shape on submit. */
 interface DriveFormState {
@@ -72,8 +95,8 @@ function statusTone(status: DriveStatus): StatusTone {
 
 /**
  * Purpose: build the POST /drive payload from the string form state - sending
- * numbers as real numbers (the backend uses z.number()) and omitting optional
- * fields when blank so we never send NaN/"" that would fail validation.
+ * numbers as real numbers and omitting optional fields when blank so we never
+ * send NaN/"" that would fail validation.
  */
 function toCreatePayload(form: DriveFormState): CreateDrivePayload {
   const payload: CreateDrivePayload = {
@@ -86,8 +109,7 @@ function toCreatePayload(form: DriveFormState): CreateDrivePayload {
   };
 
   if (form.job_role.trim()) payload.job_role = form.job_role.trim();
-  if (form.job_description.trim())
-    payload.job_description = form.job_description.trim();
+  if (form.job_description.trim()) payload.job_description = form.job_description.trim();
   if (form.package_ctc !== "") payload.package_ctc = Number(form.package_ctc);
   if (form.max_active_backlogs !== "")
     payload.max_active_backlogs = Number(form.max_active_backlogs);
@@ -101,17 +123,15 @@ function toCreatePayload(form: DriveFormState): CreateDrivePayload {
 
 /**
  * Purpose: /Admin/drives and /TPC/drives - create and list real placement
- * drives via GET/POST /drive (useDrives/useCreateDrive). Each drive references
- * a company (company_id) and carries its own eligibility criteria; this
- * replaces the earlier "companies = drives" stand-in. Shared by Admin and TPC;
- * the backend authorizes both (requireAdminTPCSPC on POST /drive).
+ * drives via GET/POST /drive. Each drive references a company (company_id) and
+ * carries its own eligibility criteria.
  */
 export default function DrivesPage() {
   const { data: drives, isLoading, isError, error, refetch } = useDrives();
   const { data: companies } = useCompanies();
   const createMutation = useCreateDrive();
 
-  const [showForm, setShowForm] = useState(false);
+  const [open, setOpen] = useState(false);
   const [form, setForm] = useState<DriveFormState>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | undefined>();
 
@@ -123,6 +143,12 @@ export default function DrivesPage() {
   }, [companies]);
 
   const driveBasePath = paths.adminDrives;
+
+  function openCreate() {
+    setForm(EMPTY_FORM);
+    setFormError(undefined);
+    setOpen(true);
+  }
 
   function toggleBranch(branch: string) {
     setForm((prev) => ({
@@ -138,17 +164,15 @@ export default function DrivesPage() {
 
     if (!form.company_id) return setFormError("Select a company for this drive.");
     if (!form.drive_date) return setFormError("Pick a drive date.");
-    if (!form.application_deadline)
-      return setFormError("Pick an application deadline.");
-    if (form.minimum_cgpa === "")
-      return setFormError("Enter the minimum CGPA.");
+    if (!form.application_deadline) return setFormError("Pick an application deadline.");
+    if (form.minimum_cgpa === "") return setFormError("Enter the minimum CGPA.");
     if (form.allowed_branches.length === 0)
       return setFormError("Select at least one eligible branch.");
 
     setFormError(undefined);
     createMutation.mutate(toCreatePayload(form), {
       onSuccess: () => {
-        setShowForm(false);
+        setOpen(false);
         setForm(EMPTY_FORM);
       },
     });
@@ -160,352 +184,229 @@ export default function DrivesPage() {
         title="Placement & internship drives"
         subtitle="Announce a new drive against a company and track active ones."
       />
-      <div className="dashboard-content">
-        <section className="panel" style={{ marginBottom: 16 }}>
-          <div className="panel-head">
-            <h2>{showForm ? "Create drive" : "Drives"}</h2>
-            <button
-              className="secondary"
-              type="button"
-              onClick={() => setShowForm((v) => !v)}
-            >
-              {showForm ? <X size={15} /> : <Plus size={15} />}
-              {showForm ? "Cancel" : "Create drive"}
-            </button>
-          </div>
-
-          {showForm && (
-            <div className="panel-body">
-              <form onSubmit={handleSubmit} noValidate>
-                <div className="form-grid">
-                  <label>
-                    Company
-                    <select
-                      value={form.company_id}
-                      onChange={(e) =>
-                        setForm({ ...form, company_id: e.target.value })
-                      }
-                    >
-                      <option value="">Select a company...</option>
-                      {companies?.map((c) => (
-                        <option key={c.company_id} value={c.company_id}>
-                          {c.company_name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Employment type
-                    <select
-                      value={form.employment_type}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          employment_type: e.target.value as EmploymentType,
-                        })
-                      }
-                    >
-                      {EMPLOYMENT_TYPES.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Job role
-                    <input
-                      value={form.job_role}
-                      onChange={(e) =>
-                        setForm({ ...form, job_role: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Package (CTC, LPA)
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={form.package_ctc}
-                      onChange={(e) =>
-                        setForm({ ...form, package_ctc: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Drive date
-                    <input
-                      type="date"
-                      value={form.drive_date}
-                      onChange={(e) =>
-                        setForm({ ...form, drive_date: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Application deadline
-                    <input
-                      type="date"
-                      value={form.application_deadline}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          application_deadline: e.target.value,
-                        })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Minimum CGPA
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="10"
-                      value={form.minimum_cgpa}
-                      onChange={(e) =>
-                        setForm({ ...form, minimum_cgpa: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Number of rounds
-                    <input
-                      type="number"
-                      min="1"
-                      value={form.number_of_rounds}
-                      onChange={(e) =>
-                        setForm({ ...form, number_of_rounds: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Max active backlogs
-                    <input
-                      type="number"
-                      min="0"
-                      value={form.max_active_backlogs}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          max_active_backlogs: e.target.value,
-                        })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Max passive backlogs
-                    <input
-                      type="number"
-                      min="0"
-                      value={form.max_passive_backlogs}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          max_passive_backlogs: e.target.value,
-                        })
-                      }
-                    />
-                  </label>
-                </div>
-
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    margin: "4px 0 18px",
-                  }}
-                >
-                  Job description
-                  <input
-                    style={{
-                      width: "100%",
-                      border: "1px solid var(--line)",
-                      borderRadius: 8,
-                      padding: "12px 13px",
-                      marginTop: 7,
-                    }}
-                    placeholder="Role details, responsibilities, location..."
-                    value={form.job_description}
-                    onChange={(e) =>
-                      setForm({ ...form, job_description: e.target.value })
-                    }
-                  />
-                </label>
-
-                <fieldset
-                  style={{
-                    border: "1px solid var(--line)",
-                    borderRadius: 8,
-                    padding: "10px 13px",
-                    marginBottom: 16,
-                  }}
-                >
-                  <legend style={{ fontSize: 12, fontWeight: 700 }}>
-                    Eligible branches
-                  </legend>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: 14,
-                      marginTop: 6,
-                    }}
-                  >
-                    {DEPARTMENTS.map((dept) => (
-                      <label
-                        key={dept}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          fontSize: 12,
-                          fontWeight: 500,
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={form.allowed_branches.includes(dept)}
-                          onChange={() => toggleBranch(dept)}
-                        />
-                        {dept}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-
-                {(formError || createMutation.isError) && (
-                  <span className="field-error">
-                    {formError ?? createMutation.error?.message}
-                  </span>
-                )}
-                <div className="form-actions">
-                  <p />
-                  <button
-                    className="primary"
-                    type="submit"
-                    disabled={createMutation.isPending}
-                  >
-                    {createMutation.isPending ? "Creating..." : "Create drive"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-        </section>
+      <PageContainer>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold tracking-tight">Drives</h2>
+          <Button type="button" onClick={openCreate}>
+            <Plus /> Create drive
+          </Button>
+        </div>
 
         {isLoading && <LoadingState label="Loading drives..." />}
         {isError && (
-          <ErrorState
-            message={error?.message ?? "Could not load drives."}
-            onRetry={refetch}
-          />
+          <ErrorState message={error?.message ?? "Could not load drives."} onRetry={refetch} />
         )}
 
         {!isLoading && !isError && (!drives || drives.length === 0) && (
           <EmptyState
-            icon={<Megaphone size={28} />}
+            icon={<Megaphone />}
             title="No drives announced yet"
-            description="Create a drive above to start filtering eligible students."
+            description="Create a drive to start filtering eligible students."
           />
         )}
 
         {!isLoading && !isError && drives && drives.length > 0 && (
-          <div className="two-column">
+          <div className="grid gap-4 lg:grid-cols-2">
             {drives.map((drive) => (
-              <section className="panel" key={drive.drive_id}>
-                <div className="panel-head">
-                  <h2>
+              <Card key={drive.drive_id} className="flex flex-col">
+                <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+                  <CardTitle className="min-w-0 truncate text-base">
                     {drive.job_role ||
                       companyNameById.get(drive.company_id) ||
                       `Drive #${drive.drive_id}`}
-                  </h2>
-                  <Badge tone={statusTone(drive.status)}>{drive.status}</Badge>
-                </div>
-                <div className="panel-body">
+                  </CardTitle>
+                  <StatusBadge tone={statusTone(drive.status)}>{drive.status}</StatusBadge>
+                </CardHeader>
+                <CardContent className="flex flex-1 flex-col gap-4">
                   {drive.job_description && (
-                    <p style={{ fontSize: 12, marginBottom: 12, whiteSpace: "pre-wrap" }}>
+                    <p className="whitespace-pre-wrap text-sm text-muted-foreground">
                       {drive.job_description}
                     </p>
                   )}
-                  <div className="info-grid">
-                    <div>
-                      <span>Drive ID</span>
-                      <b>{drive.drive_id}</b>
-                    </div>
-                    <div>
-                      <span>Company</span>
-                      <b>
-                        {companyNameById.get(drive.company_id) ??
-                          `#${drive.company_id}`}
-                      </b>
-                    </div>
-                    <div>
-                      <span>Role</span>
-                      <b>{drive.job_role ?? "-"}</b>
-                    </div>
-                    <div>
-                      <span>Type</span>
-                      <b>{drive.employment_type}</b>
-                    </div>
-                    <div>
-                      <span>Package (LPA)</span>
-                      <b>{drive.package_ctc ?? "-"}</b>
-                    </div>
-                    <div>
-                      <span>Min CGPA</span>
-                      <b>{drive.minimum_cgpa}</b>
-                    </div>
-                    <div>
-                      <span>Drive date</span>
-                      <b>{formatDate(drive.drive_date)}</b>
-                    </div>
-                    <div>
-                      <span>Deadline</span>
-                      <b>{formatDate(drive.application_deadline)}</b>
-                    </div>
-                    <div>
-                      <span>Max active backlogs</span>
-                      <b>{drive.max_active_backlogs}</b>
-                    </div>
-                    <div>
-                      <span>Max passive backlogs</span>
-                      <b>{drive.max_passive_backlogs}</b>
-                    </div>
-                    <div>
-                      <span>Rounds</span>
-                      <b>{drive.number_of_rounds}</b>
-                    </div>
-                    <div>
-                      <span>Branches</span>
-                      <b>{drive.allowed_branches?.join(", ") || "-"}</b>
-                    </div>
-                    <div>
-                      <span>Created</span>
-                      <b>{formatDate(drive.created_at)}</b>
-                    </div>
-                    <div>
-                      <span>Updated</span>
-                      <b>{formatDate(drive.updated_at)}</b>
-                    </div>
-                  </div>
-                  <div className="form-actions" style={{ marginTop: 14 }}>
-                    <p />
-                    <Link
-                      className="text-btn"
-                      to={`${driveBasePath}/${drive.drive_id}`}
-                    >
-                      Review applicants <ArrowRight size={15} />
+                  <InfoGrid
+                    items={[
+                      ["Company", companyNameById.get(drive.company_id) ?? `#${drive.company_id}`],
+                      ["Type", drive.employment_type],
+                      ["Package (LPA)", drive.package_ctc ?? "—"],
+                      ["Min CGPA", String(drive.minimum_cgpa)],
+                      ["Drive date", formatDate(drive.drive_date)],
+                      ["Deadline", formatDate(drive.application_deadline)],
+                      ["Max active backlogs", String(drive.max_active_backlogs)],
+                      ["Max passive backlogs", String(drive.max_passive_backlogs)],
+                      ["Rounds", String(drive.number_of_rounds)],
+                      ["Branches", drive.allowed_branches?.join(", ") || "—"],
+                    ]}
+                  />
+                </CardContent>
+                <CardFooter className="justify-end border-t pt-4">
+                  <Button asChild variant="outline" size="sm">
+                    <Link to={`${driveBasePath}/${drive.drive_id}`}>
+                      Review applicants <ArrowRight />
                     </Link>
-                  </div>
-                </div>
-              </section>
+                  </Button>
+                </CardFooter>
+              </Card>
             ))}
           </div>
         )}
-      </div>
+      </PageContainer>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Create drive</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Company" htmlFor="company">
+                <Select
+                  value={form.company_id}
+                  onValueChange={(value) => setForm({ ...form, company_id: value })}
+                >
+                  <SelectTrigger id="company">
+                    <SelectValue placeholder="Select a company..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companies?.map((c) => (
+                      <SelectItem key={c.company_id} value={String(c.company_id)}>
+                        {c.company_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Employment type" htmlFor="employment_type">
+                <Select
+                  value={form.employment_type}
+                  onValueChange={(value) =>
+                    setForm({ ...form, employment_type: value as EmploymentType })
+                  }
+                >
+                  <SelectTrigger id="employment_type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EMPLOYMENT_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Job role" htmlFor="job_role">
+                <Input
+                  id="job_role"
+                  value={form.job_role}
+                  onChange={(e) => setForm({ ...form, job_role: e.target.value })}
+                />
+              </Field>
+              <Field label="Package (CTC, LPA)" htmlFor="package_ctc">
+                <Input
+                  id="package_ctc"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.package_ctc}
+                  onChange={(e) => setForm({ ...form, package_ctc: e.target.value })}
+                />
+              </Field>
+              <Field label="Drive date" htmlFor="drive_date">
+                <Input
+                  id="drive_date"
+                  type="date"
+                  value={form.drive_date}
+                  onChange={(e) => setForm({ ...form, drive_date: e.target.value })}
+                />
+              </Field>
+              <Field label="Application deadline" htmlFor="application_deadline">
+                <Input
+                  id="application_deadline"
+                  type="date"
+                  value={form.application_deadline}
+                  onChange={(e) => setForm({ ...form, application_deadline: e.target.value })}
+                />
+              </Field>
+              <Field label="Minimum CGPA" htmlFor="minimum_cgpa">
+                <Input
+                  id="minimum_cgpa"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="10"
+                  value={form.minimum_cgpa}
+                  onChange={(e) => setForm({ ...form, minimum_cgpa: e.target.value })}
+                />
+              </Field>
+              <Field label="Number of rounds" htmlFor="number_of_rounds">
+                <Input
+                  id="number_of_rounds"
+                  type="number"
+                  min="1"
+                  value={form.number_of_rounds}
+                  onChange={(e) => setForm({ ...form, number_of_rounds: e.target.value })}
+                />
+              </Field>
+              <Field label="Max active backlogs" htmlFor="max_active_backlogs">
+                <Input
+                  id="max_active_backlogs"
+                  type="number"
+                  min="0"
+                  value={form.max_active_backlogs}
+                  onChange={(e) => setForm({ ...form, max_active_backlogs: e.target.value })}
+                />
+              </Field>
+              <Field label="Max passive backlogs" htmlFor="max_passive_backlogs">
+                <Input
+                  id="max_passive_backlogs"
+                  type="number"
+                  min="0"
+                  value={form.max_passive_backlogs}
+                  onChange={(e) => setForm({ ...form, max_passive_backlogs: e.target.value })}
+                />
+              </Field>
+            </div>
+
+            <Field label="Job description" htmlFor="job_description">
+              <Input
+                id="job_description"
+                placeholder="Role details, responsibilities, location..."
+                value={form.job_description}
+                onChange={(e) => setForm({ ...form, job_description: e.target.value })}
+              />
+            </Field>
+
+            <div className="flex flex-col gap-2">
+              <Label>Eligible branches</Label>
+              <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-lg border p-3">
+                {DEPARTMENTS.map((dept) => (
+                  <label key={dept} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={form.allowed_branches.includes(dept)}
+                      onCheckedChange={() => toggleBranch(dept)}
+                    />
+                    {dept}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {(formError || createMutation.isError) && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {formError ?? createMutation.error?.message}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <DialogFooter>
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending ? "Creating..." : "Create drive"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

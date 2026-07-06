@@ -1,15 +1,41 @@
-import { Bell, CheckCheck } from "lucide-react";
+import type { ReactNode } from "react";
+import { Bell, CheckCheck, CheckCircle2, Clock, FileText, XCircle } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { Activity, Badge, EmptyState, LoadingState } from "../../components/ui";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { FeedItem } from "@/components/dashboard/FeedItem";
+import { EmptyState, LoadingState } from "@/components/dashboard/states";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
   useNotifications,
 } from "../../hooks/useNotifications";
 import { formatDate } from "../../lib/format";
+import type { StatusTone } from "../../types";
 
-import "../../styles/dashboard.css";
+/** Presentational icon for a notification's tone. */
+function iconForTone(tone: StatusTone): ReactNode {
+  switch (tone) {
+    case "green":
+      return <CheckCircle2 />;
+    case "red":
+      return <XCircle />;
+    case "amber":
+      return <Clock />;
+    case "blue":
+      return <Bell />;
+    default:
+      return <FileText />;
+  }
+}
 
 /**
  * Purpose: /Student/notifications - the signed-in user's personal notification
@@ -26,52 +52,58 @@ export default function NotificationsPage() {
   return (
     <>
       <Topbar title="Notifications" subtitle="Updates about your profile and placement drives." />
-      <div className="dashboard-content">
+      <PageContainer>
         {isLoading && <LoadingState label="Loading notifications..." />}
 
         {!isLoading && (!notifications || notifications.length === 0) && (
           <EmptyState
-            icon={<Bell size={28} />}
+            icon={<Bell />}
             title="No notifications yet"
             description="You'll see placement and verification updates here."
           />
         )}
 
         {!isLoading && notifications && notifications.length > 0 && (
-          <section className="panel">
-            <div className="panel-head">
-              <h2>
-                Recent activity{" "}
-                {unreadCount > 0 && <Badge tone="amber">{unreadCount} unread</Badge>}
-              </h2>
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0 border-b">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                Recent activity
+                {unreadCount > 0 && (
+                  <Badge variant="secondary">{unreadCount} unread</Badge>
+                )}
+              </CardTitle>
               {unreadCount > 0 && (
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   type="button"
                   onClick={() => markAllRead.mutate()}
                   disabled={markAllRead.isPending}
                 >
-                  <CheckCheck size={12} />
+                  <CheckCheck />
                   {markAllRead.isPending ? "Marking..." : "Mark all read"}
-                </button>
+                </Button>
               )}
-            </div>
-            <div className="panel-body">
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2 pt-6">
               {notifications.map((notification) => (
-                <Activity
+                <FeedItem
                   key={notification.id}
+                  icon={iconForTone(notification.tone)}
                   title={notification.title}
                   meta={`${notification.message} · ${formatDate(notification.createdAt)}`}
-                  tone={notification.tone}
-                  className={notification.read ? undefined : "is-unread"}
+                  unread={!notification.read}
                   onClick={
-                    notification.read ? undefined : () => markRead.mutate(notification.id)
+                    notification.read
+                      ? undefined
+                      : () => markRead.mutate(notification.id)
                   }
                 />
               ))}
-            </div>
-          </section>
+            </CardContent>
+          </Card>
         )}
-      </div>
+      </PageContainer>
     </>
   );
 }

@@ -1,28 +1,36 @@
 import { useMemo, useState } from "react";
-import { Search, UserCheck, Users } from "lucide-react";
+import { UserCheck, Users } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { Badge, EmptyState, ErrorState, LoadingState } from "../../components/ui";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { ListCard } from "@/components/dashboard/ListCard";
+import { SearchInput } from "@/components/dashboard/SearchInput";
+import { StudentTable } from "@/components/dashboard/StudentTable";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useApplyForDrive } from "../../hooks/useApplications";
 import { useCompanies } from "../../hooks/useCompanies";
 import { useDrives } from "../../hooks/useDrives";
 import { useStudents } from "../../hooks/useStudents";
-import { formatCgpa, initialsFromName } from "../../lib/format";
 import { DEPARTMENTS } from "../../lib/validation";
-
-import "../../styles/dashboard.css";
-import "../../styles/data-table.css";
 
 /**
  * Purpose: /Admin/students - the UPC/Admin "Filter Students" + "Shortlist
- * Students" screen from the brief's placement-cell-driven workflow (UPC
- * creates a drive -> system filters eligible students -> UPC shortlists
- * students). Filtering (branch, minimum CGPA, no-active-backlogs) happens
- * client-side over the cached GET /students list, same approach as the
- * SPC/TPC roster pages. Shortlisting a student into the selected drive calls
- * POST /application/apply/:driveId (useApplyForDrive) - the same endpoint a
- * student uses to apply for themselves - surfaced here as an inline per-row
- * error rather than blocking the page.
+ * Students" screen. Filtering (branch, minimum CGPA, no-active-backlogs) happens
+ * client-side over the cached GET /students list. Shortlisting a student into
+ * the selected drive calls POST /application/apply/:driveId (useApplyForDrive) -
+ * the same endpoint a student uses to apply for themselves.
  */
 export default function AdminStudentsPage() {
   const { data: students, isLoading, isError, error, refetch } = useStudents();
@@ -61,131 +69,128 @@ export default function AdminStudentsPage() {
   return (
     <>
       <Topbar title="Students" subtitle="Filter eligible students and shortlist them for a drive." />
-      <div className="dashboard-content">
+      <PageContainer>
         {isLoading && <LoadingState label="Loading students..." />}
         {isError && (
           <ErrorState message={error?.message ?? "Could not load students."} onRetry={refetch} />
         )}
 
         {!isLoading && !isError && (
-          <section className="panel queue-panel">
-            <div className="queue-head">
-              <div>
-                <div className="eyebrow">Eligibility filter</div>
-                <h2>All students</h2>
-                <p>{filtered.length} of {students?.length ?? 0} students match the current filter.</p>
-              </div>
-            </div>
-            <div className="table-tools">
-              <div className="searchbox">
-                <Search size={17} />
-                <input
-                  placeholder="Search name or roll number..."
+          <ListCard
+            eyebrow="Eligibility filter"
+            title="All students"
+            description={`${filtered.length} of ${students?.length ?? 0} students match the current filter.`}
+          >
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <SearchInput
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={setSearch}
+                  placeholder="Search name or roll number..."
                 />
+                <Select
+                  value={branch || "all"}
+                  onValueChange={(v) => setBranch(v === "all" ? "" : v)}
+                >
+                  <SelectTrigger className="w-full sm:w-52">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All departments</SelectItem>
+                    {DEPARTMENTS.map((dept) => (
+                      <SelectItem key={dept} value={dept}>
+                        {dept}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  placeholder="Min CGPA"
+                  value={minCgpa}
+                  onChange={(e) => setMinCgpa(e.target.value)}
+                  className="w-28"
+                />
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={noBacklogsOnly}
+                    onCheckedChange={(c) => setNoBacklogsOnly(c === true)}
+                  />
+                  No active backlogs
+                </label>
               </div>
-              <select value={branch} onChange={(e) => setBranch(e.target.value)}>
-                <option value="">All departments</option>
-                {DEPARTMENTS.map((dept) => (
-                  <option key={dept} value={dept}>
-                    {dept}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                placeholder="Min CGPA"
-                value={minCgpa}
-                onChange={(e) => setMinCgpa(e.target.value)}
-                style={{ width: 90, border: "1px solid var(--line)", borderRadius: 7, padding: "0 10px" }}
-              />
-              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10 }}>
-                <input
-                  type="checkbox"
-                  checked={noBacklogsOnly}
-                  onChange={(e) => setNoBacklogsOnly(e.target.checked)}
-                />
-                No active backlogs
-              </label>
-              <select value={driveId} onChange={(e) => setDriveId(e.target.value)}>
-                <option value="">Select a drive to shortlist into...</option>
-                {drives?.map((drive) => {
-                  const companyName = companies?.find(
-                    (c) => c.company_id === drive.company_id,
-                  )?.company_name;
-                  const label = drive.job_role
-                    ? `${drive.job_role}${companyName ? ` · ${companyName}` : ""}`
-                    : companyName ?? `Drive #${drive.drive_id}`;
-                  return (
-                    <option key={drive.drive_id} value={drive.drive_id}>
-                      {label}
-                    </option>
-                  );
-                })}
-              </select>
+
+              <Select
+                value={driveId || "none"}
+                onValueChange={(v) => setDriveId(v === "none" ? "" : v)}
+              >
+                <SelectTrigger className="w-full sm:w-80">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Select a drive to shortlist into...</SelectItem>
+                  {drives?.map((drive) => {
+                    const companyName = companies?.find(
+                      (c) => c.company_id === drive.company_id,
+                    )?.company_name;
+                    const label = drive.job_role
+                      ? `${drive.job_role}${companyName ? ` · ${companyName}` : ""}`
+                      : companyName ?? `Drive #${drive.drive_id}`;
+                    return (
+                      <SelectItem key={drive.drive_id} value={String(drive.drive_id)}>
+                        {label}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
             </div>
 
             {filtered.length === 0 ? (
               <EmptyState
-                icon={<Users size={24} />}
+                icon={<Users />}
                 title="No students match this filter"
                 description="Try widening the branch or CGPA filter."
               />
             ) : (
-              <div className="data-table">
-                <div className="data-row data-head">
-                  <span>Student</span>
-                  <span>Branch</span>
-                  <span>CGPA</span>
-                  <span>Status</span>
-                  <span>Action</span>
-                </div>
-                {filtered.map((s) => (
-                  <div className="data-row" key={s.id}>
-                    <span className="student-cell">
-                      <i>{initialsFromName(s.name)}</i>
-                      <span>
-                        <b>{s.name}</b>
-                        <small>{s.roll_no}</small>
-                      </span>
-                    </span>
-                    <span>{s.branch ?? "-"}</span>
-                    <span>
-                      <b>{formatCgpa(s.cgpa)}</b>
-                    </span>
-                    <span>
-                      <Badge tone={s.placement_status === "placed" ? "green" : "blue"}>
-                        {s.placement_status}
-                      </Badge>
-                    </span>
-                    <span>
-                      <button
-                        className="row-action"
-                        type="button"
-                        disabled={!driveId || applyForDrive.isPending}
-                        onClick={() => handleShortlist(s.id)}
-                      >
-                        <UserCheck size={14} /> Shortlist
-                      </button>
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <StudentTable
+                students={filtered}
+                renderStatus={(s) => (
+                  <StatusBadge tone={s.placement_status === "placed" ? "green" : "blue"}>
+                    {s.placement_status}
+                  </StatusBadge>
+                )}
+                renderAction={(s) => (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    disabled={!driveId || applyForDrive.isPending}
+                    onClick={() => handleShortlist(s.id)}
+                  >
+                    <UserCheck /> Shortlist
+                  </Button>
+                )}
+              />
             )}
+
             {applyForDrive.isError && shortlistedId !== null && (
-              <p style={{ padding: "0 24px 16px", fontSize: 10, color: "var(--red)" }}>
-                Could not shortlist this student: {applyForDrive.error.message}
-              </p>
+              <Alert variant="destructive">
+                <AlertDescription>
+                  Could not shortlist this student: {applyForDrive.error.message}
+                </AlertDescription>
+              </Alert>
             )}
             {applyForDrive.isSuccess && shortlistedId !== null && (
-              <p style={{ padding: "0 24px 16px", fontSize: 10, color: "var(--green)" }}>
-                Student shortlisted into the selected drive.
-              </p>
+              <Alert>
+                <AlertDescription>
+                  Student shortlisted into the selected drive.
+                </AlertDescription>
+              </Alert>
             )}
-          </section>
+          </ListCard>
         )}
-      </div>
+      </PageContainer>
     </>
   );
 }

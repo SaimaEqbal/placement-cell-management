@@ -1,17 +1,17 @@
-import { Megaphone } from "lucide-react";
+import { Mail, Megaphone } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { Activity, EmptyState, ErrorState, LoadingState } from "../../components/ui";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { FeedItem } from "@/components/dashboard/FeedItem";
+import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useCompanyPosts } from "../../hooks/useCompanyPosts";
 import { formatDate } from "../../lib/format";
-import type { StatusTone } from "../../types";
-
-import "../../styles/dashboard.css";
-
-/** Purpose: presentational tone for a post category. */
-function postTone(postType: string | null): StatusTone {
-  return postType === "email" ? "gray" : "blue";
-}
 
 /**
  * Purpose: /Student/announcements - a read-only feed of company posts
@@ -28,7 +28,7 @@ export default function AnnouncementsPage() {
         title="Announcements"
         subtitle="Updates and announcements from the placement cell."
       />
-      <div className="dashboard-content">
+      <PageContainer>
         {isLoading && <LoadingState label="Loading announcements..." />}
 
         {isError && (
@@ -40,30 +40,30 @@ export default function AnnouncementsPage() {
 
         {!isLoading && !isError && (!posts || posts.length === 0) && (
           <EmptyState
-            icon={<Megaphone size={28} />}
+            icon={<Megaphone />}
             title="No announcements yet"
             description="Placement cell announcements will show up here."
           />
         )}
 
         {!isLoading && !isError && posts && posts.length > 0 && (
-          <section className="panel">
-            <div className="panel-head">
-              <h2>Recent announcements</h2>
-            </div>
-            <div className="panel-body">
+          <Card>
+            <CardHeader className="border-b">
+              <CardTitle className="text-lg">Recent announcements</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2 pt-6">
               {posts.map((post) => (
-                <Activity
+                <FeedItem
                   key={post.post_id}
+                  icon={post.post_type === "email" ? <Mail /> : <Megaphone />}
                   title={post.title}
                   meta={`${post.content} · ${formatDate(post.created_at)}`}
-                  tone={postTone(post.post_type)}
                 />
               ))}
-            </div>
-          </section>
+            </CardContent>
+          </Card>
         )}
-      </div>
+      </PageContainer>
     </>
   );
 }

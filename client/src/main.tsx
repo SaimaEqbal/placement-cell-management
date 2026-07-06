@@ -1,8 +1,9 @@
 import { createRoot } from "react-dom/client";
 
 import App from "./App";
-import "./styles.css";
-/** states.css styles the shared LoadingState/ErrorState/EmptyState components (src/components/ui.tsx). Imported once here so the styling applies app-wide. */
-import "./styles/states.css";
+/** index.css is the single style entry: Tailwind + the black/white theme tokens,
+ *  with the legacy monolith and shared-state CSS pulled in under a lower cascade
+ *  layer so not-yet-migrated pages keep their original look. */
+import "./index.css";
 
 createRoot(document.getElementById("root")!).render(<App />);

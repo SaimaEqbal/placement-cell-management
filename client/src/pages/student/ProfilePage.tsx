@@ -1,21 +1,26 @@
 import { Link } from "react-router-dom";
-import { Edit3, FileText } from "lucide-react";
+import { Edit3, ExternalLink, FileText } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { ErrorState, InfoGrid, LoadingState } from "../../components/ui";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { InfoGrid } from "@/components/dashboard/InfoGrid";
+import { ErrorState, LoadingState } from "@/components/dashboard/states";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useProfile } from "../../hooks/useProfile";
 import { capitalize, formatCgpa, formatDate, initialsFromName } from "../../lib/format";
 import { paths } from "../../routes/paths";
-
-import "../../styles/dashboard.css";
 
 /**
  * Purpose: /Student/profile - read-only view of the student's own record.
  * Calls the same useProfile() hook (same ['students','me'] query key) as
  * StudentDashboard, so if the dashboard already loaded the profile this
- * page renders instantly from cache instead of firing a second request -
- * per the brief's "must reuse cached profile data, do not trigger duplicate
- * requests" requirement for this page.
+ * page renders instantly from cache instead of firing a second request.
  */
 export default function ProfilePage() {
   const { data: profile, isLoading, isError, error, refetch } = useProfile();
@@ -24,9 +29,9 @@ export default function ProfilePage() {
     return (
       <>
         <Topbar title="My profile" subtitle="" />
-        <div className="dashboard-content">
+        <PageContainer>
           <LoadingState label="Loading your profile..." />
-        </div>
+        </PageContainer>
       </>
     );
   }
@@ -36,7 +41,7 @@ export default function ProfilePage() {
     return (
       <>
         <Topbar title="My profile" subtitle="" />
-        <div className="dashboard-content">
+        <PageContainer>
           <ErrorState
             message={
               isIncomplete
@@ -46,13 +51,13 @@ export default function ProfilePage() {
             onRetry={isIncomplete ? undefined : refetch}
           />
           {isIncomplete && (
-            <div className="empty-state-action">
-              <Link className="primary" to={paths.studentCompleteProfile}>
-                Complete your profile
-              </Link>
+            <div className="flex justify-center">
+              <Button asChild size="lg">
+                <Link to={paths.studentCompleteProfile}>Complete your profile</Link>
+              </Button>
             </div>
           )}
-        </div>
+        </PageContainer>
       </>
     );
   }
@@ -72,6 +77,13 @@ export default function ProfilePage() {
     return acc;
   }, []);
 
+  const documents: Array<{ label: string; url: string | null }> = [
+    { label: "Resume", url: profile.resume_url },
+    { label: "10th marksheet", url: profile.tenth_marksheet_url },
+    { label: "12th marksheet", url: profile.twelfth_marksheet_url },
+    { label: "Latest semester marksheet", url: profile.last_sem_marksheet_url },
+  ];
+
   return (
     <>
       <Topbar
@@ -79,34 +91,34 @@ export default function ProfilePage() {
         subtitle={profile.roll_no}
         initials={initialsFromName(profile.name)}
       />
-      <div className="dashboard-content">
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Personal &amp; academic details</h2>
-            <Link className="text-btn" to={paths.studentCompleteProfile}>
-              <Edit3 size={14} /> Edit
-            </Link>
-          </div>
-          <div className="panel-body">
+      <PageContainer>
+        <Card>
+          <CardHeader className="flex-row items-center justify-between space-y-0 border-b">
+            <CardTitle className="text-lg">Personal &amp; academic details</CardTitle>
+            <Button asChild variant="outline" size="sm">
+              <Link to={paths.studentCompleteProfile}>
+                <Edit3 /> Edit
+              </Link>
+            </Button>
+          </CardHeader>
+          <CardContent className="pt-6">
             <InfoGrid
+              className="lg:grid-cols-3"
               items={[
                 ["Full name", profile.name],
                 ["Roll number", profile.roll_no],
                 ["Email", profile.email],
-                ["Phone", profile.phone ?? "-"],
-                ["Department", profile.department ?? "-"],
-                ["Branch", profile.branch ?? "-"],
-                [
-                  "Graduation year",
-                  profile.graduation_year ? String(profile.graduation_year) : "-",
-                ],
-                ["Current semester", profile.semester ? String(profile.semester) : "-"],
+                ["Phone", profile.phone ?? "—"],
+                ["Department", profile.department ?? "—"],
+                ["Branch", profile.branch ?? "—"],
+                ["Graduation year", profile.graduation_year ? String(profile.graduation_year) : "—"],
+                ["Current semester", profile.semester ? String(profile.semester) : "—"],
                 ["CGPA", formatCgpa(profile.cgpa)],
-                ["10th percentage", profile.tenth_percentage ?? "-"],
-                ["12th percentage", profile.twelfth_percentage ?? "-"],
-                ["Gender", profile.gender ?? "-"],
-                ["Region", profile.region ?? "-"],
-                ["Religion", profile.religion ?? "-"],
+                ["10th percentage", profile.tenth_percentage ?? "—"],
+                ["12th percentage", profile.twelfth_percentage ?? "—"],
+                ["Gender", profile.gender ?? "—"],
+                ["Region", profile.region ?? "—"],
+                ["Religion", profile.religion ?? "—"],
                 ["Date of birth", formatDate(profile.date_of_birth)],
                 ["Active backlogs", String(profile.active_backlogs)],
                 ["Passive backlogs", String(profile.passive_backlogs)],
@@ -114,53 +126,56 @@ export default function ProfilePage() {
                 ["Verification status", capitalize(profile.review_status ?? "pending")],
               ]}
             />
-          </div>
-        </section>
+          </CardContent>
+        </Card>
 
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Documents</h2>
-          </div>
-          <div className="doc-list">
-            <DocumentLink label="Resume" url={profile.resume_url} />
-            <DocumentLink label="10th marksheet" url={profile.tenth_marksheet_url} />
-            <DocumentLink label="12th marksheet" url={profile.twelfth_marksheet_url} />
-            <DocumentLink label="Latest semester marksheet" url={profile.last_sem_marksheet_url} />
-          </div>
-        </section>
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle className="text-lg">Documents</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 pt-6">
+            {documents.map((doc) => (
+              <DocumentRow key={doc.label} label={doc.label} url={doc.url} />
+            ))}
+          </CardContent>
+        </Card>
 
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Semester SPIs</h2>
-          </div>
-          <div className="panel-body">
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle className="text-lg">Semester SPIs</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6">
             {spiItems.length > 0 ? (
-              <InfoGrid items={spiItems} />
+              <InfoGrid className="lg:grid-cols-4" items={spiItems} />
             ) : (
-              <p style={{ fontSize: 12, color: "var(--muted)" }}>No SPIs recorded yet.</p>
+              <p className="text-sm text-muted-foreground">No SPIs recorded yet.</p>
             )}
-          </div>
-        </section>
-      </div>
+          </CardContent>
+        </Card>
+      </PageContainer>
     </>
   );
 }
 
-/** Purpose: one row in the Documents panel - shows upload state, links out to the stored URL when present. */
-function DocumentLink({ label, url }: { label: string; url: string | null }) {
+/** One row in the Documents card - shows upload state, links out to the stored URL when present. */
+function DocumentRow({ label, url }: { label: string; url: string | null }) {
   return (
-    <div className="document-item">
-      <div className="doc-icon">
-        <FileText size={16} />
+    <div className="flex items-center gap-3 rounded-lg border p-3">
+      <div className="grid size-9 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+        <FileText className="size-4" />
       </div>
-      <div>
-        <b>{label}</b>
-        <span>{url ? "Uploaded" : "Not uploaded yet"}</span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{label}</div>
+        <div className="text-xs text-muted-foreground">
+          {url ? "Uploaded" : "Not uploaded yet"}
+        </div>
       </div>
       {url && (
-        <a className="row-action" href={url} target="_blank" rel="noreferrer">
-          View
-        </a>
+        <Button asChild variant="outline" size="sm">
+          <a href={url} target="_blank" rel="noreferrer">
+            View <ExternalLink />
+          </a>
+        </Button>
       )}
     </div>
   );

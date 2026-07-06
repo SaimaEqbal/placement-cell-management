@@ -1,8 +1,27 @@
 import { useState, type FormEvent } from "react";
-import { Building2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Building2, Pencil, Plus, Trash2 } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { EmptyState, ErrorState, LoadingState } from "../../components/ui";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { InfoGrid } from "@/components/dashboard/InfoGrid";
+import { Field } from "@/components/dashboard/Field";
+import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   useCompanies,
   useCreateCompany,
@@ -12,9 +31,6 @@ import {
 import type { ApiError } from "../../api/apiError";
 import type { CompanyRecord, CreateCompanyPayload } from "../../services/companyService";
 import { formatDate } from "../../lib/format";
-
-import "../../styles/dashboard.css";
-import "../../styles/form-wizard.css";
 
 const EMPTY_FORM: CreateCompanyPayload = {
   company_name: "",
@@ -27,8 +43,7 @@ const EMPTY_FORM: CreateCompanyPayload = {
 
 /**
  * Purpose: flatten an ApiError's per-field validation errors (from the backend's
- * Zod schema) into a single readable line, so the form shows "industry: Industry
- * is required" instead of a generic "Request failed (400)".
+ * Zod schema) into a single readable line.
  */
 function fieldErrorText(error: ApiError): string | undefined {
   if (!error.fieldErrors) return undefined;
@@ -41,8 +56,7 @@ function fieldErrorText(error: ApiError): string | undefined {
 /**
  * Purpose: /Admin/companies - UPC/Admin's company management CRUD (Add,
  * Edit, Delete Company per the brief), backed by GET/POST/PUT/DELETE
- * /companies via useCompanies/useCreateCompany/useUpdateCompany/
- * useDeleteCompany.
+ * /companies.
  */
 export default function CompaniesPage() {
   const { data: companies, isLoading, isError, error, refetch } = useCompanies();
@@ -50,7 +64,7 @@ export default function CompaniesPage() {
   const updateMutation = useUpdateCompany();
   const deleteMutation = useDeleteCompany();
 
-  const [showForm, setShowForm] = useState(false);
+  const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<CreateCompanyPayload>(EMPTY_FORM);
   const [formError, setFormError] = useState<string>();
@@ -59,7 +73,7 @@ export default function CompaniesPage() {
     setEditingId(null);
     setForm(EMPTY_FORM);
     setFormError(undefined);
-    setShowForm(true);
+    setOpen(true);
   }
 
   function openEditForm(company: CompanyRecord) {
@@ -73,7 +87,7 @@ export default function CompaniesPage() {
       hr_email: company.hr_email ?? "",
       hr_phone: company.hr_phone ?? "",
     });
-    setShowForm(true);
+    setOpen(true);
   }
 
   function handleSubmit(event: FormEvent) {
@@ -97,7 +111,7 @@ export default function CompaniesPage() {
     /**
      * Omit optional HR fields when blank: the backend's Zod schema treats an
      * empty string as an invalid value (fails min-length / email), not as
-     * "absent". Sending "" for an unfilled HR field is what was causing the 400.
+     * "absent".
      */
     const payload: CreateCompanyPayload = { company_name, industry, description };
     if (form.hr_name?.trim()) payload.hr_name = form.hr_name.trim();
@@ -107,10 +121,10 @@ export default function CompaniesPage() {
     if (editingId !== null) {
       updateMutation.mutate(
         { id: editingId, payload },
-        { onSuccess: () => setShowForm(false) },
+        { onSuccess: () => setOpen(false) },
       );
     } else {
-      createMutation.mutate(payload, { onSuccess: () => setShowForm(false) });
+      createMutation.mutate(payload, { onSuccess: () => setOpen(false) });
     }
   }
 
@@ -119,80 +133,13 @@ export default function CompaniesPage() {
   return (
     <>
       <Topbar title="Companies" subtitle="Manage the companies engaging with the placement cell." />
-      <div className="dashboard-content">
-        <section className="panel" style={{ marginBottom: 16 }}>
-          <div className="panel-head">
-            <h2>{showForm ? (editingId !== null ? "Edit company" : "Add company") : "Companies"}</h2>
-            <button className="secondary" type="button" onClick={() => (showForm ? setShowForm(false) : openCreateForm())}>
-              {showForm ? <X size={15} /> : <Plus size={15} />}
-              {showForm ? "Cancel" : "Add company"}
-            </button>
-          </div>
-
-          {showForm && (
-            <div className="panel-body">
-              <form onSubmit={handleSubmit} noValidate>
-                <div className="form-grid">
-                  <label>
-                    Company name
-                    <input
-                      value={form.company_name}
-                      onChange={(e) => setForm({ ...form, company_name: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Industry
-                    <input
-                      value={form.industry}
-                      onChange={(e) => setForm({ ...form, industry: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    HR name
-                    <input
-                      value={form.hr_name}
-                      onChange={(e) => setForm({ ...form, hr_name: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    HR email
-                    <input
-                      type="email"
-                      value={form.hr_email}
-                      onChange={(e) => setForm({ ...form, hr_email: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    HR phone
-                    <input
-                      value={form.hr_phone}
-                      onChange={(e) => setForm({ ...form, hr_phone: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Description
-                    <input
-                      value={form.description}
-                      onChange={(e) => setForm({ ...form, description: e.target.value })}
-                    />
-                  </label>
-                </div>
-                {formError && <span className="field-error">{formError}</span>}
-                {mutation.isError && (
-                  <span className="field-error">
-                    {fieldErrorText(mutation.error) ?? mutation.error.message}
-                  </span>
-                )}
-                <div className="form-actions">
-                  <p />
-                  <button className="primary" type="submit" disabled={mutation.isPending}>
-                    {mutation.isPending ? "Saving..." : editingId !== null ? "Save changes" : "Add company"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-        </section>
+      <PageContainer>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold tracking-tight">Companies</h2>
+          <Button type="button" onClick={openCreateForm}>
+            <Plus /> Add company
+          </Button>
+        </div>
 
         {isLoading && <LoadingState label="Loading companies..." />}
         {isError && (
@@ -201,72 +148,139 @@ export default function CompaniesPage() {
 
         {!isLoading && !isError && (!companies || companies.length === 0) && (
           <EmptyState
-            icon={<Building2 size={28} />}
+            icon={<Building2 />}
             title="No companies yet"
             description="Add the first company to get placement drives started."
           />
         )}
 
         {!isLoading && !isError && companies && companies.length > 0 && (
-          <div className="two-column">
+          <div className="grid gap-4 lg:grid-cols-2">
             {companies.map((company) => (
-              <section className="panel" key={company.company_id}>
-                <div className="panel-head">
-                  <h2>{company.company_name}</h2>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button className="icon-btn" type="button" onClick={() => openEditForm(company)}>
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      className="icon-btn"
+              <Card key={company.company_id}>
+                <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+                  <CardTitle className="min-w-0 truncate text-base">
+                    {company.company_name}
+                  </CardTitle>
+                  <div className="flex shrink-0 gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       type="button"
+                      aria-label="Edit company"
+                      onClick={() => openEditForm(company)}
+                    >
+                      <Pencil />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      type="button"
+                      aria-label="Delete company"
+                      className="text-muted-foreground hover:text-destructive"
                       disabled={deleteMutation.isPending}
                       onClick={() => deleteMutation.mutate(company.company_id)}
                     >
-                      <Trash2 size={14} />
-                    </button>
+                      <Trash2 />
+                    </Button>
                   </div>
-                </div>
-                <div className="panel-body">
-                  <p style={{ fontSize: 12, marginBottom: 12, whiteSpace: "pre-wrap" }}>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  <p className="whitespace-pre-wrap text-sm text-muted-foreground">
                     {company.description ?? "No description provided."}
                   </p>
-                  <div className="info-grid">
-                    <div>
-                      <span>Company ID</span>
-                      <b>{company.company_id}</b>
-                    </div>
-                    <div>
-                      <span>Industry</span>
-                      <b>{company.industry ?? "-"}</b>
-                    </div>
-                    <div>
-                      <span>HR contact</span>
-                      <b>{company.hr_name ?? "-"}</b>
-                    </div>
-                    <div>
-                      <span>HR email</span>
-                      <b>{company.hr_email ?? "-"}</b>
-                    </div>
-                    <div>
-                      <span>HR phone</span>
-                      <b>{company.hr_phone ?? "-"}</b>
-                    </div>
-                    <div>
-                      <span>Created</span>
-                      <b>{formatDate(company.created_at)}</b>
-                    </div>
-                    <div>
-                      <span>Created by</span>
-                      <b>{company.created_by ?? "-"}</b>
-                    </div>
-                  </div>
-                </div>
-              </section>
+                  <InfoGrid
+                    items={[
+                      ["Company ID", String(company.company_id)],
+                      ["Industry", company.industry ?? "—"],
+                      ["HR contact", company.hr_name ?? "—"],
+                      ["HR email", company.hr_email ?? "—"],
+                      ["HR phone", company.hr_phone ?? "—"],
+                      ["Created", formatDate(company.created_at)],
+                    ]}
+                  />
+                </CardContent>
+              </Card>
             ))}
           </div>
         )}
-      </div>
+      </PageContainer>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingId !== null ? "Edit company" : "Add company"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Company name" htmlFor="company_name">
+                <Input
+                  id="company_name"
+                  value={form.company_name}
+                  onChange={(e) => setForm({ ...form, company_name: e.target.value })}
+                />
+              </Field>
+              <Field label="Industry" htmlFor="industry">
+                <Input
+                  id="industry"
+                  value={form.industry}
+                  onChange={(e) => setForm({ ...form, industry: e.target.value })}
+                />
+              </Field>
+              <Field label="HR name" htmlFor="hr_name">
+                <Input
+                  id="hr_name"
+                  value={form.hr_name}
+                  onChange={(e) => setForm({ ...form, hr_name: e.target.value })}
+                />
+              </Field>
+              <Field label="HR email" htmlFor="hr_email">
+                <Input
+                  id="hr_email"
+                  type="email"
+                  value={form.hr_email}
+                  onChange={(e) => setForm({ ...form, hr_email: e.target.value })}
+                />
+              </Field>
+              <Field label="HR phone" htmlFor="hr_phone">
+                <Input
+                  id="hr_phone"
+                  value={form.hr_phone}
+                  onChange={(e) => setForm({ ...form, hr_phone: e.target.value })}
+                />
+              </Field>
+              <Field label="Description" htmlFor="description" className="sm:col-span-2">
+                <Input
+                  id="description"
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                />
+              </Field>
+            </div>
+
+            {(formError || mutation.isError) && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {formError ??
+                    (mutation.error
+                      ? fieldErrorText(mutation.error) ?? mutation.error.message
+                      : undefined)}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <DialogFooter>
+              <Button type="submit" disabled={mutation.isPending}>
+                {mutation.isPending
+                  ? "Saving..."
+                  : editingId !== null
+                    ? "Save changes"
+                    : "Add company"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

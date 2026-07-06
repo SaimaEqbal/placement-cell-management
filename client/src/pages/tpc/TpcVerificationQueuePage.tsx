@@ -1,15 +1,18 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, ClipboardCheck, Search } from "lucide-react";
+import { ArrowRight, ClipboardCheck } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { Badge, EmptyState, ErrorState, LoadingState } from "../../components/ui";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { ListCard } from "@/components/dashboard/ListCard";
+import { SearchInput } from "@/components/dashboard/SearchInput";
+import { BranchFilter } from "@/components/dashboard/BranchFilter";
+import { StudentTable } from "@/components/dashboard/StudentTable";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
+import { Button } from "@/components/ui/button";
 import { useTpcBranches, useTpcQueue } from "../../hooks/useVerification";
-import { formatCgpa, initialsFromName } from "../../lib/format";
 import { paths } from "../../routes/paths";
-
-import "../../styles/dashboard.css";
-import "../../styles/data-table.css";
 
 /**
  * Purpose: /TPC/verification - students an SPC rejected (review_status =
@@ -38,97 +41,59 @@ export default function TpcVerificationQueuePage() {
   return (
     <>
       <Topbar title="Verification queue" subtitle="Students rejected by an SPC, awaiting your review." />
-      <div className="dashboard-content">
+      <PageContainer>
         {isLoading && <LoadingState label="Loading verification queue..." />}
         {isError && (
           <ErrorState message={error?.message ?? "Could not load the queue."} onRetry={refetch} />
         )}
 
         {!isLoading && !isError && (
-          <section className="panel queue-panel">
-            <div className="queue-head">
-              <div>
-                <div className="eyebrow">TPC verification</div>
-                <h2>SPC-rejected students</h2>
-                <p>
-                  {(students ?? []).length} student(s) awaiting your review
-                  {branch ? ` in ${branch}` : ""}.
-                </p>
-              </div>
-            </div>
-            <div className="table-tools">
-              <div className="searchbox">
-                <Search size={17} />
-                <input
-                  placeholder="Search name or roll number..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-              <select
-                className="filter-select"
-                value={branch}
-                onChange={(e) => setBranch(e.target.value)}
-              >
-                <option value="">All branches</option>
-                {(branches ?? []).map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
+          <ListCard
+            eyebrow="TPC verification"
+            title="SPC-rejected students"
+            description={`${(students ?? []).length} student(s) awaiting your review${branch ? ` in ${branch}` : ""}.`}
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder="Search name or roll number..."
+              />
+              <BranchFilter branches={branches ?? []} value={branch} onChange={setBranch} />
             </div>
 
             {filtered.length === 0 ? (
               <EmptyState
-                icon={<ClipboardCheck size={28} />}
+                icon={<ClipboardCheck />}
                 title="Nothing waiting for review"
                 description="No SPC-rejected students in this view."
               />
             ) : (
-              <div className="data-table">
-                <div className="data-row data-head">
-                  <span>Student</span>
-                  <span>Branch</span>
-                  <span>CGPA</span>
-                  <span>Status</span>
-                  <span>Action</span>
-                </div>
-                {filtered.map((s) => (
-                  <div className="data-row" key={s.id}>
-                    <span className="student-cell">
-                      <i>{initialsFromName(s.name)}</i>
-                      <span>
-                        <b>{s.name}</b>
-                        <small>{s.roll_no}</small>
-                        {s.rejection_reason && (
-                          <small className="reason-line">SPC: {s.rejection_reason}</small>
-                        )}
-                      </span>
-                    </span>
-                    <span>{s.branch ?? "-"}</span>
-                    <span>
-                      <b>{formatCgpa(s.cgpa)}</b>
-                    </span>
-                    <span>
-                      <Badge tone="red">SPC rejected</Badge>
-                    </span>
-                    <span>
-                      <Link
-                        className="row-action"
-                        to={`${paths.tpcVerification}/${s.id}`}
-                        state={{ ids, backPath: paths.tpcVerification }}
-                      >
-                        Review <ArrowRight size={15} />
-                      </Link>
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <StudentTable
+                students={filtered}
+                renderMeta={(s) =>
+                  s.rejection_reason ? (
+                    <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                      SPC: {s.rejection_reason}
+                    </div>
+                  ) : null
+                }
+                renderStatus={() => <StatusBadge tone="red">SPC rejected</StatusBadge>}
+                renderAction={(s) => (
+                  <Button asChild variant="outline" size="sm">
+                    <Link
+                      to={`${paths.tpcVerification}/${s.id}`}
+                      state={{ ids, backPath: paths.tpcVerification }}
+                    >
+                      Review <ArrowRight />
+                    </Link>
+                  </Button>
+                )}
+              />
             )}
-          </section>
+          </ListCard>
         )}
-      </div>
+      </PageContainer>
     </>
   );
 }

@@ -1,8 +1,19 @@
 import { useMemo } from "react";
-import { Briefcase, CalendarClock, GraduationCap, IndianRupee } from "lucide-react";
+import { Briefcase } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { Badge, EmptyState, ErrorState, LoadingState } from "../../components/ui";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { InfoGrid } from "@/components/dashboard/InfoGrid";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useCompanies } from "../../hooks/useCompanies";
 import { useDrives } from "../../hooks/useDrives";
 import {
@@ -14,8 +25,6 @@ import { useProfile } from "../../hooks/useProfile";
 import { formatDate } from "../../lib/format";
 import type { ApplicationRecord } from "../../services/applicationService";
 import type { StatusTone } from "../../types";
-
-import "../../styles/dashboard.css";
 
 /** Purpose: tone for an application's workflow status. */
 function statusTone(status: string): StatusTone {
@@ -69,9 +78,9 @@ export default function PlacementDrivesPage() {
         title="Placement drives"
         subtitle="Drives currently open through the placement cell."
       />
-      <div className="dashboard-content">
+      <PageContainer>
         {!profile && (
-          <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>
+          <p className="text-sm text-muted-foreground">
             Complete your profile to apply for drives.
           </p>
         )}
@@ -87,110 +96,66 @@ export default function PlacementDrivesPage() {
 
         {!isLoading && !isError && (!drives || drives.length === 0) && (
           <EmptyState
-            icon={<Briefcase size={28} />}
+            icon={<Briefcase />}
             title="No placement drives yet"
             description="The placement cell hasn't announced any drives yet. Check back soon."
           />
         )}
 
         {!isLoading && !isError && drives && drives.length > 0 && (
-          <div className="two-column">
+          <div className="grid gap-6 lg:grid-cols-2">
             {drives.map((drive) => {
               const application = applicationByDrive.get(drive.drive_id);
               const companyName =
                 companyNameById.get(drive.company_id) ??
                 `Company #${drive.company_id}`;
               return (
-                <section className="panel" key={drive.drive_id}>
-                  <div className="panel-head">
-                    <h2>{drive.job_role || companyName}</h2>
+                <Card key={drive.drive_id} className="flex flex-col">
+                  <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+                    <div className="min-w-0">
+                      <CardTitle className="truncate text-base">
+                        {drive.job_role || companyName}
+                      </CardTitle>
+                      <CardDescription>{companyName}</CardDescription>
+                    </div>
                     {application ? (
-                      <Badge tone={statusTone(application.status)}>
+                      <StatusBadge tone={statusTone(application.status)}>
                         {application.status}
-                      </Badge>
+                      </StatusBadge>
                     ) : (
-                      <Badge tone="blue">{drive.status}</Badge>
+                      <StatusBadge tone="blue">{drive.status}</StatusBadge>
                     )}
-                  </div>
-                  <div className="panel-body">
-                    <p
-                      style={{
-                        fontSize: 11,
-                        color: "var(--muted)",
-                        marginBottom: 12,
-                      }}
-                    >
+                  </CardHeader>
+                  <CardContent className="flex flex-1 flex-col gap-4">
+                    <p className="text-sm text-muted-foreground">
                       {drive.job_description ?? "No description provided."}
                     </p>
-                    <div className="info-grid">
-                      <div>
-                        <span>Company</span>
-                        <b>{companyName}</b>
-                      </div>
-                      <div>
-                        <span>Type</span>
-                        <b>{drive.employment_type}</b>
-                      </div>
-                      <div>
-                        <span>
-                          <IndianRupee size={11} /> Package (LPA)
-                        </span>
-                        <b>{drive.package_ctc ?? "-"}</b>
-                      </div>
-                      <div>
-                        <span>
-                          <GraduationCap size={11} /> Min CGPA
-                        </span>
-                        <b>{drive.minimum_cgpa}</b>
-                      </div>
-                      <div>
-                        <span>
-                          <CalendarClock size={11} /> Deadline
-                        </span>
-                        <b>{formatDate(drive.application_deadline)}</b>
-                      </div>
-                      <div>
-                        <span>Role</span>
-                        <b>{drive.job_role ?? "-"}</b>
-                      </div>
-                      <div>
-                        <span>Drive date</span>
-                        <b>{formatDate(drive.drive_date)}</b>
-                      </div>
-                      <div>
-                        <span>Rounds</span>
-                        <b>{drive.number_of_rounds}</b>
-                      </div>
-                      <div>
-                        <span>Max active backlogs</span>
-                        <b>{drive.max_active_backlogs}</b>
-                      </div>
-                      <div>
-                        <span>Max passive backlogs</span>
-                        <b>{drive.max_passive_backlogs}</b>
-                      </div>
-                      <div>
-                        <span>Branches</span>
-                        <b>{drive.allowed_branches?.join(", ") || "-"}</b>
-                      </div>
-                    </div>
+                    <InfoGrid
+                      items={[
+                        ["Type", drive.employment_type],
+                        ["Package (LPA)", drive.package_ctc ?? "—"],
+                        ["Min CGPA", String(drive.minimum_cgpa)],
+                        ["Deadline", formatDate(drive.application_deadline)],
+                        ["Drive date", formatDate(drive.drive_date)],
+                        ["Rounds", String(drive.number_of_rounds)],
+                        ["Max active backlogs", String(drive.max_active_backlogs)],
+                        ["Max passive backlogs", String(drive.max_passive_backlogs)],
+                        ["Branches", drive.allowed_branches?.join(", ") || "—"],
+                      ]}
+                    />
 
-                    <div className="form-actions" style={{ marginTop: 14 }}>
-                      <p />
+                    <div className="mt-auto flex justify-end pt-2">
                       {application ? (
-                        <button
-                          className="secondary"
+                        <Button
+                          variant="outline"
                           type="button"
                           disabled={withdraw.isPending}
-                          onClick={() =>
-                            withdraw.mutate(application.application_id)
-                          }
+                          onClick={() => withdraw.mutate(application.application_id)}
                         >
                           {withdraw.isPending ? "Withdrawing..." : "Withdraw"}
-                        </button>
+                        </Button>
                       ) : (
-                        <button
-                          className="primary"
+                        <Button
                           type="button"
                           disabled={!studentId || applyForDrive.isPending}
                           onClick={() =>
@@ -202,22 +167,22 @@ export default function PlacementDrivesPage() {
                           }
                         >
                           {applyForDrive.isPending ? "Applying..." : "Apply"}
-                        </button>
+                        </Button>
                       )}
                     </div>
-                  </div>
-                </section>
+                  </CardContent>
+                </Card>
               );
             })}
           </div>
         )}
 
         {(applyForDrive.isError || withdraw.isError) && (
-          <p style={{ fontSize: 11, color: "var(--red)", marginTop: 12 }}>
+          <p className="text-sm text-destructive">
             {applyForDrive.error?.message ?? withdraw.error?.message}
           </p>
         )}
-      </div>
+      </PageContainer>
     </>
   );
 }

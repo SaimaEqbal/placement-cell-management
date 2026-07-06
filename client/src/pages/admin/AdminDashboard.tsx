@@ -1,14 +1,28 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Building2, CheckCircle2, Megaphone, Users } from "lucide-react";
+import { ArrowRight, Building2, Megaphone, UserPlus, Users } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { ErrorState, LoadingState, StatCard } from "../../components/ui";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { ErrorState, LoadingState } from "@/components/dashboard/states";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useCompanies } from "../../hooks/useCompanies";
 import { useDrives } from "../../hooks/useDrives";
 import { useStudents } from "../../hooks/useStudents";
 import { paths } from "../../routes/paths";
 
-import "../../styles/dashboard.css";
+const quickLinks = [
+  { label: "Manage companies", to: paths.adminCompanies, icon: Building2 },
+  { label: "Manage drives", to: paths.adminDrives, icon: Megaphone },
+  { label: "Filter & shortlist students", to: paths.adminStudents, icon: Users },
+  { label: "Invite TPC / SPC / Admin", to: paths.adminInvitations, icon: UserPlus },
+];
 
 /**
  * Purpose: /Admin - UPC/Admin overview combining GET /students and GET
@@ -28,9 +42,9 @@ export default function AdminDashboard() {
     return (
       <>
         <Topbar title="Placement cell overview" subtitle="Companies, drives, and student placement at a glance." />
-        <div className="dashboard-content">
+        <PageContainer>
           <LoadingState label="Loading overview..." />
-        </div>
+        </PageContainer>
       </>
     );
   }
@@ -39,7 +53,7 @@ export default function AdminDashboard() {
     return (
       <>
         <Topbar title="Placement cell overview" subtitle="" />
-        <div className="dashboard-content">
+        <PageContainer>
           <ErrorState
             message={students.error?.message ?? companies.error?.message ?? "Could not load the overview."}
             onRetry={() => {
@@ -47,34 +61,60 @@ export default function AdminDashboard() {
               companies.refetch();
             }}
           />
-        </div>
+        </PageContainer>
       </>
     );
   }
+
   return (
     <>
       <Topbar title="Placement cell overview" subtitle="Companies, drives, and student placement at a glance." />
-      <div className="dashboard-content">
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Quick links</h2>
-          </div>
-          <div className="quick-links">
-            <Link className="text-btn" to={paths.adminCompanies}>
-              Manage companies <ArrowRight size={15} />
-            </Link>
-            <Link className="text-btn" to={paths.adminDrives}>
-              Manage drives <ArrowRight size={15} />
-            </Link>
-            <Link className="text-btn" to={paths.adminStudents}>
-              Filter & shortlist students <ArrowRight size={15} />
-            </Link>
-            <Link className="text-btn" to={paths.adminInvitations}>
-              Invite TPC / SPC / Admin <ArrowRight size={15} />
-            </Link>
-          </div>
-        </section>
-      </div>
+      <PageContainer>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard
+            label="Companies"
+            value={String(companies.data?.length ?? 0)}
+            note="Engaged with the placement cell"
+            icon={<Building2 />}
+          />
+          <StatCard
+            label="Drives"
+            value={String(drives.data?.length ?? 0)}
+            note="Announced so far"
+            icon={<Megaphone />}
+          />
+          <StatCard
+            label="Students"
+            value={String(students.data?.length ?? 0)}
+            note="Registered in the portal"
+            icon={<Users />}
+          />
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Quick links</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            {quickLinks.map(({ label, to, icon: Icon }) => (
+              <Button
+                key={to}
+                asChild
+                variant="outline"
+                className="h-auto justify-between px-4 py-3"
+              >
+                <Link to={to}>
+                  <span className="flex items-center gap-2.5">
+                    <Icon className="size-4 text-muted-foreground" />
+                    {label}
+                  </span>
+                  <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+            ))}
+          </CardContent>
+        </Card>
+      </PageContainer>
     </>
   );
 }

@@ -1,12 +1,33 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, CheckCircle2, Users, XCircle } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  ClipboardCheck,
+  UserCog,
+  Users,
+  XCircle,
+} from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { ErrorState, LoadingState, StatCard } from "../../components/ui";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { ErrorState, LoadingState } from "@/components/dashboard/states";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useTpcQueue, useTpcSpcVerified, useTpcStudents } from "../../hooks/useVerification";
 import { paths } from "../../routes/paths";
 
-import "../../styles/dashboard.css";
+const quickLinks = [
+  { label: "Verification queue", to: paths.tpcVerification, icon: ClipboardCheck },
+  { label: "Awaiting TPC verification", to: paths.tpcSpcVerified, icon: CheckCircle2 },
+  { label: "Students", to: paths.tpcStudents, icon: Users },
+  { label: "SPC assignment", to: paths.tpcSpc, icon: UserCog },
+];
 
 /**
  * Purpose: /TPC - overview for the Training & Placement Coordinator, scoped to
@@ -22,9 +43,9 @@ export default function TpcDashboard() {
     return (
       <>
         <Topbar title="TPC overview" subtitle="Your department's verification pipeline." />
-        <div className="dashboard-content">
+        <PageContainer>
           <LoadingState label="Loading your department..." />
-        </div>
+        </PageContainer>
       </>
     );
   }
@@ -33,12 +54,12 @@ export default function TpcDashboard() {
     return (
       <>
         <Topbar title="TPC overview" subtitle="" />
-        <div className="dashboard-content">
+        <PageContainer>
           <ErrorState
             message={students.error?.message ?? "Could not load your department."}
             onRetry={students.refetch}
           />
-        </div>
+        </PageContainer>
       </>
     );
   }
@@ -50,51 +71,52 @@ export default function TpcDashboard() {
   return (
     <>
       <Topbar title="TPC overview" subtitle="Your department's verification pipeline." />
-      <div className="dashboard-content">
-        <div className="stats-row admin">
+      <PageContainer>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <StatCard
             label="Awaiting TPC review"
             value={String(awaitingCount)}
             note="SPC-verified + coordinators"
             icon={<CheckCircle2 />}
-            tone="amber"
           />
           <StatCard
             label="Rejected by SPC"
             value={String(rejectedCount)}
             note="In your verification queue"
             icon={<XCircle />}
-            tone="red"
           />
           <StatCard
             label="Department students"
             value={String(total)}
             note="Total in your department"
             icon={<Users />}
-            tone="blue"
           />
         </div>
 
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Quick links</h2>
-          </div>
-          <div className="quick-links">
-            <Link className="text-btn" to={paths.tpcVerification}>
-              Verification queue <ArrowRight size={15} />
-            </Link>
-            <Link className="text-btn" to={paths.tpcSpcVerified}>
-              Awaiting TPC verification <ArrowRight size={15} />
-            </Link>
-            <Link className="text-btn" to={paths.tpcStudents}>
-              Students <ArrowRight size={15} />
-            </Link>
-            <Link className="text-btn" to={paths.tpcSpc}>
-              SPC assignment <ArrowRight size={15} />
-            </Link>
-          </div>
-        </section>
-      </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Quick links</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            {quickLinks.map(({ label, to, icon: Icon }) => (
+              <Button
+                key={to}
+                asChild
+                variant="outline"
+                className="h-auto justify-between px-4 py-3"
+              >
+                <Link to={to}>
+                  <span className="flex items-center gap-2.5">
+                    <Icon className="size-4 text-muted-foreground" />
+                    {label}
+                  </span>
+                  <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+            ))}
+          </CardContent>
+        </Card>
+      </PageContainer>
     </>
   );
 }
