@@ -29,7 +29,7 @@ interface NavItem {
 /** The normal student navigation. Shared by the student role and the SPC role
  * (an SPC is also a student), so it is defined once and reused below. */
 const studentNav: NavItem[] = [
-  { label: "Overview", to: paths.student, icon: LayoutDashboard },
+  { label: "Dashboard", to: paths.student, icon: LayoutDashboard },
   { label: "My profile", to: paths.studentProfile, icon: FileText },
   { label: "Placement drives", to: paths.studentDrives, icon: Megaphone },
   { label: "Announcements", to: paths.studentAnnouncements, icon: Newspaper },

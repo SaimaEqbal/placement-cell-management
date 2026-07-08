@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCompleteRegistration, useVerifyInvitation } from "../../hooks/useInvitations";
-import { DEPARTMENT_OPTIONS, validateConfirmPassword, validateFullName, validatePassword, validatePhone } from "../../lib/validation";
+import { DEPARTMENT_BRANCHES, DEPARTMENT_OPTIONS, validateConfirmPassword, validateDepartment, validateFullName, validatePassword, validatePhone } from "../../lib/validation";
 import { paths } from "../../routes/paths";
 
 interface FieldErrors { name?: string; phone?: string; department?: string; password?: string; confirmPassword?: string; }
@@ -31,6 +31,7 @@ export default function InviteRegisterPage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [department, setDepartment] = useState("");
+  const [branch, setBranch] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -42,7 +43,7 @@ export default function InviteRegisterPage() {
     const nextErrors: FieldErrors = {
       name: validateFullName(name),
       phone: validatePhone(phone),
-      department: department ? undefined : "Select a department.",
+      department: validateDepartment(department),
       password: validatePassword(password),
       confirmPassword: validateConfirmPassword(password, confirmPassword),
     };
@@ -51,7 +52,9 @@ export default function InviteRegisterPage() {
 
     complete.mutate({
       token,
-      payload: { name: name.trim(), phone: phone.trim(), department, password },
+      /** branch is optional (tpc.branch is nullable) - omit it when left blank
+       * so the backend stores NULL rather than an empty string. */
+      payload: { name: name.trim(), phone: phone.trim(), department, branch: branch || undefined, password },
     });
   }
 
@@ -168,7 +171,14 @@ export default function InviteRegisterPage() {
               label="Department"
               error={errors.department}
             >
-              <Select value={department} onValueChange={setDepartment}>
+              <Select
+                value={department}
+                onValueChange={(value) => {
+                  setDepartment(value);
+                  /** Changing the department clears the branch - the old branch may not belong to the new department. */
+                  setBranch("");
+                }}
+              >
                 <SelectTrigger id="department">
                   <SelectValue placeholder="Select your department..." />
                 </SelectTrigger>
@@ -181,6 +191,23 @@ export default function InviteRegisterPage() {
                 </SelectContent>
               </Select>
             </AuthField>
+
+            {department && (
+              <AuthField id="branch" label="Branch (optional)">
+                <Select value={branch} onValueChange={setBranch}>
+                  <SelectTrigger id="branch">
+                    <SelectValue placeholder="Select your branch..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(DEPARTMENT_BRANCHES[department] ?? []).map((b) => (
+                      <SelectItem key={b} value={b}>
+                        {b}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </AuthField>
+            )}
 
             <PasswordField
               id="password"

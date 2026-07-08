@@ -26,7 +26,9 @@ export default function ForgotPasswordPage() {
       return;
     }
     setFieldError(undefined);
-    forgotMutation.mutate(email.trim());
+    /** Lowercased to match the canonical form stored at signup - the backend
+     * lookup is case-sensitive, so a mixed-case entry would silently find nothing. */
+    forgotMutation.mutate(email.trim().toLowerCase());
   }
 
   return (

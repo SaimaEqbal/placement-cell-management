@@ -2,29 +2,27 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { ApiError } from "../api/apiError";
 import {
-  approveApplication,
+  confirmStudents,
   createDrive,
   deleteDrive,
-  getDriveApplicants,
   getDriveById,
-  getDriveResults,
+  getDriveStudents,
   getDrives,
-  markNotSelected,
-  markSelected,
-  rejectApplication,
-  updateApplicationRound,
+  markStudentRejected,
+  markStudentSelected,
+  removeDriveStudent,
   updateDrive,
   type CreateDrivePayload,
-  type DriveApplicant,
   type DriveRecord,
-  type DriveResult,
+  type DriveStudent,
+  type DriveWithEligible,
   type UpdateDrivePayload,
 } from "../services/driveService";
 import { queryKeys } from "./queryKeys";
 
-/** Purpose: TanStack Query wrappers over driveService.ts - drive CRUD plus the Admin/TPC application-review pipeline. Mirrors useCompanies.ts: one shared cache per resource, and every mutation invalidates the keys it affects. */
+/** Purpose: TanStack Query wrappers over driveService.ts - drive CRUD plus the admin shortlist pipeline (confirm eligible students, then select/reject/remove them). Mirrors useCompanies.ts: one shared cache per resource, and every mutation invalidates the keys it affects. */
 
-/** Purpose: GET /drive - list all drives. Shared by student/Admin/TPC drive pages. */
+/** Purpose: GET /drive - list all drives. Shared by student/Admin drive pages. */
 export function useDrives() {
   return useQuery<DriveRecord[], ApiError>({
     queryKey: queryKeys.drives,
@@ -41,11 +39,11 @@ export function useDrive(id: number | string | undefined) {
   });
 }
 
-/** Purpose: POST /drive - create a drive. Invalidates the drives list on success. */
+/** Purpose: POST /drive - create a drive. Returns { drive, eligibleStudents } for the admin to review; invalidates the drives list on success. */
 export function useCreateDrive() {
   const queryClient = useQueryClient();
 
-  return useMutation<DriveRecord, ApiError, CreateDrivePayload>({
+  return useMutation<DriveWithEligible, ApiError, CreateDrivePayload>({
     mutationFn: createDrive,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.drives });
@@ -53,12 +51,12 @@ export function useCreateDrive() {
   });
 }
 
-/** Purpose: PUT /drive/:driveId - edit a drive. Invalidates the list and that drive's detail. */
+/** Purpose: PUT /drive/:driveId - edit a drive. The backend clears the old shortlist and returns a fresh eligible list, so we invalidate the list, that drive's detail, and its (now empty) confirmed students. */
 export function useUpdateDrive() {
   const queryClient = useQueryClient();
 
   return useMutation<
-    DriveRecord,
+    DriveWithEligible,
     ApiError,
     { id: number | string; payload: UpdateDrivePayload }
   >({
@@ -66,6 +64,9 @@ export function useUpdateDrive() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.drives });
       queryClient.invalidateQueries({ queryKey: queryKeys.drive(variables.id) });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.driveStudents(variables.id),
+      });
     },
   });
 }
@@ -82,92 +83,73 @@ export function useDeleteDrive() {
   });
 }
 
-/** Purpose: GET /drive/:driveId/applications - applicants for a drive. */
-export function useDriveApplicants(driveId: number | string | undefined) {
-  return useQuery<DriveApplicant[], ApiError>({
-    queryKey: queryKeys.driveApplicants(driveId ?? "unknown"),
-    queryFn: () => getDriveApplicants(driveId as number | string),
+/** Purpose: GET /drive/:driveId/students - the confirmed shortlist for a drive. */
+export function useDriveStudents(driveId: number | string | undefined) {
+  return useQuery<DriveStudent[], ApiError>({
+    queryKey: queryKeys.driveStudents(driveId ?? "unknown"),
+    queryFn: () => getDriveStudents(driveId as number | string),
     enabled: driveId !== undefined,
   });
 }
 
-/** Purpose: GET /drive/:driveId/results - final results roster for a drive. */
-export function useDriveResults(driveId: number | string | undefined) {
-  return useQuery<DriveResult[], ApiError>({
-    queryKey: queryKeys.driveResults(driveId ?? "unknown"),
-    queryFn: () => getDriveResults(driveId as number | string),
-    enabled: driveId !== undefined,
-  });
-}
-
-/** The five mutations below all act on a single application within a drive. They take the driveId only so onSuccess can refresh that drive's applicant and results caches; it is not sent to the backend (the endpoints key off applicationId). */
-
-/** Purpose: PUT /drive/applications/:applicationId/approve. */
-export function useApproveApplication(driveId: number | string) {
-  const queryClient = useQueryClient();
-
-  return useMutation<DriveApplicant, ApiError, number | string>({
-    mutationFn: approveApplication,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.driveApplicants(driveId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.driveResults(driveId) });
-    },
-  });
-}
-
-/** Purpose: PUT /drive/applications/:applicationId/reject. */
-export function useRejectApplication(driveId: number | string) {
-  const queryClient = useQueryClient();
-
-  return useMutation<DriveApplicant, ApiError, number | string>({
-    mutationFn: rejectApplication,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.driveApplicants(driveId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.driveResults(driveId) });
-    },
-  });
-}
-
-/** Purpose: PUT /drive/applications/:applicationId/round - advance an applicant to a round. */
-export function useUpdateApplicationRound(driveId: number | string) {
+/** Purpose: POST /drive/:driveId/confirm-students - persist the reviewed shortlist. Invalidates that drive's confirmed students so the roster refreshes. */
+export function useConfirmStudents() {
   const queryClient = useQueryClient();
 
   return useMutation<
-    DriveApplicant,
+    { message: string },
     ApiError,
-    { applicationId: number | string; currentRound: number }
+    { driveId: number | string; studentIds: Array<number | string> }
   >({
-    mutationFn: ({ applicationId, currentRound }) =>
-      updateApplicationRound(applicationId, currentRound),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.driveApplicants(driveId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.driveResults(driveId) });
+    mutationFn: ({ driveId, studentIds }) => confirmStudents(driveId, studentIds),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.driveStudents(variables.driveId),
+      });
     },
   });
 }
 
-/** Purpose: PUT /drive/applications/:applicationId/select - mark an applicant finally selected. */
-export function useMarkSelected(driveId: number | string) {
+/** The three mutations below act on one confirmed student (drive_students row). They take the driveId only so onSuccess can refresh that drive's roster; the endpoints key off driveStudentId. */
+
+/** Purpose: PATCH /drive/students/:driveStudentId/select. */
+export function useMarkStudentSelected(driveId: number | string) {
   const queryClient = useQueryClient();
 
-  return useMutation<DriveApplicant, ApiError, number | string>({
-    mutationFn: markSelected,
+  return useMutation<DriveStudent, ApiError, number | string>({
+    mutationFn: markStudentSelected,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.driveApplicants(driveId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.driveResults(driveId) });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.driveStudents(driveId),
+      });
     },
   });
 }
 
-/** Purpose: PUT /drive/applications/:applicationId/not-select - mark an applicant not selected. */
-export function useMarkNotSelected(driveId: number | string) {
+/** Purpose: PATCH /drive/students/:driveStudentId/reject. */
+export function useMarkStudentRejected(driveId: number | string) {
   const queryClient = useQueryClient();
 
-  return useMutation<DriveApplicant, ApiError, number | string>({
-    mutationFn: markNotSelected,
+  return useMutation<DriveStudent, ApiError, number | string>({
+    mutationFn: markStudentRejected,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.driveApplicants(driveId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.driveResults(driveId) });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.driveStudents(driveId),
+      });
+    },
+  });
+}
+
+/** Purpose: DELETE /drive/students/:driveStudentId - remove a student from the shortlist. */
+export function useRemoveDriveStudent(driveId: number | string) {
+  const queryClient = useQueryClient();
+
+  return useMutation<{ message: string }, ApiError, number | string>({
+    mutationFn: removeDriveStudent,
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.driveStudents(driveId),
+      });
     },
   });
 }

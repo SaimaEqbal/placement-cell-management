@@ -7,13 +7,11 @@ export const queryKeys = {
   company: (id: number | string) => ["companies", "detail", id] as const,
   drives: ["drives", "list"] as const,
   drive: (id: number | string) => ["drives", "detail", id] as const,
-  driveApplicants: (driveId: number | string) =>
-    ["drives", "applicants", driveId] as const,
-  driveResults: (driveId: number | string) =>
-    ["drives", "results", driveId] as const,
-  applications: ["applications", "list"] as const,
-  studentApplications: (studentId: number | string) =>
-    ["applications", "student", studentId] as const,
+  // Confirmed shortlist for a drive (the `drive_students` table). The old
+  // application-based `driveApplicants`/`driveResults`/`studentApplications`
+  // keys were removed with the applications workflow.
+  driveStudents: (driveId: number | string) =>
+    ["drives", "students", driveId] as const,
   notifications: ["notifications", "list"] as const,
   companyPosts: ["companyPosts", "list"] as const,
   companyPost: (id: number | string) => ["companyPosts", "detail", id] as const,

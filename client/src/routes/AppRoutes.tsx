@@ -29,7 +29,7 @@ import TpcSpcPage from "../pages/tpc/TpcSpcPage";
 import AdminDashboard from "../pages/admin/AdminDashboard";
 import CompaniesPage from "../pages/admin/CompaniesPage";
 import DrivesPage from "../pages/admin/DrivesPage";
-import DriveApplicantsPage from "../pages/admin/DriveApplicantsPage";
+import DriveStudentsPage from "../pages/admin/DriveStudentsPage";
 import AdminStudentsPage from "../pages/admin/AdminStudentsPage";
 import InvitationsPage from "../pages/admin/InvitationsPage";
 import CompanyPostsPage from "../pages/admin/CompanyPostsPage";
@@ -147,7 +147,7 @@ export default function AppRoutes() {
           <Route path={paths.adminDrives} element={<DrivesPage />} />
           <Route
             path={`${paths.adminDrives}/:driveId`}
-            element={<DriveApplicantsPage />}
+            element={<DriveStudentsPage />}
           />
           <Route path={paths.adminStudents} element={<AdminStudentsPage />} />
           <Route path={paths.adminInvitations} element={<InvitationsPage />} />

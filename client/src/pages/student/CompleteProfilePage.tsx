@@ -27,7 +27,23 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { useCreateProfile, useProfile, useUpdateProfile } from "../../hooks/useProfile";
 import { capitalize, toLowerTrim, toTitleCase, toUpperTrim } from "../../lib/format";
-import { DEPARTMENT_BRANCHES, DEPARTMENT_OPTIONS, SEMESTERS } from "../../lib/validation";
+import { computeCgpa, computeCgpaRounded } from "../../lib/cgpa";
+import {
+  DEPARTMENT_BRANCHES,
+  DEPARTMENT_OPTIONS,
+  SEMESTERS,
+  validateBranch,
+  validateDateOfBirth,
+  validateDepartment,
+  validateFullName,
+  validateGraduationYear,
+  validatePercentage,
+  validatePhone,
+  validateRequired,
+  validateRollNumber,
+  validateSemester,
+  validateSpi,
+} from "../../lib/validation";
 import { paths } from "../../routes/paths";
 import type { CreateStudentPayload } from "../../services/studentService";
 
@@ -63,7 +79,6 @@ export default function CompleteProfilePage() {
   const [department, setDepartment] = useState("");
   const [branch, setBranch] = useState("");
   const [phone, setPhone] = useState("");
-  const [cgpa, setCgpa] = useState("");
   const [graduationYear, setGraduationYear] = useState("");
   const [semester, setSemester] = useState("");
   const [tenthPercentage, setTenthPercentage] = useState("");
@@ -102,7 +117,6 @@ export default function CompleteProfilePage() {
       setDepartment(profile.department ?? "");
       setBranch(profile.branch ?? "");
       setPhone(profile.phone ?? "");
-      setCgpa(profile.cgpa ?? "");
       setGraduationYear(profile.graduation_year ? String(profile.graduation_year) : "");
       setSemester(profile.semester ? String(profile.semester) : "");
       setTenthPercentage(profile.tenth_percentage ?? "");
@@ -149,31 +163,35 @@ export default function CompleteProfilePage() {
     event.preventDefault();
 
     /**
-     * Per-field required check so the error names the EXACT missing field
-     * instead of lumping all four together.
+     * All field rules live in lib/validation.ts so this form validates against
+     * the same source of truth as the rest of the app. Show the first failing
+     * field so the message names exactly what's wrong.
      */
-    const missing: string[] = [];
-    if (!name.trim()) missing.push("Full name");
-    if (!rollNo.trim()) missing.push("Roll number");
-    if (!email.trim()) missing.push("Institutional email");
-    if (!department) missing.push("Department");
-    if (!branch) missing.push("Branch");
-    if (!semester) missing.push("Current semester");
-    if (!tenthPercentage.trim()) missing.push("10th percentage");
-    if (!twelfthPercentage.trim()) missing.push("12th percentage");
-    // A student in semester n must provide SPIs for every completed semester (1..n-1).
     const sem = Number(semester);
-    if (sem >= 5) {
+    const checks: (string | undefined)[] = [
+      validateFullName(name),
+      validateRollNumber(rollNo),
+      validatePhone(phone),
+      validateDepartment(department),
+      validateBranch(branch),
+      validateSemester(semester),
+      validateGraduationYear(graduationYear),
+      validatePercentage(tenthPercentage, "10th percentage"),
+      validatePercentage(twelfthPercentage, "12th percentage"),
+      validateDateOfBirth(dateOfBirth),
+      validateRequired(gender, "Gender"),
+      validateRequired(region, "Region"),
+      validateRequired(religion, "Religion"),
+    ];
+    // A student in semester n must provide SPIs for every completed semester (1..n-1).
+    if (Number.isFinite(sem)) {
       for (let i = 1; i < sem; i++) {
-        if (!spi[i - 1]?.trim()) missing.push(`Semester ${i} SPI`);
+        checks.push(validateSpi(spi[i - 1] ?? "", `Semester ${i} SPI`));
       }
     }
-    if (missing.length > 0) {
-      setFormError(
-        missing.length === 1
-          ? `${missing[0]} is required.`
-          : `Required: ${missing.join(", ")}.`,
-      );
+    const firstError = checks.find(Boolean);
+    if (firstError) {
+      setFormError(firstError);
       return;
     }
     setFormError(undefined);
@@ -193,9 +211,10 @@ export default function CompleteProfilePage() {
       phone: phone.trim(),
       branch,
       department,
-      graduation_year: Number(graduationYear) || new Date().getFullYear(),
+      graduation_year: Number(graduationYear),
       semester: Number(semester),
-      cgpa: Number(cgpa) || 0,
+      /** CGPA is derived from the SPIs (weighted average over completed semesters) - never entered by the student. */
+      cgpa: computeCgpaRounded(spi, sem) ?? 0,
       tenth_percentage: Number(tenthPercentage) || 0,
       twelfth_percentage: Number(twelfthPercentage) || 0,
       gender,
@@ -231,6 +250,8 @@ export default function CompleteProfilePage() {
 
   const mutation = profile ? updateMutation : createMutation;
   const sem = Number(semester);
+  /** Live weighted-average CGPA from the entered SPIs, shown read-only (never edited). */
+  const computedCgpa = computeCgpa(spi, sem);
 
   if (isLoading) {
     return (
@@ -406,15 +427,16 @@ export default function CompleteProfilePage() {
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="CGPA" htmlFor="cgpa">
+              <Field
+                label="CGPA (auto-calculated)"
+                htmlFor="cgpa"
+                hint="Weighted average of your semester SPIs — calculated for you, not editable."
+              >
                 <Input
                   id="cgpa"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="10"
-                  value={cgpa}
-                  onChange={(e) => setCgpa(e.target.value)}
+                  readOnly
+                  value={computedCgpa !== null ? computedCgpa.toFixed(2) : "—"}
+                  className="bg-muted text-muted-foreground"
                 />
               </Field>
               <Field label="10th percentage" htmlFor="tenth">

@@ -19,9 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useApplyForDrive } from "../../hooks/useApplications";
 import { useCompanies } from "../../hooks/useCompanies";
-import { useDrives } from "../../hooks/useDrives";
+import { useConfirmStudents, useDrives } from "../../hooks/useDrives";
 import { useStudents } from "../../hooks/useStudents";
 import { DEPARTMENTS } from "../../lib/validation";
 
@@ -29,14 +28,14 @@ import { DEPARTMENTS } from "../../lib/validation";
  * Purpose: /Admin/students - the UPC/Admin "Filter Students" + "Shortlist
  * Students" screen. Filtering (branch, minimum CGPA, no-active-backlogs) happens
  * client-side over the cached GET /students list. Shortlisting a student into
- * the selected drive calls POST /application/apply/:driveId (useApplyForDrive) -
- * the same endpoint a student uses to apply for themselves.
+ * the selected drive calls POST /drive/:driveId/confirm-students (useConfirmStudents),
+ * adding that one student to the drive's confirmed shortlist (drive_students).
  */
 export default function AdminStudentsPage() {
   const { data: students, isLoading, isError, error, refetch } = useStudents();
   const { data: companies } = useCompanies();
   const { data: drives } = useDrives();
-  const applyForDrive = useApplyForDrive();
+  const confirmStudents = useConfirmStudents();
 
   const [search, setSearch] = useState("");
   const [branch, setBranch] = useState("");
@@ -63,7 +62,7 @@ export default function AdminStudentsPage() {
   function handleShortlist(studentId: number) {
     if (!driveId) return;
     setShortlistedId(studentId);
-    applyForDrive.mutate({ driveId: Number(driveId), studentId });
+    confirmStudents.mutate({ driveId: Number(driveId), studentIds: [studentId] });
   }
 
   return (
@@ -165,7 +164,7 @@ export default function AdminStudentsPage() {
                     variant="outline"
                     size="sm"
                     type="button"
-                    disabled={!driveId || applyForDrive.isPending}
+                    disabled={!driveId || confirmStudents.isPending}
                     onClick={() => handleShortlist(s.id)}
                   >
                     <UserCheck /> Shortlist
@@ -174,17 +173,17 @@ export default function AdminStudentsPage() {
               />
             )}
 
-            {applyForDrive.isError && shortlistedId !== null && (
+            {confirmStudents.isError && shortlistedId !== null && (
               <Alert variant="destructive">
                 <AlertDescription>
-                  Could not shortlist this student: {applyForDrive.error.message}
+                  Could not shortlist this student: {confirmStudents.error.message}
                 </AlertDescription>
               </Alert>
             )}
-            {applyForDrive.isSuccess && shortlistedId !== null && (
+            {confirmStudents.isSuccess && shortlistedId !== null && (
               <Alert>
                 <AlertDescription>
-                  Student shortlisted into the selected drive.
+                  Student added to the selected drive's shortlist.
                 </AlertDescription>
               </Alert>
             )}
