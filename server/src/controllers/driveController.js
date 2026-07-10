@@ -23,7 +23,6 @@ async function getEligibleStudentsForDrive(drive) {
      FROM students
      WHERE
         review_status = 'verified'
-        AND placement_status = 'unplaced'
         AND cgpa >= $1
         AND active_backlogs <= $2
         AND passive_backlogs <= $3
