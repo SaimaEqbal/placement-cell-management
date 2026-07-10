@@ -150,6 +150,10 @@ export default function AppRoutes() {
             element={<DriveStudentsPage />}
           />
           <Route path={paths.adminStudents} element={<AdminStudentsPage />} />
+          <Route
+            path={`${paths.adminStudents}/:studentId`}
+            element={<StudentVerificationDetailPage mode="view" />}
+          />
           <Route path={paths.adminInvitations} element={<InvitationsPage />} />
           <Route path={paths.adminPosts} element={<CompanyPostsPage />} />
         </Route>

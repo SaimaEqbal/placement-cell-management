@@ -12,6 +12,7 @@ import {
   XCircle,
 } from "lucide-react";
 
+import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
 import { InfoGrid } from "@/components/dashboard/InfoGrid";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { ErrorState, LoadingState } from "@/components/dashboard/states";
@@ -24,7 +25,7 @@ import {
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { useStudent } from "../../hooks/useStudents";
+import { useStudent, useDeleteStudent } from "../../hooks/useStudents";
 import {
   useDemoteSpc,
   usePromoteSpc,
@@ -42,8 +43,10 @@ import { reviewStatusLabel, reviewStatusTone } from "../../lib/reviewStatus";
  * /TPC/students/:studentId - the shared review + action screen.
  *
  * `role` selects which verify/reject endpoint fires (SPC vs TPC). `mode`
- * selects the action set: "verify" (approve/reject, the default) or "manage"
- * (the TPC roster's delete / promote-to-SPC / demote actions).
+ * selects the action set: "verify" (approve/reject, the default), "manage"
+ * (the TPC roster's delete / promote-to-SPC / demote actions), or "view"
+ * (the Admin's read-only view with only a delete action - the admin doesn't
+ * verify, promote or demote; role is irrelevant here).
  *
  * The queue/roster pages pass `{ ids, backPath }` via router state so this page
  * can offer a "Next student" button and return to the right list.
@@ -82,8 +85,8 @@ export default function StudentVerificationDetailPage({
   role,
   mode = "verify",
 }: {
-  role: "SPC" | "TPC";
-  mode?: "verify" | "manage";
+  role?: "SPC" | "TPC";
+  mode?: "verify" | "manage" | "view";
 }) {
   const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
@@ -100,7 +103,11 @@ export default function StudentVerificationDetailPage({
   // Manage-mode mutations
   const promote = usePromoteSpc();
   const demote = useDemoteSpc();
-  const removeStudent = useTpcDeleteStudent();
+  const tpcRemoveStudent = useTpcDeleteStudent();
+  const adminRemoveStudent = useDeleteStudent();
+  /** Admin "view" mode deletes via the plain /students endpoint (invalidates the
+   * admin list); TPC "manage" mode uses the TPC-scoped delete. Same signature. */
+  const removeStudent = mode === "view" ? adminRemoveStudent : tpcRemoveStudent;
 
   const [rejecting, setRejecting] = useState(false);
   const [remarks, setRemarks] = useState("");
@@ -145,21 +152,19 @@ export default function StudentVerificationDetailPage({
     rejectMutation.mutate({ id: studentId, reason: remarks.trim() }, { onSuccess: afterAction });
   }
 
+  /** Confirmation is handled by the ConfirmDialog wrapping each trigger button. */
   function handleDelete() {
     if (!studentId) return;
-    if (!window.confirm("Delete this student permanently? This cannot be undone.")) return;
     removeStudent.mutate(studentId, { onSuccess: () => navigate(backPath) });
   }
 
   function handlePromote() {
     if (!studentId) return;
-    if (!window.confirm("Promote this student to SPC?")) return;
     promote.mutate(studentId, { onSuccess: () => navigate(backPath) });
   }
 
   function handleDemote() {
     if (!studentId) return;
-    if (!window.confirm("Demote this SPC back to a student?")) return;
     demote.mutate(studentId, { onSuccess: () => navigate(backPath) });
   }
 
@@ -205,7 +210,7 @@ export default function StudentVerificationDetailPage({
   return (
     <>
       <DetailHeader
-        title={mode === "manage" ? "Student details" : "Review student record"}
+        title={mode === "verify" ? "Review student record" : "Student details"}
         subtitle={student.roll_no}
         onBack={() => navigate(backPath)}
       />
@@ -384,6 +389,28 @@ export default function StudentVerificationDetailPage({
                 </div>
               </CardContent>
             </Card>
+          ) : mode === "view" ? (
+            <Card>
+              <CardContent className="flex flex-col gap-3 p-4">
+                {removeStudent.error && (
+                  <p className="text-sm text-destructive">
+                    {removeStudent.error.message}
+                  </p>
+                )}
+                <ConfirmDialog
+                  trigger={
+                    <Button variant="destructive" type="button" disabled={busy}>
+                      <Trash2 /> Delete student
+                    </Button>
+                  }
+                  title="Delete this student?"
+                  description="This permanently deletes the student record. This action cannot be undone."
+                  confirmLabel="Delete"
+                  destructive
+                  onConfirm={handleDelete}
+                />
+              </CardContent>
+            </Card>
           ) : (
             <Card>
               <CardContent className="flex flex-col gap-3 p-4">
@@ -391,17 +418,42 @@ export default function StudentVerificationDetailPage({
                   <p className="text-sm text-destructive">{manageError.message}</p>
                 )}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Button variant="destructive" type="button" onClick={handleDelete} disabled={busy}>
-                    <Trash2 /> Delete
-                  </Button>
+                  <ConfirmDialog
+                    trigger={
+                      <Button variant="destructive" type="button" disabled={busy}>
+                        <Trash2 /> Delete
+                      </Button>
+                    }
+                    title="Delete this student?"
+                    description="This permanently deletes the student record. This action cannot be undone."
+                    confirmLabel="Delete"
+                    destructive
+                    onConfirm={handleDelete}
+                  />
                   {student.is_spc ? (
-                    <Button variant="secondary" type="button" onClick={handleDemote} disabled={busy}>
-                      <UserMinus /> Demote from SPC
-                    </Button>
+                    <ConfirmDialog
+                      trigger={
+                        <Button variant="secondary" type="button" disabled={busy}>
+                          <UserMinus /> Demote from SPC
+                        </Button>
+                      }
+                      title="Demote this SPC?"
+                      description="They will return to being a regular student and lose verification access."
+                      confirmLabel="Demote"
+                      onConfirm={handleDemote}
+                    />
                   ) : (
-                    <Button type="button" onClick={handlePromote} disabled={busy}>
-                      <ShieldCheck /> Promote to SPC
-                    </Button>
+                    <ConfirmDialog
+                      trigger={
+                        <Button type="button" disabled={busy}>
+                          <ShieldCheck /> Promote to SPC
+                        </Button>
+                      }
+                      title="Promote this student to SPC?"
+                      description="They will be able to verify other students in their department."
+                      confirmLabel="Promote"
+                      onConfirm={handlePromote}
+                    />
                   )}
                 </div>
               </CardContent>

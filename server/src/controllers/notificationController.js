@@ -2,8 +2,8 @@ import pool from "../config/db.js";
 
 /**
  * Purpose: internal helper for other controllers to raise a notification for
- * a user (e.g. driveController on createDrive, applicationController on
- * status changes). Not exposed as a route - called directly from JS.
+ * a user (e.g. the SPC/TPC verification flow on status changes). Not exposed
+ * as a route - called directly from JS.
  * Kept here rather than in a separate service file so every notifications
  * query lives in one place, matching how the rest of this codebase groups
  * table access by controller.

@@ -18,6 +18,12 @@ export type EmploymentType = "FTE" | "Internship" | "Internship + PPO";
 /** Lifecycle status of a drive (server/src/migrations/010_create_drives.sql). */
 export type DriveStatus = "upcoming" | "ongoing" | "completed" | "cancelled";
 
+/** Authoritative round-workflow state of a drive (server/src/migrations/024). */
+export type DriveState = "SHORTLISTING" | "ROUND_IN_PROGRESS" | "COMPLETED";
+
+/** Sub-stage within an in-progress round (rounds >= 1); null while shortlisting. */
+export type RoundStage = "PREFILTER" | "ATTENDANCE" | "RESULT";
+
 /** Shape of a row from the `drives` table (server/src/migrations/010_create_drives.sql). */
 export interface DriveRecord {
   drive_id: number;
@@ -26,8 +32,6 @@ export interface DriveRecord {
   job_description: string | null;
   package_ctc: string | number | null;
   employment_type: EmploymentType;
-  drive_date: string;
-  application_deadline: string;
   minimum_cgpa: string | number;
   allowed_branches: string[];
   max_active_backlogs: number;
@@ -37,6 +41,10 @@ export interface DriveRecord {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  current_round: number;
+  drive_state: DriveState;
+  round_stage: RoundStage | null;
+  is_locked: boolean;
 }
 
 /**
@@ -50,8 +58,6 @@ export interface CreateDrivePayload {
   job_description?: string;
   package_ctc?: number;
   employment_type: EmploymentType;
-  drive_date: string; // "YYYY-MM-DD"
-  application_deadline: string; // "YYYY-MM-DD"
   minimum_cgpa: number;
   allowed_branches: string[];
   max_active_backlogs?: number;
@@ -83,14 +89,28 @@ export interface EligibleStudent {
   passive_backlogs: number;
 }
 
-/** Workflow status of a confirmed student inside a drive (`drive_students.status`). */
-export type DriveStudentStatus = "shortlisted" | "selected" | "not_selected";
+/**
+ * Current state of a confirmed student inside a drive (`drive_students.status`,
+ * server/src/migrations/025_drive_students_status.sql - uppercase vocabulary).
+ */
+export type DriveStudentStatus =
+  | "SHORTLISTED"
+  | "ACTIVE"
+  | "SELECTED"
+  | "REJECTED"
+  | "ABSENT"
+  | "REMOVED"
+  | "PLACED";
+
+/** Transient per-round attendance mark. */
+export type AttendanceMark = "PRESENT" | "ABSENT" | null;
 
 /** Shape of a row from GET /drive/:driveId/students (`drive_students` joined to students). */
 export interface DriveStudent {
   drive_student_id: number;
   current_round: number;
   status: DriveStudentStatus;
+  attendance_mark: AttendanceMark;
   remarks: string | null;
   id: string | number;
   roll_no: string;
@@ -98,6 +118,63 @@ export interface DriveStudent {
   email: string;
   branch: string | null;
   cgpa: string | number | null;
+}
+
+/**
+ * A drive the current student has been shortlisted into, carrying the student's
+ * OWN status/round (GET /drive/my-drives). Never exposes other students.
+ */
+export interface MyDrive extends DriveRecord {
+  my_status: DriveStudentStatus;
+  my_current_round: number;
+}
+
+/** History stage/result of one of the student's own round events. */
+export type HistoryStage = "SHORTLIST" | "PREFILTER" | "ATTENDANCE" | "RESULT";
+export type HistoryResult =
+  | "SHORTLISTED"
+  | "REMOVED"
+  | "PRESENT"
+  | "ABSENT"
+  | "SELECTED"
+  | "REJECTED"
+  | "PLACED";
+
+/** One row of the current student's own progression in a drive (GET /drive/:id/my-results). */
+export interface MyDriveResult {
+  history_id: number;
+  round_no: number;
+  stage: HistoryStage;
+  result: HistoryResult;
+  reason: string | null;
+  recorded_at: string;
+}
+
+/** One row of a drive's per-round history for admins (GET /drive/:id/history), joined to the student. */
+export interface RoundHistoryRow {
+  history_id: number;
+  student_id: string | number;
+  round_no: number;
+  stage: HistoryStage;
+  result: HistoryResult;
+  reason: string | null;
+  recorded_at: string;
+  name: string;
+  roll_no: string;
+  branch: string | null;
+}
+
+/** Response of a round-workflow transition: the saved message plus the updated drive. */
+export interface DriveTransitionResult {
+  message: string;
+  drive: DriveRecord;
+}
+
+/** A round of a drive and its date (server/src/migrations/028_create_drive_rounds.sql). */
+export interface DriveRound {
+  round_no: number;
+  /** null = TBD. */
+  round_date: string | null;
 }
 
 /** Response body from POST /drive and PUT /drive/:driveId - the saved drive plus the freshly generated eligible list to review. */
@@ -168,23 +245,123 @@ export function confirmStudents(
     .then((res) => res.data);
 }
 
-/** Purpose: PATCH /drive/students/:driveStudentId/select - mark a confirmed student finally selected. */
-export function markStudentSelected(driveStudentId: number | string) {
+/** Purpose: GET /drive/my-drives - the drives the current student is shortlisted into (self-scoped). */
+export function getMyDrives() {
+  return axiosInstance.get<MyDrive[]>("/drive/my-drives").then((res) => res.data);
+}
+
+/** Purpose: GET /drive/:driveId/my-results - the current student's own round-by-round progression. */
+export function getMyDriveResults(driveId: number | string) {
   return axiosInstance
-    .patch<DriveStudent>(`/drive/students/${driveStudentId}/select`)
+    .get<MyDriveResult[]>(`/drive/${driveId}/my-results`)
     .then((res) => res.data);
 }
 
-/** Purpose: PATCH /drive/students/:driveStudentId/reject - mark a confirmed student not selected. */
-export function markStudentRejected(driveStudentId: number | string) {
+// --- Admin round-workflow transitions & actions ---------------------------
+
+/** Purpose: POST /drive/:driveId/start-round-0 - lock the drive and send the shortlist to the company. */
+export function startRoundZero(driveId: number | string) {
   return axiosInstance
-    .patch<DriveStudent>(`/drive/students/${driveStudentId}/reject`)
+    .post<DriveTransitionResult>(`/drive/${driveId}/start-round-0`)
     .then((res) => res.data);
 }
 
-/** Purpose: DELETE /drive/students/:driveStudentId - remove a student from the shortlist. */
-export function removeDriveStudent(driveStudentId: number | string) {
+/** Purpose: POST /drive/:driveId/finalize-prefilter - close pre-filter, open attendance (rounds >= 1). */
+export function finalizePrefilter(driveId: number | string) {
   return axiosInstance
-    .delete<{ message: string }>(`/drive/students/${driveStudentId}`)
+    .post<DriveTransitionResult>(`/drive/${driveId}/finalize-prefilter`)
+    .then((res) => res.data);
+}
+
+/** Purpose: POST /drive/:driveId/finalize-attendance - close attendance, open results. */
+export function finalizeAttendance(driveId: number | string) {
+  return axiosInstance
+    .post<DriveTransitionResult>(`/drive/${driveId}/finalize-attendance`)
+    .then((res) => res.data);
+}
+
+/** Purpose: POST /drive/:driveId/advance-round - open a fresh next round with the selected students. */
+export function advanceRound(driveId: number | string) {
+  return axiosInstance
+    .post<DriveTransitionResult>(`/drive/${driveId}/advance-round`)
+    .then((res) => res.data);
+}
+
+/** Purpose: POST /drive/:driveId/complete - place all selected students and finish the drive. */
+export function completeDrive(driveId: number | string) {
+  return axiosInstance
+    .post<DriveTransitionResult>(`/drive/${driveId}/complete`)
+    .then((res) => res.data);
+}
+
+/** Purpose: PATCH /drive/:driveId/students/:driveStudentId/prefilter - remove a student before a round (reason required). */
+export function prefilterRemoveStudent(
+  driveId: number | string,
+  driveStudentId: number | string,
+  reason: string,
+) {
+  return axiosInstance
+    .patch<{ message: string }>(
+      `/drive/${driveId}/students/${driveStudentId}/prefilter`,
+      { reason },
+    )
+    .then((res) => res.data);
+}
+
+/** Purpose: PATCH /drive/:driveId/students/:driveStudentId/attendance - mark present/absent. */
+export function markAttendance(
+  driveId: number | string,
+  driveStudentId: number | string,
+  present: boolean,
+) {
+  return axiosInstance
+    .patch<{ message: string }>(
+      `/drive/${driveId}/students/${driveStudentId}/attendance`,
+      { present },
+    )
+    .then((res) => res.data);
+}
+
+/** Purpose: PATCH /drive/:driveId/students/:driveStudentId/result - record a round result (reject needs a reason). */
+export function recordResult(
+  driveId: number | string,
+  driveStudentId: number | string,
+  result: "SELECTED" | "REJECTED",
+  reason?: string,
+) {
+  return axiosInstance
+    .patch<{ message: string }>(
+      `/drive/${driveId}/students/${driveStudentId}/result`,
+      { result, reason },
+    )
+    .then((res) => res.data);
+}
+
+/** Purpose: GET /drive/:driveId/history?round=N - a round's full history for every student (admin). */
+export function getRoundHistory(driveId: number | string, round?: number) {
+  return axiosInstance
+    .get<RoundHistoryRow[]>(`/drive/${driveId}/history`, {
+      params: round === undefined ? undefined : { round },
+    })
+    .then((res) => res.data);
+}
+
+/** Purpose: GET /drive/:driveId/rounds - every round of a drive with its date. */
+export function getDriveRounds(driveId: number | string) {
+  return axiosInstance
+    .get<DriveRound[]>(`/drive/${driveId}/rounds`)
+    .then((res) => res.data);
+}
+
+/** Purpose: PATCH /drive/:driveId/rounds/:roundNo/date - set/clear a round's date (notifies its students). */
+export function setRoundDate(
+  driveId: number | string,
+  roundNo: number,
+  round_date: string,
+) {
+  return axiosInstance
+    .patch<{ message: string }>(`/drive/${driveId}/rounds/${roundNo}/date`, {
+      round_date,
+    })
     .then((res) => res.data);
 }

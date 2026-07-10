@@ -8,14 +8,29 @@ import {
   getDriveById,
   getDriveStudents,
   getDrives,
-  markStudentRejected,
-  markStudentSelected,
-  removeDriveStudent,
+  getMyDrives,
+  getMyDriveResults,
+  startRoundZero,
+  finalizePrefilter,
+  finalizeAttendance,
+  advanceRound,
+  completeDrive,
+  prefilterRemoveStudent,
+  markAttendance,
+  recordResult,
+  getRoundHistory,
+  getDriveRounds,
+  setRoundDate,
   updateDrive,
   type CreateDrivePayload,
   type DriveRecord,
+  type DriveRound,
   type DriveStudent,
+  type DriveTransitionResult,
   type DriveWithEligible,
+  type MyDrive,
+  type MyDriveResult,
+  type RoundHistoryRow,
   type UpdateDrivePayload,
 } from "../services/driveService";
 import { queryKeys } from "./queryKeys";
@@ -110,46 +125,156 @@ export function useConfirmStudents() {
   });
 }
 
-/** The three mutations below act on one confirmed student (drive_students row). They take the driveId only so onSuccess can refresh that drive's roster; the endpoints key off driveStudentId. */
-
-/** Purpose: PATCH /drive/students/:driveStudentId/select. */
-export function useMarkStudentSelected(driveId: number | string) {
-  const queryClient = useQueryClient();
-
-  return useMutation<DriveStudent, ApiError, number | string>({
-    mutationFn: markStudentSelected,
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.driveStudents(driveId),
-      });
-    },
+/** Purpose: GET /drive/my-drives - the drives the current student is shortlisted into. */
+export function useMyDrives() {
+  return useQuery<MyDrive[], ApiError>({
+    queryKey: queryKeys.myDrives,
+    queryFn: getMyDrives,
   });
 }
 
-/** Purpose: PATCH /drive/students/:driveStudentId/reject. */
-export function useMarkStudentRejected(driveId: number | string) {
-  const queryClient = useQueryClient();
-
-  return useMutation<DriveStudent, ApiError, number | string>({
-    mutationFn: markStudentRejected,
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.driveStudents(driveId),
-      });
-    },
+/** Purpose: GET /drive/:driveId/my-results - the current student's own round-by-round progression. */
+export function useMyDriveResults(driveId: number | string | undefined) {
+  return useQuery<MyDriveResult[], ApiError>({
+    queryKey: queryKeys.myDriveResults(driveId ?? "unknown"),
+    queryFn: () => getMyDriveResults(driveId as number | string),
+    enabled: driveId !== undefined,
   });
 }
 
-/** Purpose: DELETE /drive/students/:driveStudentId - remove a student from the shortlist. */
-export function useRemoveDriveStudent(driveId: number | string) {
+/**
+ * The round-workflow mutations below all change a drive's state and/or its
+ * students' rows, so each refreshes that drive's detail (drive_state/round_stage)
+ * and its roster. A shared helper keeps the invalidation consistent.
+ */
+function useDriveWorkflowInvalidator(driveId: number | string) {
   const queryClient = useQueryClient();
+  return () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.drive(driveId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.driveStudents(driveId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.drives });
+  };
+}
 
-  return useMutation<{ message: string }, ApiError, number | string>({
-    mutationFn: removeDriveStudent,
+/** Purpose: POST /drive/:driveId/start-round-0. */
+export function useStartRoundZero(driveId: number | string) {
+  const invalidate = useDriveWorkflowInvalidator(driveId);
+  return useMutation<DriveTransitionResult, ApiError, void>({
+    mutationFn: () => startRoundZero(driveId),
+    onSuccess: invalidate,
+  });
+}
+
+/** Purpose: POST /drive/:driveId/finalize-prefilter. */
+export function useFinalizePrefilter(driveId: number | string) {
+  const invalidate = useDriveWorkflowInvalidator(driveId);
+  return useMutation<DriveTransitionResult, ApiError, void>({
+    mutationFn: () => finalizePrefilter(driveId),
+    onSuccess: invalidate,
+  });
+}
+
+/** Purpose: POST /drive/:driveId/finalize-attendance. */
+export function useFinalizeAttendance(driveId: number | string) {
+  const invalidate = useDriveWorkflowInvalidator(driveId);
+  return useMutation<DriveTransitionResult, ApiError, void>({
+    mutationFn: () => finalizeAttendance(driveId),
+    onSuccess: invalidate,
+  });
+}
+
+/** Purpose: POST /drive/:driveId/advance-round. */
+export function useAdvanceRound(driveId: number | string) {
+  const invalidate = useDriveWorkflowInvalidator(driveId);
+  return useMutation<DriveTransitionResult, ApiError, void>({
+    mutationFn: () => advanceRound(driveId),
+    onSuccess: invalidate,
+  });
+}
+
+/** Purpose: POST /drive/:driveId/complete. */
+export function useCompleteDrive(driveId: number | string) {
+  const invalidate = useDriveWorkflowInvalidator(driveId);
+  return useMutation<DriveTransitionResult, ApiError, void>({
+    mutationFn: () => completeDrive(driveId),
+    onSuccess: invalidate,
+  });
+}
+
+/** Purpose: PATCH .../prefilter - remove one student before a round (reason required). */
+export function usePrefilterRemove(driveId: number | string) {
+  const invalidate = useDriveWorkflowInvalidator(driveId);
+  return useMutation<
+    { message: string },
+    ApiError,
+    { driveStudentId: number | string; reason: string }
+  >({
+    mutationFn: ({ driveStudentId, reason }) =>
+      prefilterRemoveStudent(driveId, driveStudentId, reason),
+    onSuccess: invalidate,
+  });
+}
+
+/** Purpose: PATCH .../attendance - mark one student present/absent. */
+export function useMarkAttendance(driveId: number | string) {
+  const invalidate = useDriveWorkflowInvalidator(driveId);
+  return useMutation<
+    { message: string },
+    ApiError,
+    { driveStudentId: number | string; present: boolean }
+  >({
+    mutationFn: ({ driveStudentId, present }) =>
+      markAttendance(driveId, driveStudentId, present),
+    onSuccess: invalidate,
+  });
+}
+
+/** Purpose: PATCH .../result - record one student's round result (reject needs a reason). */
+export function useRecordResult(driveId: number | string) {
+  const invalidate = useDriveWorkflowInvalidator(driveId);
+  return useMutation<
+    { message: string },
+    ApiError,
+    { driveStudentId: number | string; result: "SELECTED" | "REJECTED"; reason?: string }
+  >({
+    mutationFn: ({ driveStudentId, result, reason }) =>
+      recordResult(driveId, driveStudentId, result, reason),
+    onSuccess: invalidate,
+  });
+}
+
+/** Purpose: GET /drive/:driveId/history?round=N - one round's full history (admin). */
+export function useRoundHistory(
+  driveId: number | string | undefined,
+  round: number | undefined,
+) {
+  return useQuery<RoundHistoryRow[], ApiError>({
+    queryKey: queryKeys.driveHistory(driveId ?? "unknown", round ?? "all"),
+    queryFn: () => getRoundHistory(driveId as number | string, round),
+    enabled: driveId !== undefined && round !== undefined,
+  });
+}
+
+/** Purpose: GET /drive/:driveId/rounds - per-round dates for a drive. */
+export function useDriveRounds(driveId: number | string | undefined) {
+  return useQuery<DriveRound[], ApiError>({
+    queryKey: queryKeys.driveRounds(driveId ?? "unknown"),
+    queryFn: () => getDriveRounds(driveId as number | string),
+    enabled: driveId !== undefined,
+  });
+}
+
+/** Purpose: PATCH /drive/:driveId/rounds/:roundNo/date - set a round's date (notifies its students). */
+export function useSetRoundDate(driveId: number | string) {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { message: string },
+    ApiError,
+    { roundNo: number; round_date: string }
+  >({
+    mutationFn: ({ roundNo, round_date }) => setRoundDate(driveId, roundNo, round_date),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.driveStudents(driveId),
-      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.driveRounds(driveId) });
     },
   });
 }

@@ -1,23 +1,17 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Megaphone, Pencil, Plus } from "lucide-react";
+import { Megaphone, MoreHorizontal, Plus } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
 
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
-import { InfoGrid } from "@/components/dashboard/InfoGrid";
 import { Field } from "@/components/dashboard/Field";
-import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { ShortlistReviewDialog } from "@/components/dashboard/ShortlistReviewDialog";
+import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
+import { DataTable, DataTableColumnHeader } from "@/components/dashboard/data-table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -26,6 +20,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -36,18 +36,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCompanies } from "../../hooks/useCompanies";
-import { useCreateDrive, useDrives, useUpdateDrive } from "../../hooks/useDrives";
-import { formatDate } from "../../lib/format";
-import { DEPARTMENTS } from "../../lib/validation";
+import {
+  useCreateDrive,
+  useDeleteDrive,
+  useDrives,
+  useUpdateDrive,
+} from "../../hooks/useDrives";
+import { DEPARTMENT_BRANCHES } from "../../lib/validation";
 import { paths } from "../../routes/paths";
 import type {
   CreateDrivePayload,
   DriveRecord,
-  DriveStatus,
   EligibleStudent,
   EmploymentType,
 } from "../../services/driveService";
-import type { StatusTone } from "../../types";
 
 const EMPLOYMENT_TYPES: EmploymentType[] = ["FTE", "Internship", "Internship + PPO"];
 
@@ -58,13 +60,10 @@ interface DriveFormState {
   job_description: string;
   package_ctc: string;
   employment_type: EmploymentType;
-  drive_date: string;
-  application_deadline: string;
   minimum_cgpa: string;
   allowed_branches: string[];
   max_active_backlogs: string;
   max_passive_backlogs: string;
-  number_of_rounds: string;
 }
 
 const EMPTY_FORM: DriveFormState = {
@@ -73,41 +72,18 @@ const EMPTY_FORM: DriveFormState = {
   job_description: "",
   package_ctc: "",
   employment_type: "FTE",
-  drive_date: "",
-  application_deadline: "",
   minimum_cgpa: "",
   allowed_branches: [],
   max_active_backlogs: "",
   max_passive_backlogs: "",
-  number_of_rounds: "",
 };
-
-/** Purpose: map a drive's lifecycle status to a Badge tone. */
-function statusTone(status: DriveStatus): StatusTone {
-  switch (status) {
-    case "ongoing":
-      return "amber";
-    case "completed":
-      return "green";
-    case "cancelled":
-      return "red";
-    default:
-      return "blue"; // upcoming
-  }
-}
-
-/** Purpose: turn an ISO timestamp into the YYYY-MM-DD a <input type="date"> needs. */
-function toDateInput(value: string | null | undefined): string {
-  if (!value) return "";
-  return value.slice(0, 10);
-}
 
 /**
  * Purpose: turn a nullable numeric column into a text-input value. Nullable
- * drive columns (package_ctc, max_active_backlogs, max_passive_backlogs,
- * number_of_rounds) come back null; String(null) would produce the literal
- * "null", which then coerces to NaN and serialises to JSON null - the exact
- * cause of the backend's "expected number, received null" 400 on edit.
+ * drive columns (package_ctc, max_active_backlogs, max_passive_backlogs) come
+ * back null; String(null) would produce the literal "null", which then coerces
+ * to NaN and serialises to JSON null - the exact cause of the backend's
+ * "expected number, received null" 400 on edit.
  */
 function numToInput(value: number | string | null | undefined): string {
   return value != null ? String(value) : "";
@@ -121,13 +97,10 @@ function formFromDrive(drive: DriveRecord): DriveFormState {
     job_description: drive.job_description ?? "",
     package_ctc: numToInput(drive.package_ctc),
     employment_type: drive.employment_type,
-    drive_date: toDateInput(drive.drive_date),
-    application_deadline: toDateInput(drive.application_deadline),
     minimum_cgpa: numToInput(drive.minimum_cgpa),
     allowed_branches: drive.allowed_branches ?? [],
     max_active_backlogs: numToInput(drive.max_active_backlogs),
     max_passive_backlogs: numToInput(drive.max_passive_backlogs),
-    number_of_rounds: numToInput(drive.number_of_rounds),
   };
 }
 
@@ -140,25 +113,32 @@ function toCreatePayload(form: DriveFormState): CreateDrivePayload {
   const payload: CreateDrivePayload = {
     company_id: Number(form.company_id),
     employment_type: form.employment_type,
-    drive_date: form.drive_date,
-    application_deadline: form.application_deadline,
     minimum_cgpa: Number(form.minimum_cgpa),
     allowed_branches: form.allowed_branches,
   };
 
   /** Only forward an optional number when it parses to a finite value, so we can never serialise NaN as JSON null (which the backend rejects). */
-  const setNum = (raw: string, key: "package_ctc" | "max_active_backlogs" | "max_passive_backlogs" | "number_of_rounds") => {
+  const setNum = (raw: string, key: "package_ctc") => {
     if (raw === "") return;
     const n = Number(raw);
     if (Number.isFinite(n)) payload[key] = n;
   };
 
+  /**
+   * Backlog caps default to 0 (the DB column default) when left blank. Omitting
+   * them writes NULL, and the eligibility filter `active_backlogs <= NULL` is
+   * UNKNOWN for every student - i.e. a blank cap would exclude everyone.
+   */
+  const setBacklog = (raw: string, key: "max_active_backlogs" | "max_passive_backlogs") => {
+    const n = raw === "" ? 0 : Number(raw);
+    payload[key] = Number.isFinite(n) ? n : 0;
+  };
+
   if (form.job_role.trim()) payload.job_role = form.job_role.trim();
   if (form.job_description.trim()) payload.job_description = form.job_description.trim();
   setNum(form.package_ctc, "package_ctc");
-  setNum(form.max_active_backlogs, "max_active_backlogs");
-  setNum(form.max_passive_backlogs, "max_passive_backlogs");
-  setNum(form.number_of_rounds, "number_of_rounds");
+  setBacklog(form.max_active_backlogs, "max_active_backlogs");
+  setBacklog(form.max_passive_backlogs, "max_passive_backlogs");
 
   return payload;
 }
@@ -174,11 +154,15 @@ export default function DrivesPage() {
   const { data: companies } = useCompanies();
   const createMutation = useCreateDrive();
   const updateMutation = useUpdateDrive();
+  const deleteMutation = useDeleteDrive();
 
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<DriveFormState>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | undefined>();
+
+  /** The drive pending deletion (opens the irreversible-delete confirm dialog). */
+  const [deleteTarget, setDeleteTarget] = useState<DriveRecord | null>(null);
 
   /** After a successful create/edit, hold the drive + eligible list for the review dialog. */
   const [review, setReview] = useState<{
@@ -233,8 +217,6 @@ export default function DrivesPage() {
     event.preventDefault();
 
     if (!form.company_id) return setFormError("Select a company for this drive.");
-    if (!form.drive_date) return setFormError("Pick a drive date.");
-    if (!form.application_deadline) return setFormError("Pick an application deadline.");
     if (form.minimum_cgpa === "") return setFormError("Enter the minimum CGPA.");
     if (form.allowed_branches.length === 0)
       return setFormError("Select at least one eligible branch.");
@@ -262,8 +244,17 @@ export default function DrivesPage() {
     const payload = toCreatePayload(form);
 
     if (editingId) {
+      /**
+       * updateDrive overwrites every column, including status. The form never
+       * edits status, so carry the drive's current status through - otherwise
+       * the omitted field is written as NULL, wiping the drive's lifecycle state.
+       */
+      const editingDrive = drives?.find((d) => d.drive_id === editingId);
       updateMutation.mutate(
-        { id: editingId, payload },
+        {
+          id: editingId,
+          payload: editingDrive ? { ...payload, status: editingDrive.status } : payload,
+        },
         {
           onSuccess: (data) => {
             setOpen(false);
@@ -291,11 +282,66 @@ export default function DrivesPage() {
     }
   }
 
+  const driveColumns: ColumnDef<DriveRecord>[] = [
+    {
+      id: "company",
+      accessorFn: (d) => companyNameById.get(d.company_id) ?? `#${d.company_id}`,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Company" />,
+      meta: { label: "Company" },
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium">
+            {companyNameById.get(row.original.company_id) ?? `#${row.original.company_id}`}
+          </div>
+          {row.original.job_role && (
+            <div className="truncate text-xs text-muted-foreground">{row.original.job_role}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "employment_type",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Type" />,
+      meta: { label: "Type" },
+    },
+    {
+      id: "actions",
+      header: () => <div className="text-right">Action</div>,
+      enableSorting: false,
+      enableHiding: false,
+      cell: ({ row }) => (
+        <div className="flex justify-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                Manage drive <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => openEdit(row.original)}>
+                Edit drive
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to={`${driveBasePath}/${row.original.drive_id}`}>Manage drive</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => setDeleteTarget(row.original)}
+              >
+                Delete drive
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <>
       <Topbar
         title="Placement & internship drives"
-        subtitle="Create a drive, review the eligible students, and confirm the shortlist."
+        subtitle="Create, manage drives"
       />
       <PageContainer>
         <div className="flex items-center justify-between">
@@ -319,53 +365,13 @@ export default function DrivesPage() {
         )}
 
         {!isLoading && !isError && drives && drives.length > 0 && (
-          <div className="grid gap-4 lg:grid-cols-2">
-            {drives.map((drive) => (
-              <Card key={drive.drive_id} className="flex flex-col">
-                <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-                  <CardTitle className="min-w-0 truncate text-base">
-                    {driveLabel(drive)}
-                  </CardTitle>
-                  <StatusBadge tone={statusTone(drive.status)}>{drive.status}</StatusBadge>
-                </CardHeader>
-                <CardContent className="flex flex-1 flex-col gap-4">
-                  {drive.job_description && (
-                    <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                      {drive.job_description}
-                    </p>
-                  )}
-                  <InfoGrid
-                    items={[
-                      ["Company", companyNameById.get(drive.company_id) ?? `#${drive.company_id}`],
-                      ["Type", drive.employment_type],
-                      ["Package (LPA)", drive.package_ctc ?? "—"],
-                      ["Min CGPA", String(drive.minimum_cgpa)],
-                      ["Drive date", formatDate(drive.drive_date)],
-                      ["Deadline", formatDate(drive.application_deadline)],
-                      ["Max active backlogs", String(drive.max_active_backlogs)],
-                      ["Max passive backlogs", String(drive.max_passive_backlogs)],
-                      ["Branches", drive.allowed_branches?.join(", ") || "—"],
-                    ]}
-                  />
-                </CardContent>
-                <CardFooter className="justify-end gap-2 border-t pt-4">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => openEdit(drive)}
-                  >
-                    <Pencil /> Edit
-                  </Button>
-                  <Button asChild variant="outline" size="sm">
-                    <Link to={`${driveBasePath}/${drive.drive_id}`}>
-                      Manage shortlist <ArrowRight />
-                    </Link>
-                  </Button>
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
+          <DataTable
+            columns={driveColumns}
+            data={drives}
+            searchPlaceholder="Search company or role .."
+            enableExport
+            exportFileName="drives"
+          />
         )}
       </PageContainer>
 
@@ -429,22 +435,6 @@ export default function DrivesPage() {
                   onChange={(e) => setForm({ ...form, package_ctc: e.target.value })}
                 />
               </Field>
-              <Field label="Drive date" htmlFor="drive_date">
-                <Input
-                  id="drive_date"
-                  type="date"
-                  value={form.drive_date}
-                  onChange={(e) => setForm({ ...form, drive_date: e.target.value })}
-                />
-              </Field>
-              <Field label="Application deadline" htmlFor="application_deadline">
-                <Input
-                  id="application_deadline"
-                  type="date"
-                  value={form.application_deadline}
-                  onChange={(e) => setForm({ ...form, application_deadline: e.target.value })}
-                />
-              </Field>
               <Field label="Minimum CGPA" htmlFor="minimum_cgpa">
                 <Input
                   id="minimum_cgpa"
@@ -487,15 +477,25 @@ export default function DrivesPage() {
 
             <div className="flex flex-col gap-2">
               <Label>Eligible branches</Label>
-              <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-lg border p-3">
-                {DEPARTMENTS.map((dept) => (
-                  <label key={dept} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={form.allowed_branches.includes(dept)}
-                      onCheckedChange={() => toggleBranch(dept)}
-                    />
-                    {dept}
-                  </label>
+              {/* Branches are grouped under their department. allowed_branches holds
+                  the branch values, which the backend matches against students.branch. */}
+              <div className="flex flex-col gap-4 rounded-lg border p-3">
+                {Object.entries(DEPARTMENT_BRANCHES).map(([dept, branches]) => (
+                  <div key={dept} className="flex flex-col gap-2">
+                    <p className="text-xs font-medium text-muted-foreground">{dept}</p>
+                    <div className="flex flex-col gap-2 pl-1">
+                      {branches.map((branch) => (
+                        <label key={branch} className="flex items-start gap-2 text-sm">
+                          <Checkbox
+                            className="mt-0.5"
+                            checked={form.allowed_branches.includes(branch)}
+                            onCheckedChange={() => toggleBranch(branch)}
+                          />
+                          {branch}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -544,6 +544,23 @@ export default function DrivesPage() {
         driveLabel={review?.label}
         eligibleStudents={review?.eligibleStudents ?? []}
         note={review?.note}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(null);
+        }}
+        title={`Delete ${deleteTarget ? driveLabel(deleteTarget) : "drive"}?`}
+        description="This is irreversible. All round history will be lost, and the confirmed shortlist, every round's pre-filter / attendance / results records, and all other data for this drive will be permanently deleted."
+        confirmLabel="Delete drive"
+        destructive
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          deleteMutation.mutate(deleteTarget.drive_id, {
+            onSuccess: () => setDeleteTarget(null),
+          });
+        }}
       />
     </>
   );

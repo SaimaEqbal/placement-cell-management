@@ -5,11 +5,11 @@ import { ArrowRight, CheckCircle2 } from "lucide-react";
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
 import { ListCard } from "@/components/dashboard/ListCard";
-import { SearchInput } from "@/components/dashboard/SearchInput";
 import { BranchFilter } from "@/components/dashboard/BranchFilter";
-import { StudentTable } from "@/components/dashboard/StudentTable";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
+import { DataTable } from "@/components/dashboard/data-table";
+import { makeStudentColumns } from "@/components/dashboard/studentColumns";
 import { Button } from "@/components/ui/button";
 import { useTpcBranches, useTpcSpcVerified } from "../../hooks/useVerification";
 import { paths } from "../../routes/paths";
@@ -22,22 +22,36 @@ import { paths } from "../../routes/paths";
  */
 export default function TpcSpcVerifiedPage() {
   const [branch, setBranch] = useState("");
-  const [search, setSearch] = useState("");
   const { data: branches } = useTpcBranches();
   const { data: students, isLoading, isError, error, refetch } = useTpcSpcVerified(
     branch || undefined,
   );
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    const list = students ?? [];
-    if (!term) return list;
-    return list.filter(
-      (s) => s.name.toLowerCase().includes(term) || s.roll_no.toLowerCase().includes(term),
-    );
-  }, [students, search]);
+  const ids = (students ?? []).map((s) => s.id);
+  const total = students?.length ?? 0;
 
-  const ids = filtered.map((s) => s.id);
+  const columns = useMemo(
+    () =>
+      makeStudentColumns({
+        status: (s) =>
+          s.is_spc ? (
+            <StatusBadge tone="blue">SPC coordinator</StatusBadge>
+          ) : (
+            <StatusBadge tone="green">SPC verified</StatusBadge>
+          ),
+        action: (s) => (
+          <Button asChild variant="outline" size="sm">
+            <Link
+              to={`${paths.tpcVerification}/${s.id}`}
+              state={{ ids, backPath: paths.tpcSpcVerified }}
+            >
+              Review <ArrowRight />
+            </Link>
+          </Button>
+        ),
+      }),
+    [ids],
+  );
 
   return (
     <>
@@ -52,43 +66,24 @@ export default function TpcSpcVerifiedPage() {
           <ListCard
             eyebrow="TPC final review"
             title="Awaiting TPC verification"
-            description={`${(students ?? []).length} student(s) ready for final approval${branch ? ` in ${branch}` : ""}.`}
+            description={`${total} student(s) ready for final approval${branch ? ` in ${branch}` : ""}.`}
           >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <SearchInput
-                value={search}
-                onChange={setSearch}
-                placeholder="Search name or roll number..."
-              />
-              <BranchFilter branches={branches ?? []} value={branch} onChange={setBranch} />
-            </div>
-
-            {filtered.length === 0 ? (
+            {total === 0 ? (
               <EmptyState
                 icon={<CheckCircle2 />}
                 title="Nothing awaiting final review"
                 description="No SPC-verified students or coordinators in this view."
               />
             ) : (
-              <StudentTable
-                students={filtered}
-                renderStatus={(s) =>
-                  s.is_spc ? (
-                    <StatusBadge tone="blue">SPC coordinator</StatusBadge>
-                  ) : (
-                    <StatusBadge tone="green">SPC verified</StatusBadge>
-                  )
+              <DataTable
+                columns={columns}
+                data={students ?? []}
+                searchPlaceholder="Search name or roll number..."
+                enableExport
+                exportFileName="awaiting-tpc-verification"
+                toolbarActions={
+                  <BranchFilter branches={branches ?? []} value={branch} onChange={setBranch} />
                 }
-                renderAction={(s) => (
-                  <Button asChild variant="outline" size="sm">
-                    <Link
-                      to={`${paths.tpcVerification}/${s.id}`}
-                      state={{ ids, backPath: paths.tpcSpcVerified }}
-                    >
-                      Review <ArrowRight />
-                    </Link>
-                  </Button>
-                )}
               />
             )}
           </ListCard>

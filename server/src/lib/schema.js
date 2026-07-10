@@ -251,10 +251,6 @@ export const createDriveSchema = z.object({
     "Internship + PPO",
   ]),
 
-  drive_date: z.string(),
-
-  application_deadline: z.string(),
-
   minimum_cgpa: z
     .number()
     .min(0)
@@ -277,7 +273,7 @@ export const createDriveSchema = z.object({
   number_of_rounds: z
     .number()
     .int()
-    .positive().optional(),
+    .min(0).optional(),
 });
 
 export const updateDriveSchema = z
@@ -297,10 +293,6 @@ export const updateDriveSchema = z
         "Internship + PPO",
       ])
       .optional(),
-
-    drive_date: z.string().optional(),
-
-    application_deadline: z.string().optional(),
 
     minimum_cgpa: z
       .number()
@@ -328,7 +320,7 @@ export const updateDriveSchema = z
     number_of_rounds: z
       .number()
       .int()
-      .positive()
+      .min(0)
       .optional(),
 
     status: z
@@ -342,19 +334,37 @@ export const updateDriveSchema = z
   })
   .strict();
 
-export const applyForDriveSchema = z.object({
-  student_id: z
-    .number()
-    .int()
-    .positive(),
+// --- Round-workflow per-student action bodies -----------------------------
+// A pre-filter removal always requires a reason (stored in drive_round_history).
+export const prefilterSchema = z.object({
+  reason: z.string().min(1, "A removal reason is required"),
 });
 
-export const updateStudentRoundSchema = z.object({
-  current_round: z
-    .number()
-    .int()
-    .min(0),
+// Attendance is a simple present/absent toggle; the round is derived server-side.
+export const attendanceSchema = z.object({
+  present: z.boolean(),
 });
+
+// A round's date; "" or "TBD" clears it (stored NULL), otherwise a YYYY-MM-DD string.
+export const roundDateSchema = z.object({
+  round_date: z.string(),
+});
+
+// A round result. A rejection always requires a reason; a selection does not.
+export const resultSchema = z
+  .object({
+    result: z.enum(["SELECTED", "REJECTED"]),
+    reason: z.string().min(1).optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.result === "REJECTED" && !val.reason) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["reason"],
+        message: "A rejection reason is required.",
+      });
+    }
+  });
 
 export const createCompanyPostSchema = z.object({
   title: z.string().min(1),

@@ -17,6 +17,7 @@ import { Field } from "@/components/dashboard/Field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Select,
   SelectContent,
@@ -323,11 +324,11 @@ export default function CompleteProfilePage() {
                 />
               </Field>
               <Field label="Date of birth" htmlFor="dob">
-                <Input
+                <DatePicker
                   id="dob"
-                  type="date"
                   value={dateOfBirth}
-                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  onChange={setDateOfBirth}
+                  toDate={new Date().toISOString().slice(0, 10)}
                 />
               </Field>
               <Field label="Gender" htmlFor="gender">

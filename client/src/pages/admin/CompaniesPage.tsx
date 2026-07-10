@@ -1,19 +1,16 @@
 import { useState, type FormEvent } from "react";
-import { Building2, Pencil, Plus, Trash2 } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Building2, MoreHorizontal, Plus } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
-import { InfoGrid } from "@/components/dashboard/InfoGrid";
+import { ListCard } from "@/components/dashboard/ListCard";
 import { Field } from "@/components/dashboard/Field";
+import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
+import { DataTable, DataTableColumnHeader } from "@/components/dashboard/data-table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +18,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   useCompanies,
@@ -30,7 +34,7 @@ import {
 } from "../../hooks/useCompanies";
 import type { ApiError } from "../../api/apiError";
 import type { CompanyRecord, CreateCompanyPayload } from "../../services/companyService";
-import { formatDate } from "../../lib/format";
+import { validateEmail } from "../../lib/validation";
 
 const EMPTY_FORM: CreateCompanyPayload = {
   company_name: "",
@@ -41,10 +45,7 @@ const EMPTY_FORM: CreateCompanyPayload = {
   hr_phone: "",
 };
 
-/**
- * Purpose: flatten an ApiError's per-field validation errors (from the backend's
- * Zod schema) into a single readable line.
- */
+/** Flatten an ApiError's per-field validation errors into a single readable line. */
 function fieldErrorText(error: ApiError): string | undefined {
   if (!error.fieldErrors) return undefined;
   const msgs = Object.entries(error.fieldErrors).flatMap(([field, list]) =>
@@ -54,9 +55,9 @@ function fieldErrorText(error: ApiError): string | undefined {
 }
 
 /**
- * Purpose: /Admin/companies - UPC/Admin's company management CRUD (Add,
- * Edit, Delete Company per the brief), backed by GET/POST/PUT/DELETE
- * /companies.
+ * Purpose: /Admin/companies - UPC/Admin's company management CRUD in a data
+ * table (Company name, Industry, and a "Manage company" action for edit/delete),
+ * backed by GET/POST/PUT/DELETE /companies.
  */
 export default function CompaniesPage() {
   const { data: companies, isLoading, isError, error, refetch } = useCompanies();
@@ -68,6 +69,7 @@ export default function CompaniesPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<CreateCompanyPayload>(EMPTY_FORM);
   const [formError, setFormError] = useState<string>();
+  const [deleteTarget, setDeleteTarget] = useState<CompanyRecord | null>(null);
 
   function openCreateForm() {
     setEditingId(null);
@@ -103,6 +105,10 @@ export default function CompaniesPage() {
     if (industry.length < 2) return setFormError("Industry is required.");
     if (description.length < 10)
       return setFormError("Description must be at least 10 characters.");
+    if (form.hr_email?.trim()) {
+      const emailError = validateEmail(form.hr_email.trim());
+      if (emailError) return setFormError(emailError);
+    }
     if (form.hr_phone?.trim() && !/^\d{10,15}$/.test(form.hr_phone.trim()))
       return setFormError("HR phone must be 10-15 digits (or leave it blank).");
 
@@ -110,8 +116,7 @@ export default function CompaniesPage() {
 
     /**
      * Omit optional HR fields when blank: the backend's Zod schema treats an
-     * empty string as an invalid value (fails min-length / email), not as
-     * "absent".
+     * empty string as an invalid value (fails min-length / email), not as "absent".
      */
     const payload: CreateCompanyPayload = { company_name, industry, description };
     if (form.hr_name?.trim()) payload.hr_name = form.hr_name.trim();
@@ -119,16 +124,59 @@ export default function CompaniesPage() {
     if (form.hr_phone?.trim()) payload.hr_phone = form.hr_phone.trim();
 
     if (editingId !== null) {
-      updateMutation.mutate(
-        { id: editingId, payload },
-        { onSuccess: () => setOpen(false) },
-      );
+      updateMutation.mutate({ id: editingId, payload }, { onSuccess: () => setOpen(false) });
     } else {
       createMutation.mutate(payload, { onSuccess: () => setOpen(false) });
     }
   }
 
   const mutation = editingId !== null ? updateMutation : createMutation;
+
+  const columns: ColumnDef<CompanyRecord>[] = [
+    {
+      accessorKey: "company_name",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Company name" />,
+      meta: { label: "Company name" },
+      cell: ({ row }) => <span className="font-medium">{row.original.company_name}</span>,
+    },
+    {
+      accessorKey: "industry",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Industry" />,
+      meta: { label: "Industry" },
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{row.original.industry ?? "—"}</span>
+      ),
+    },
+    {
+      id: "actions",
+      header: () => <div className="text-right">Action</div>,
+      enableSorting: false,
+      enableHiding: false,
+      cell: ({ row }) => (
+        <div className="flex justify-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                Manage company <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => openEditForm(row.original)}>
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => setDeleteTarget(row.original)}
+              >
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <>
@@ -155,54 +203,15 @@ export default function CompaniesPage() {
         )}
 
         {!isLoading && !isError && companies && companies.length > 0 && (
-          <div className="grid gap-4 lg:grid-cols-2">
-            {companies.map((company) => (
-              <Card key={company.company_id}>
-                <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-                  <CardTitle className="min-w-0 truncate text-base">
-                    {company.company_name}
-                  </CardTitle>
-                  <div className="flex shrink-0 gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      type="button"
-                      aria-label="Edit company"
-                      onClick={() => openEditForm(company)}
-                    >
-                      <Pencil />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      type="button"
-                      aria-label="Delete company"
-                      className="text-muted-foreground hover:text-destructive"
-                      disabled={deleteMutation.isPending}
-                      onClick={() => deleteMutation.mutate(company.company_id)}
-                    >
-                      <Trash2 />
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-4">
-                  <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                    {company.description ?? "No description provided."}
-                  </p>
-                  <InfoGrid
-                    items={[
-                      ["Company ID", String(company.company_id)],
-                      ["Industry", company.industry ?? "—"],
-                      ["HR contact", company.hr_name ?? "—"],
-                      ["HR email", company.hr_email ?? "—"],
-                      ["HR phone", company.hr_phone ?? "—"],
-                      ["Created", formatDate(company.created_at)],
-                    ]}
-                  />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <ListCard title="All companies" description={`${companies.length} compan${companies.length === 1 ? "y" : "ies"}.`}>
+            <DataTable
+              columns={columns}
+              data={companies}
+              searchPlaceholder="Search company or industry..."
+              enableExport
+              exportFileName="companies"
+            />
+          </ListCard>
         )}
       </PageContainer>
 
@@ -281,6 +290,23 @@ export default function CompaniesPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(next) => !next && setDeleteTarget(null)}
+        title="Delete this company?"
+        description={
+          deleteTarget
+            ? `"${deleteTarget.company_name}" will be permanently removed. This cannot be undone.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget.company_id);
+          setDeleteTarget(null);
+        }}
+      />
     </>
   );
 }

@@ -20,7 +20,7 @@ import { paths } from "../../routes/paths";
 const quickLinks = [
   { label: "Manage companies", to: paths.adminCompanies, icon: Building2 },
   { label: "Manage drives", to: paths.adminDrives, icon: Megaphone },
-  { label: "Filter & shortlist students", to: paths.adminStudents, icon: Users },
+  { label: "Browse students", to: paths.adminStudents, icon: Users },
   { label: "Invite TPC / SPC / Admin", to: paths.adminInvitations, icon: UserPlus },
 ];
 

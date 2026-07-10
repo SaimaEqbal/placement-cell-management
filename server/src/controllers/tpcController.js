@@ -184,6 +184,19 @@ export const promoteSPC = async (req, res) => {
 
     const student = studentResult.rows[0];
 
+    // The spc table requires department and phone (both NOT NULL), but the
+    // students columns are nullable. Promoting a student whose profile lacks
+    // either would fail as a generic 500; return a clear, actionable error
+    // instead so the TPC knows the profile must be completed first.
+    if (!student.department || !student.phone) {
+      await client.query("ROLLBACK");
+
+      return res.status(400).json({
+        message:
+          "This student's profile is missing a department or phone number, both required to become an SPC. Ask them to complete their profile first.",
+      });
+    }
+
     await client.query(
       `UPDATE users
        SET role = 'spc'

@@ -1,14 +1,14 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Users } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
 import { ListCard } from "@/components/dashboard/ListCard";
-import { SearchInput } from "@/components/dashboard/SearchInput";
-import { StudentTable } from "@/components/dashboard/StudentTable";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
-import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
+import { ErrorState, LoadingState } from "@/components/dashboard/states";
+import { DataTable } from "@/components/dashboard/data-table";
+import { makeStudentColumns } from "@/components/dashboard/studentColumns";
 import { Button } from "@/components/ui/button";
 import { useTpcStudents } from "../../hooks/useVerification";
 import { reviewStatusLabel, reviewStatusTone } from "../../lib/reviewStatus";
@@ -20,19 +20,34 @@ import { paths } from "../../routes/paths";
  * demote / delete). SPC coordinators are tagged.
  */
 export default function TpcStudentsPage() {
-  const [search, setSearch] = useState("");
   const { data: students, isLoading, isError, error, refetch } = useTpcStudents();
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    const list = students ?? [];
-    if (!term) return list;
-    return list.filter(
-      (s) => s.roll_no.toLowerCase().includes(term) || s.name.toLowerCase().includes(term),
-    );
-  }, [students, search]);
+  const ids = (students ?? []).map((s) => s.id);
 
-  const ids = filtered.map((s) => s.id);
+  const columns = useMemo(
+    () =>
+      makeStudentColumns({
+        status: (s) =>
+          s.is_spc ? (
+            <StatusBadge tone="blue">SPC</StatusBadge>
+          ) : (
+            <StatusBadge tone={reviewStatusTone(s.review_status)}>
+              {reviewStatusLabel(s.review_status)}
+            </StatusBadge>
+          ),
+        action: (s) => (
+          <Button asChild variant="outline" size="sm">
+            <Link
+              to={`${paths.tpcStudents}/${s.id}`}
+              state={{ ids, backPath: paths.tpcStudents }}
+            >
+              Manage <ArrowRight />
+            </Link>
+          </Button>
+        ),
+      }),
+    [ids],
+  );
 
   return (
     <>
@@ -49,44 +64,14 @@ export default function TpcStudentsPage() {
             title="Students"
             description={`${(students ?? []).length} student(s) in your department.`}
           >
-            <div className="flex">
-              <SearchInput
-                value={search}
-                onChange={setSearch}
-                placeholder="Search by roll number or name..."
-              />
-            </div>
-
-            {filtered.length === 0 ? (
-              <EmptyState
-                icon={<Users />}
-                title="No students found"
-                description="Try a different roll number."
-              />
-            ) : (
-              <StudentTable
-                students={filtered}
-                renderStatus={(s) =>
-                  s.is_spc ? (
-                    <StatusBadge tone="blue">SPC</StatusBadge>
-                  ) : (
-                    <StatusBadge tone={reviewStatusTone(s.review_status)}>
-                      {reviewStatusLabel(s.review_status)}
-                    </StatusBadge>
-                  )
-                }
-                renderAction={(s) => (
-                  <Button asChild variant="outline" size="sm">
-                    <Link
-                      to={`${paths.tpcStudents}/${s.id}`}
-                      state={{ ids, backPath: paths.tpcStudents }}
-                    >
-                      Manage <ArrowRight />
-                    </Link>
-                  </Button>
-                )}
-              />
-            )}
+            <DataTable
+              columns={columns}
+              data={students ?? []}
+              searchPlaceholder="Search by roll number or name..."
+              enableExport
+              exportFileName="department-students"
+              emptyMessage="No students found."
+            />
           </ListCard>
         )}
       </PageContainer>

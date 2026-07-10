@@ -12,6 +12,15 @@ export const queryKeys = {
   // keys were removed with the applications workflow.
   driveStudents: (driveId: number | string) =>
     ["drives", "students", driveId] as const,
+  // Student self-scoped drive views.
+  myDrives: ["drives", "mine"] as const,
+  myDriveResults: (driveId: number | string) =>
+    ["drives", "myResults", driveId] as const,
+  // Admin per-round history for a drive.
+  driveHistory: (driveId: number | string, round: number | string) =>
+    ["drives", "history", driveId, round] as const,
+  // Per-round dates for a drive.
+  driveRounds: (driveId: number | string) => ["drives", "rounds", driveId] as const,
   notifications: ["notifications", "list"] as const,
   companyPosts: ["companyPosts", "list"] as const,
   companyPost: (id: number | string) => ["companyPosts", "detail", id] as const,
