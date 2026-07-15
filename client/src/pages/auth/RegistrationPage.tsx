@@ -1,14 +1,16 @@
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Eye, EyeOff, MailCheck } from "lucide-react";
+import { ArrowRight, MailCheck } from "lucide-react";
 
-import Brand from "../../components/Brand";
-import { SectionTitle } from "../../components/ui";
+import { AuthShell, AuthBackLink } from "@/components/auth/AuthShell";
+import { AuthStatus } from "@/components/auth/AuthStatus";
+import { AuthField, PasswordField } from "@/components/auth/AuthFields";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { useResendVerification, useSignup } from "../../hooks/useAuthMutations";
 import { validateConfirmPassword, validateInstitutionalEmail, validatePassword, } from "../../lib/validation";
 import { paths } from "../../routes/paths";
-
-import "../../styles/form-wizard.css";
 
 interface FieldErrors {
   email?: string;
@@ -25,7 +27,6 @@ export default function RegistrationPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
 
   /** Purpose: validate the credential fields, then call POST /auth/signup (email + password only). */
@@ -47,106 +48,133 @@ export default function RegistrationPage() {
 
   if (signupMutation.isSuccess) {
     return (
-      <div className="public-page">
-        <header className="public-header">
-          <Brand />
-        </header>
-        <div className="register-wrap">
-          <div className="page-heading">
-            <div className="auth-status-icon success" style={{ margin: "0 auto 18px" }}>
-              <MailCheck size={26} />
+      <AuthShell>
+        <Card>
+          <CardContent className="flex flex-col gap-6 pt-6">
+            <AuthStatus
+              tone="success"
+              icon={<MailCheck />}
+              title="Check your inbox"
+              description={
+                <>
+                  We sent a verification link to{" "}
+                  <span className="font-medium text-foreground">
+                    {email.trim().toLowerCase()}
+                  </span>
+                  . Open it to activate your account, then come back and sign in.
+                </>
+              }
+            />
+
+            <div className="flex flex-col items-center gap-3 text-center text-sm text-muted-foreground">
+              <p>
+                Didn't receive the email?{" "}
+                <button
+                  type="button"
+                  disabled={resendMutation.isPending}
+                  onClick={() =>
+                    resendMutation.mutate(email.trim().toLowerCase())
+                  }
+                  className="inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-4 disabled:opacity-50"
+                >
+                  {resendMutation.isPending ? "Resending..." : "Resend it"}
+                  <ArrowRight className="size-3.5" />
+                </button>
+              </p>
+              {resendMutation.isSuccess && (
+                <p>Verification email sent — check your inbox.</p>
+              )}
+              {resendMutation.isError && (
+                <p className="text-destructive">
+                  {resendMutation.error.message}
+                </p>
+              )}
             </div>
-            <h1>Check your inbox</h1>
-            <p>
-              We sent a verification link to <b>{email.trim().toLowerCase()}</b>. Open it to
-              activate your account, then come back and sign in.
-            </p>
-
-            <p style={{ marginTop: 16 }}>
-              Didn't receive the email?{" "}
-              <button
-                type="button"
-                className="text-btn"
-                style={{ display: "inline", margin: 0 }}
-                disabled={resendMutation.isPending}
-                onClick={() => resendMutation.mutate(email.trim().toLowerCase())}
-              >
-                {resendMutation.isPending ? "Resending..." : "Resend it"}{" "}
-                <ArrowRight size={14} />
-              </button>
-            </p>
-            {resendMutation.isSuccess && (
-              <span className="field-error" style={{ color: "var(--green)" }}>
-                Verification email sent - check your inbox.
-              </span>
-            )}
-            {resendMutation.isError && (
-              <span className="field-error">{resendMutation.error.message}</span>
-            )}
-
-            <Link className="text-btn" to={paths.login} style={{ marginTop: 18 }}>
-              Back to sign in <ArrowRight size={15} />
-            </Link>
-          </div>
-        </div>
-      </div>
+          </CardContent>
+          <CardFooter className="justify-center border-t pt-6">
+            <AuthBackLink to={paths.login}>
+              Back to sign in <ArrowRight className="size-4" />
+            </AuthBackLink>
+          </CardFooter>
+        </Card>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="public-page">
-      <header className="public-header">
-        <Brand />
-        <Link className="ghost" to={paths.login}>
-          <ArrowLeft size={16} /> Back to sign in
-        </Link>
-      </header>
-      <div className="register-wrap">
-        <div className="page-heading">
-          <div className="eyebrow">Student onboarding</div>
-          <h1>Create your student account</h1>
-          <p>Just your login details for now - you'll complete your academic profile after your first login.</p>
-        </div>
+    <AuthShell>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-2xl">Create your student account</CardTitle>
+          <CardDescription>
+            Just your login details for now — you'll complete your academic
+            profile after your first login.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form
+            onSubmit={handleSubmit}
+            noValidate
+            className="flex flex-col gap-4"
+          >
+            <AuthField
+              id="email"
+              label="Institutional email"
+              error={errors.email}
+            >
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="username"
+              />
+            </AuthField>
 
-        <form onSubmit={handleSubmit} noValidate>
-          <section className="form-section">
-            <SectionTitle icon={<MailCheck size={18} />} title="Account details" subtitle="Your login credentials"/>
-            <div className="form-grid">
-              <label>
-                Institutional email
-                <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username"/>
-                {errors.email && <span className="field-error">{errors.email}</span>}
-              </label>
-              <span />
-              <label>
-                Password
-                <div className="input-icon">
-                  <input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)}/>
-                  <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((prev) => !prev)}>
-                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                  </button>
-                </div>
-                {errors.password && <span className="field-error">{errors.password}</span>}
-              </label>
-              <label>
-                Confirm password
-                <input type={showPassword ? "text" : "password"} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)}/>
-                {errors.confirmPassword && (<span className="field-error">{errors.confirmPassword}</span>)}
-              </label>
-            </div>
-          </section>
+            <PasswordField
+              id="password"
+              label="Password"
+              value={password}
+              onChange={setPassword}
+              error={errors.password}
+              autoComplete="new-password"
+            />
 
-          {signupMutation.isError && (<span className="field-error">{signupMutation.error.message}</span>)}
+            <PasswordField
+              id="confirmPassword"
+              label="Confirm password"
+              value={confirmPassword}
+              onChange={setConfirmPassword}
+              error={errors.confirmPassword}
+              autoComplete="new-password"
+            />
 
-          <div className="form-actions">
-            <p>Your information is securely stored.</p>
-            <button className="primary" type="submit" disabled={signupMutation.isPending}>
-              {signupMutation.isPending ? "Creating account..." : "Create account"}{" "}
-              <ArrowRight size={17} />
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+            {signupMutation.isError && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {signupMutation.error.message}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full"
+              disabled={signupMutation.isPending}
+            >
+              {signupMutation.isPending ? "Creating account..." : "Create account"}
+              <ArrowRight />
+            </Button>
+            <p className="text-center text-xs text-muted-foreground">
+              Your information is securely stored.
+            </p>
+          </form>
+        </CardContent>
+        <CardFooter className="justify-center border-t pt-6">
+          <AuthBackLink to={paths.login}>Back to sign in</AuthBackLink>
+        </CardFooter>
+      </Card>
+    </AuthShell>
   );
 }

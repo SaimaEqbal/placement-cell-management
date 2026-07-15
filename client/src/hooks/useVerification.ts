@@ -6,15 +6,19 @@ import {
 } from "@tanstack/react-query";
 
 import type { ApiError } from "../api/apiError";
+import { getAllAdmins, type AdminAccountRow } from "../services/authService";
 import { deleteStudent, type StudentRecord } from "../services/studentService";
 import {
+  getAllSpcs,
   getSpcQueue,
   spcRejectStudent,
   spcVerifyStudent,
+  type AdminSpcRow,
 } from "../services/spcService";
 import {
   assignStudentsToSpc,
   demoteFromSpc,
+  getAllTpcs,
   getTpcBranches,
   getTpcQueue,
   getTpcSpcs,
@@ -23,6 +27,7 @@ import {
   promoteToSpc,
   tpcRejectStudent,
   tpcVerifyStudent,
+  type TpcRecord,
   type TpcSpcRow,
 } from "../services/tpcService";
 import { queryKeys } from "./queryKeys";
@@ -71,6 +76,32 @@ export function useSpcReject() {
   });
 }
 
+// ---- Admin rosters ----------------------------------------------------------
+
+/** GET /spc - every SPC across all departments (Admin). */
+export function useAllSpcs() {
+  return useQuery<AdminSpcRow[], ApiError>({
+    queryKey: queryKeys.spcs,
+    queryFn: getAllSpcs,
+  });
+}
+
+/** GET /tpc - every TPC account across all departments (Admin). */
+export function useAllTpcs() {
+  return useQuery<TpcRecord[], ApiError>({
+    queryKey: queryKeys.tpcs,
+    queryFn: getAllTpcs,
+  });
+}
+
+/** GET /auth/admins - every admin account (Admin). */
+export function useAllAdmins() {
+  return useQuery<AdminAccountRow[], ApiError>({
+    queryKey: queryKeys.admins,
+    queryFn: getAllAdmins,
+  });
+}
+
 // ---- TPC ------------------------------------------------------------------
 
 /** Invalidate everything the TPC pipeline reads after a mutation. */
@@ -80,24 +111,24 @@ function invalidateTpc(qc: QueryClient, id?: number | string) {
   if (id !== undefined) qc.invalidateQueries({ queryKey: queryKeys.student(id) });
 }
 
-export function useTpcStudents(rollNo?: string) {
+export function useTpcStudents(rollNo?: string, year?: string) {
   return useQuery<StudentRecord[], ApiError>({
-    queryKey: queryKeys.tpcStudents(rollNo),
-    queryFn: () => getTpcStudents(rollNo),
+    queryKey: queryKeys.tpcStudents(rollNo, year),
+    queryFn: () => getTpcStudents(rollNo, year),
   });
 }
 
-export function useTpcQueue(branch?: string) {
+export function useTpcQueue(branch?: string, year?: string) {
   return useQuery<StudentRecord[], ApiError>({
-    queryKey: queryKeys.tpcQueue(branch),
-    queryFn: () => getTpcQueue(branch),
+    queryKey: queryKeys.tpcQueue(branch, year),
+    queryFn: () => getTpcQueue(branch, year),
   });
 }
 
-export function useTpcSpcVerified(branch?: string) {
+export function useTpcSpcVerified(branch?: string, year?: string) {
   return useQuery<StudentRecord[], ApiError>({
-    queryKey: queryKeys.tpcSpcVerified(branch),
-    queryFn: () => getTpcSpcVerified(branch),
+    queryKey: queryKeys.tpcSpcVerified(branch, year),
+    queryFn: () => getTpcSpcVerified(branch, year),
   });
 }
 
@@ -108,10 +139,10 @@ export function useTpcBranches() {
   });
 }
 
-export function useTpcSpcs(branch: string | undefined) {
+export function useTpcSpcs(branch: string | undefined, year?: string) {
   return useQuery<TpcSpcRow[], ApiError>({
-    queryKey: queryKeys.tpcSpcs(branch ?? ""),
-    queryFn: () => getTpcSpcs(branch as string),
+    queryKey: queryKeys.tpcSpcs(branch ?? "", year),
+    queryFn: () => getTpcSpcs(branch as string, year),
     enabled: !!branch,
   });
 }

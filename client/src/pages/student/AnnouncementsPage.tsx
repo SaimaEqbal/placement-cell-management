@@ -1,23 +1,24 @@
 import { Megaphone } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { Activity, EmptyState, ErrorState, LoadingState } from "../../components/ui";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { AnnouncementViewer } from "@/components/dashboard/AnnouncementViewer";
+import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useCompanyPosts } from "../../hooks/useCompanyPosts";
 import { formatDate } from "../../lib/format";
-import type { StatusTone } from "../../types";
-
-import "../../styles/dashboard.css";
-
-/** Purpose: presentational tone for a post category. */
-function postTone(postType: string | null): StatusTone {
-  return postType === "email" ? "gray" : "blue";
-}
 
 /**
- * Purpose: /Student/announcements - a read-only feed of company posts
- * (announcements / emails) from GET /company-post. This is the placement
- * cell's broadcast channel; personal notifications live on the separate
- * Notifications page (opened from the topbar bell).
+ * Purpose: /Student/announcements - a read-only feed of announcements from GET
+ * /company-post. Each announcement is rendered with the shared AnnouncementViewer
+ * (Title / Content / named attachment actions that open the shared preview pane),
+ * so students never see raw Drive URLs. This is the placement cell's broadcast
+ * channel; personal notifications live on the separate Notifications page.
  */
 export default function AnnouncementsPage() {
   const { data: posts, isLoading, isError, error, refetch } = useCompanyPosts();
@@ -28,7 +29,7 @@ export default function AnnouncementsPage() {
         title="Announcements"
         subtitle="Updates and announcements from the placement cell."
       />
-      <div className="dashboard-content">
+      <PageContainer>
         {isLoading && <LoadingState label="Loading announcements..." />}
 
         {isError && (
@@ -40,30 +41,30 @@ export default function AnnouncementsPage() {
 
         {!isLoading && !isError && (!posts || posts.length === 0) && (
           <EmptyState
-            icon={<Megaphone size={28} />}
+            icon={<Megaphone />}
             title="No announcements yet"
             description="Placement cell announcements will show up here."
           />
         )}
 
         {!isLoading && !isError && posts && posts.length > 0 && (
-          <section className="panel">
-            <div className="panel-head">
-              <h2>Recent announcements</h2>
-            </div>
-            <div className="panel-body">
+          <Card>
+            <CardHeader className="border-b">
+              <CardTitle className="text-lg">Recent announcements</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col divide-y pt-0">
               {posts.map((post) => (
-                <Activity
-                  key={post.post_id}
-                  title={post.title}
-                  meta={`${post.content} · ${formatDate(post.created_at)}`}
-                  tone={postTone(post.post_type)}
-                />
+                <div key={post.post_id} className="flex flex-col gap-2 py-6 first:pt-6">
+                  <AnnouncementViewer post={post} />
+                  <p className="text-xs text-muted-foreground">
+                    Posted {formatDate(post.created_at)}
+                  </p>
+                </div>
               ))}
-            </div>
-          </section>
+            </CardContent>
+          </Card>
         )}
-      </div>
+      </PageContainer>
     </>
   );
 }

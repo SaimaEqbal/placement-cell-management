@@ -1,14 +1,23 @@
 import { useState, type FormEvent } from "react";
-import { Copy, Check, Mail, UserPlus } from "lucide-react";
+import { Check, Copy, Mail, UserPlus } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { SectionTitle } from "../../components/ui";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { FormSection } from "@/components/dashboard/FormSection";
+import { Field } from "@/components/dashboard/Field";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useSendInvitation } from "../../hooks/useInvitations";
 import { validateEmail } from "../../lib/validation";
 import type { Role } from "../../types";
-
-import "../../styles/dashboard.css";
-import "../../styles/form-wizard.css";
 
 /**
  * Roles an Admin can invite by email. SPC is intentionally excluded - SPCs are
@@ -54,69 +63,98 @@ export default function InvitationsPage() {
     }
   }
 
+  const result = sendInvitation.data;
+
   return (
     <>
       <Topbar
         title="Invitations"
         subtitle="Invite TPC or Admin users to join the placement portal."
       />
-      <div className="dashboard-content">
-        <section className="panel" style={{ marginBottom: 16 }}>
-          <div className="panel-body">
-            <form onSubmit={handleSubmit} noValidate>
-              <SectionTitle
-                icon={<UserPlus size={18} />}
-                title="Send an invitation"
-                subtitle="The invitee gets a link to set their own password and complete registration."
-              />
-              <div className="form-grid">
-                <label>
-                  Email
-                  <input
+      <PageContainer className="max-w-3xl">
+        <form onSubmit={handleSubmit} noValidate>
+          <FormSection
+            icon={<UserPlus />}
+            title="Send an invitation"
+            subtitle="The invitee gets a link to set their own password and complete registration."
+          >
+            <div className="flex flex-col gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Email" htmlFor="invite-email" error={emailError}>
+                  <Input
+                    id="invite-email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     autoComplete="off"
                   />
-                  {emailError && <span className="field-error">{emailError}</span>}
-                </label>
-                <label>
-                  Role
-                  <select
+                </Field>
+                <Field label="Role" htmlFor="invite-role">
+                  <Select
                     value={role}
-                    onChange={(e) =>
-                      setRole(e.target.value as Exclude<Role, "student">)
+                    onValueChange={(value) =>
+                      setRole(value as Exclude<Role, "student">)
                     }
                   >
-                    {INVITABLE_ROLES.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <SelectTrigger id="invite-role">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {INVITABLE_ROLES.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
+                          {r.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
               </div>
 
               {sendInvitation.isError && (
-                <span className="field-error">
-                  {sendInvitation.error.message}
-                </span>
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    {sendInvitation.error.message}
+                  </AlertDescription>
+                </Alert>
               )}
 
-              <div className="form-actions">
-                <p />
-                <button
-                  className="primary"
-                  type="submit"
-                  disabled={sendInvitation.isPending}
-                >
+              {result && (
+                <Alert>
+                  <Mail />
+                  <AlertDescription className="flex flex-col gap-3">
+                    <span>
+                      {result.emailSent
+                        ? `Invitation emailed to ${email}. You can also share the link below.`
+                        : `Invitation created. Email delivery isn't configured, so share this link with ${email}:`}
+                    </span>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <code className="min-w-0 flex-1 truncate rounded-md border bg-muted px-3 py-2 text-xs">
+                        {result.inviteLink}
+                      </code>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => copyLink(result.inviteLink)}
+                      >
+                        {copied ? <Check /> : <Copy />}
+                        {copied ? "Copied" : "Copy link"}
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="flex justify-end">
+                <Button type="submit" disabled={sendInvitation.isPending}>
                   {sendInvitation.isPending ? "Sending..." : "Send invitation"}
-                </button>
+                </Button>
               </div>
-            </form>
-          </div>
-        </section>
-      </div>
+            </div>
+          </FormSection>
+        </form>
+      </PageContainer>
     </>
   );
 }

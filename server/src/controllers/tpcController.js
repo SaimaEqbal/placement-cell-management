@@ -1,5 +1,13 @@
 import pool from "../config/db.js";
 
+// Parse an optional `year` query param (student graduation year) into a positive
+// integer, or null when absent/blank/invalid so the caller skips the filter.
+function parseYear(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 export const getAllTPCs = async (req, res) => {
   try {
     const result = await pool.query(
@@ -184,6 +192,19 @@ export const promoteSPC = async (req, res) => {
 
     const student = studentResult.rows[0];
 
+    // The spc table requires department and phone (both NOT NULL), but the
+    // students columns are nullable. Promoting a student whose profile lacks
+    // either would fail as a generic 500; return a clear, actionable error
+    // instead so the TPC knows the profile must be completed first.
+    if (!student.department || !student.phone) {
+      await client.query("ROLLBACK");
+
+      return res.status(400).json({
+        message:
+          "This student's profile is missing a department or phone number, both required to become an SPC. Ask them to complete their profile first.",
+      });
+    }
+
     await client.query(
       `UPDATE users
        SET role = 'spc'
@@ -300,7 +321,7 @@ export const getTpcStudents = async (req, res) => {
       return res.status(404).json({ message: "TPC profile not found" });
     }
 
-    const { rollNo } = req.query;
+    const { rollNo, year } = req.query;
     const params = [dept];
     let sql = `SELECT st.*, (sp.spc_id IS NOT NULL) AS is_spc
                FROM students st
@@ -308,7 +329,12 @@ export const getTpcStudents = async (req, res) => {
                WHERE st.department = $1`;
     if (rollNo) {
       params.push(`%${rollNo}%`);
-      sql += ` AND st.roll_no ILIKE $2`;
+      sql += ` AND st.roll_no ILIKE $${params.length}`;
+    }
+    const yr = parseYear(year);
+    if (yr !== null) {
+      params.push(yr);
+      sql += ` AND st.graduation_year = $${params.length}`;
     }
     sql += ` ORDER BY st.roll_no`;
 
@@ -329,13 +355,18 @@ export const getTpcQueue = async (req, res) => {
       return res.status(404).json({ message: "TPC profile not found" });
     }
 
-    const { branch } = req.query;
+    const { branch, year } = req.query;
     const params = [dept];
     let sql = `SELECT * FROM students
                WHERE department = $1 AND review_status = 'spc_rejected'`;
     if (branch) {
       params.push(branch);
-      sql += ` AND branch = $2`;
+      sql += ` AND branch = $${params.length}`;
+    }
+    const yr = parseYear(year);
+    if (yr !== null) {
+      params.push(yr);
+      sql += ` AND graduation_year = $${params.length}`;
     }
     sql += ` ORDER BY roll_no`;
 
@@ -357,7 +388,7 @@ export const getTpcSpcVerified = async (req, res) => {
       return res.status(404).json({ message: "TPC profile not found" });
     }
 
-    const { branch } = req.query;
+    const { branch, year } = req.query;
     const params = [dept];
     let sql = `SELECT st.*, (sp.spc_id IS NOT NULL) AS is_spc
                FROM students st
@@ -369,7 +400,12 @@ export const getTpcSpcVerified = async (req, res) => {
                  )`;
     if (branch) {
       params.push(branch);
-      sql += ` AND st.branch = $2`;
+      sql += ` AND st.branch = $${params.length}`;
+    }
+    const yr = parseYear(year);
+    if (yr !== null) {
+      params.push(yr);
+      sql += ` AND st.graduation_year = $${params.length}`;
     }
     sql += ` ORDER BY st.roll_no`;
 
@@ -413,20 +449,25 @@ export const getTpcSpcs = async (req, res) => {
       return res.status(404).json({ message: "TPC profile not found" });
     }
 
-    const { branch } = req.query;
+    const { branch, year } = req.query;
     if (!branch) {
       return res.status(400).json({ message: "branch is required" });
     }
 
-    const result = await pool.query(
-      `SELECT s.spc_id, s.name, s.email, s.department, s.branch,
-              st.roll_no, st.semester
-       FROM spc s
-       LEFT JOIN students st ON st.user_id = s.user_id
-       WHERE s.department = $1 AND s.branch = $2
-       ORDER BY s.spc_id`,
-      [dept, branch]
-    );
+    const params = [dept, branch];
+    let sql = `SELECT s.spc_id, s.name, s.email, s.department, s.branch,
+                      st.roll_no, st.semester, st.graduation_year
+               FROM spc s
+               LEFT JOIN students st ON st.user_id = s.user_id
+               WHERE s.department = $1 AND s.branch = $2`;
+    const yr = parseYear(year);
+    if (yr !== null) {
+      params.push(yr);
+      sql += ` AND st.graduation_year = $${params.length}`;
+    }
+    sql += ` ORDER BY s.spc_id`;
+
+    const result = await pool.query(sql, params);
     return res.status(200).json(result.rows);
   } catch (error) {
     console.error(error);

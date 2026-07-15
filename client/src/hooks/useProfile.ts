@@ -5,6 +5,7 @@ import {
   createStudentProfile,
   getMyProfile,
   updateStudent,
+  upsertMyProfile,
   type CreateStudentPayload,
   type StudentRecord,
   type UpdateStudentPayload,
@@ -52,6 +53,23 @@ export function useUpdateProfile(studentId: number | string | undefined) {
       }
       return updateStudent(studentId, payload);
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.profile });
+      queryClient.invalidateQueries({ queryKey: queryKeys.students() });
+    },
+  });
+}
+
+/**
+ * Purpose: PUT /students/me - self-scoped partial upsert for the 4-part profile
+ * wizard. Each step saves only its fields; the row is created on the first save.
+ * Invalidates the cached profile so every page reflects the latest save.
+ */
+export function useUpsertMyProfile() {
+  const queryClient = useQueryClient();
+
+  return useMutation<StudentRecord, ApiError, UpdateStudentPayload>({
+    mutationFn: upsertMyProfile,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.profile });
       queryClient.invalidateQueries({ queryKey: queryKeys.students() });

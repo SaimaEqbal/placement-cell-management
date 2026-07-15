@@ -12,8 +12,21 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { Badge, ErrorState, InfoGrid, LoadingState, ReviewSection } from "../../components/ui";
-import { useStudent } from "../../hooks/useStudents";
+import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
+import { InfoGrid } from "@/components/dashboard/InfoGrid";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { ErrorState, LoadingState } from "@/components/dashboard/states";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { toDrivePreviewUrl } from "@/lib/drivePreview";
+import { useStudent, useDeleteStudent } from "../../hooks/useStudents";
 import {
   useDemoteSpc,
   usePromoteSpc,
@@ -26,15 +39,15 @@ import {
 import { formatCgpa, formatDate, initialsFromName } from "../../lib/format";
 import { reviewStatusLabel, reviewStatusTone } from "../../lib/reviewStatus";
 
-import "../../styles/verification.css";
-
 /**
  * Purpose: /SPC/verification/:studentId, /TPC/verification/:studentId and
- * /TPC/students/:studentId - the shared two-pane review + action screen.
+ * /TPC/students/:studentId - the shared review + action screen.
  *
  * `role` selects which verify/reject endpoint fires (SPC vs TPC). `mode`
- * selects the action set: "verify" (approve/reject, the default) or "manage"
- * (the TPC roster's delete / promote-to-SPC / demote actions).
+ * selects the action set: "verify" (approve/reject, the default), "manage"
+ * (the TPC roster's delete / promote-to-SPC / demote actions), or "view"
+ * (the Admin's read-only view with only a delete action - the admin doesn't
+ * verify, promote or demote; role is irrelevant here).
  *
  * The queue/roster pages pass `{ ids, backPath }` via router state so this page
  * can offer a "Next student" button and return to the right list.
@@ -42,12 +55,39 @@ import "../../styles/verification.css";
 
 type ReviewLocationState = { ids?: number[]; backPath?: string } | null;
 
+/** Sticky header with a back button and the record title. */
+function DetailHeader({
+  title,
+  subtitle,
+  onBack,
+}: {
+  title: string;
+  subtitle?: string;
+  onBack: () => void;
+}) {
+  return (
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-6">
+      <Button variant="outline" size="icon" onClick={onBack} aria-label="Back">
+        <ArrowLeft />
+      </Button>
+      <div className="min-w-0">
+        <h1 className="truncate text-base font-semibold tracking-tight md:text-lg">
+          {title}
+        </h1>
+        {subtitle && (
+          <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
+        )}
+      </div>
+    </header>
+  );
+}
+
 export default function StudentVerificationDetailPage({
   role,
   mode = "verify",
 }: {
-  role: "SPC" | "TPC";
-  mode?: "verify" | "manage";
+  role?: "SPC" | "TPC";
+  mode?: "verify" | "manage" | "view";
 }) {
   const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
@@ -64,7 +104,11 @@ export default function StudentVerificationDetailPage({
   // Manage-mode mutations
   const promote = usePromoteSpc();
   const demote = useDemoteSpc();
-  const removeStudent = useTpcDeleteStudent();
+  const tpcRemoveStudent = useTpcDeleteStudent();
+  const adminRemoveStudent = useDeleteStudent();
+  /** Admin "view" mode deletes via the plain /students endpoint (invalidates the
+   * admin list); TPC "manage" mode uses the TPC-scoped delete. Same signature. */
+  const removeStudent = mode === "view" ? adminRemoveStudent : tpcRemoveStudent;
 
   const [rejecting, setRejecting] = useState(false);
   const [remarks, setRemarks] = useState("");
@@ -109,37 +153,41 @@ export default function StudentVerificationDetailPage({
     rejectMutation.mutate({ id: studentId, reason: remarks.trim() }, { onSuccess: afterAction });
   }
 
+  /** Confirmation is handled by the ConfirmDialog wrapping each trigger button. */
   function handleDelete() {
     if (!studentId) return;
-    if (!window.confirm("Delete this student permanently? This cannot be undone.")) return;
     removeStudent.mutate(studentId, { onSuccess: () => navigate(backPath) });
   }
 
   function handlePromote() {
     if (!studentId) return;
-    if (!window.confirm("Promote this student to SPC?")) return;
     promote.mutate(studentId, { onSuccess: () => navigate(backPath) });
   }
 
   function handleDemote() {
     if (!studentId) return;
-    if (!window.confirm("Demote this SPC back to a student?")) return;
     demote.mutate(studentId, { onSuccess: () => navigate(backPath) });
   }
 
   if (isLoading) {
     return (
-      <div className="review-layout" style={{ gridTemplateColumns: "1fr" }}>
-        <LoadingState label="Loading student record..." />
-      </div>
+      <>
+        <DetailHeader title="Review student record" onBack={() => navigate(backPath)} />
+        <div className="mx-auto w-full max-w-7xl p-4 md:p-6">
+          <LoadingState label="Loading student record..." />
+        </div>
+      </>
     );
   }
 
   if (isError || !student) {
     return (
-      <div className="review-layout" style={{ gridTemplateColumns: "1fr" }}>
-        <ErrorState message={error?.message ?? "Could not load this student."} onRetry={refetch} />
-      </div>
+      <>
+        <DetailHeader title="Review student record" onBack={() => navigate(backPath)} />
+        <div className="mx-auto w-full max-w-7xl p-4 md:p-6">
+          <ErrorState message={error?.message ?? "Could not load this student."} onRetry={refetch} />
+        </div>
+      </>
     );
   }
 
@@ -162,178 +210,270 @@ export default function StudentVerificationDetailPage({
 
   return (
     <>
-      <header className="review-topbar">
-        <button className="icon-btn" onClick={() => navigate(backPath)} type="button">
-          <ArrowLeft size={18} />
-        </button>
-        <div>
-          <h1>{mode === "manage" ? "Student details" : "Review student record"}</h1>
-          <p>{student.roll_no}</p>
-        </div>
-      </header>
+      <DetailHeader
+        title={mode === "verify" ? "Review student record" : "Student details"}
+        subtitle={student.roll_no}
+        onBack={() => navigate(backPath)}
+      />
 
-      <div className="review-layout">
-        <section className="document-viewer">
-          <div className="viewer-bar">
-            <div>
-              <FileText size={17} />
-              <b>{active.label}</b>
+      <div className="mx-auto grid w-full max-w-7xl gap-6 p-4 md:p-6 lg:grid-cols-[1.35fr_1fr]">
+        {/* Document viewer */}
+        <Card className="order-2 overflow-hidden lg:order-1 lg:sticky lg:top-20 lg:self-start">
+          <div className="flex items-center justify-between gap-2 border-b p-3">
+            <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
+              <FileText className="size-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">{active.label}</span>
             </div>
             {active.url && (
-              <a className="row-action" href={active.url} target="_blank" rel="noreferrer">
-                Open in new tab <ExternalLink size={13} />
+              <a
+                className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-foreground underline-offset-4 hover:underline"
+                href={active.url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open in new tab <ExternalLink className="size-3.5" />
               </a>
             )}
           </div>
-          <div className="viewer-canvas">
+          <div className="bg-muted/40 p-3">
             {active.url ? (
               <iframe
                 title={active.label}
-                src={active.url}
-                style={{ width: 580, minHeight: 760, border: "none", background: "#fff" }}
+                src={toDrivePreviewUrl(active.url)}
+                className="h-[60vh] w-full rounded-md border bg-white lg:h-[calc(100vh-13rem)]"
               />
             ) : (
-              <div className="marksheet" style={{ display: "grid", placeItems: "center" }}>
-                <span>No document uploaded for this record yet.</span>
+              <div className="grid h-[40vh] place-items-center rounded-md border border-dashed text-sm text-muted-foreground lg:h-[calc(100vh-13rem)]">
+                No document uploaded for this record yet.
               </div>
             )}
           </div>
-        </section>
+        </Card>
 
-        <aside className="review-panel">
-          <div className="candidate-head">
-            <div className="candidate-avatar">{initialsFromName(student.name)}</div>
-            <div>
-              <h2>{student.name}</h2>
-              <p>
-                {student.roll_no} · {student.branch ?? "Branch not set"}
-              </p>
-            </div>
-            <Badge tone={reviewStatusTone(student.review_status)}>
-              {reviewStatusLabel(student.review_status)}
-            </Badge>
-          </div>
+        {/* Review panel */}
+        <div className="order-1 flex flex-col gap-4 lg:order-2">
+          <Card>
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="grid size-12 shrink-0 place-items-center rounded-lg bg-muted font-semibold">
+                {initialsFromName(student.name)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-semibold">{student.name}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {student.roll_no} · {student.branch ?? "Branch not set"}
+                </div>
+              </div>
+              <StatusBadge tone={reviewStatusTone(student.review_status)}>
+                {reviewStatusLabel(student.review_status)}
+              </StatusBadge>
+            </CardContent>
+          </Card>
 
-          <ReviewSection title="Academic details">
-            <InfoGrid
-              items={[
-                ["Roll number", student.roll_no],
-                ["Department", student.department ?? "-"],
-                ["Branch", student.branch ?? "-"],
-                ["Semester", student.semester ? String(student.semester) : "-"],
-                ["Graduation year", student.graduation_year ? String(student.graduation_year) : "-"],
-                ["CGPA", formatCgpa(student.cgpa)],
-                ["Contact", student.phone ?? "-"],
-                ["Date of birth", formatDate(student.date_of_birth)],
-              ]}
-            />
-          </ReviewSection>
+          <Card>
+            <CardHeader className="border-b py-3">
+              <CardTitle className="text-sm">Academic details</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <InfoGrid
+                items={[
+                  ["Roll number", student.roll_no],
+                  ["Department", student.department ?? "—"],
+                  ["Branch", student.branch ?? "—"],
+                  ["Semester", student.semester ? String(student.semester) : "—"],
+                  ["Graduation year", student.graduation_year ? String(student.graduation_year) : "—"],
+                  ["CGPA", formatCgpa(student.cgpa)],
+                  ["Contact", student.phone ?? "—"],
+                  ["Date of birth", formatDate(student.date_of_birth)],
+                ]}
+              />
+            </CardContent>
+          </Card>
 
-          <ReviewSection
-            title="Backlog details"
-            badge={student.active_backlogs > 0 ? `${student.active_backlogs} active` : undefined}
-          >
-            <div className="backlog-card">
-              <div>
-                <b>
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0 border-b py-3">
+              <CardTitle className="text-sm">Backlog details</CardTitle>
+              {student.active_backlogs > 0 && (
+                <StatusBadge tone="red">{student.active_backlogs} active</StatusBadge>
+              )}
+            </CardHeader>
+            <CardContent className="flex items-center justify-between gap-3 pt-4">
+              <div className="min-w-0">
+                <div className="text-sm font-medium">
                   {student.active_backlogs > 0
                     ? `${student.active_backlogs} active backlog(s)`
                     : "No active backlogs"}
-                </b>
-                <span>{student.passive_backlogs} cleared previously</span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {student.passive_backlogs} cleared previously
+                </div>
               </div>
-              <Badge tone={student.active_backlogs > 0 ? "red" : "green"}>
+              <StatusBadge tone={student.active_backlogs > 0 ? "red" : "green"}>
                 {student.active_backlogs > 0 ? "Active backlog" : "Clear"}
-              </Badge>
-            </div>
-          </ReviewSection>
+              </StatusBadge>
+            </CardContent>
+          </Card>
 
           {student.rejection_reason && (
-            <ReviewSection title="Rejection reason">
-              <p className="reject-reason">{student.rejection_reason}</p>
-            </ReviewSection>
+            <Card>
+              <CardHeader className="border-b py-3">
+                <CardTitle className="text-sm">Rejection reason</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <p className="text-sm text-muted-foreground">
+                  {student.rejection_reason}
+                </p>
+              </CardContent>
+            </Card>
           )}
 
-          <ReviewSection title="Documents">
-            {documents.map((doc, i) => (
-              <button
-                key={doc.label}
-                type="button"
-                className={`doc-select ${i === activeDoc ? "active" : ""}`}
-                onClick={() => doc.url && setActiveDoc(i)}
-                disabled={!doc.url}
-              >
-                <FileText size={15} />
-                <span className="doc-sel-text">
-                  <b>{doc.label}</b>
-                  <small>{doc.url ? "Click to view on the left" : "Not uploaded"}</small>
-                </span>
-                <Badge tone={doc.url ? "green" : "gray"}>{doc.url ? "View" : "Missing"}</Badge>
-              </button>
-            ))}
-          </ReviewSection>
+          <Card>
+            <CardHeader className="border-b py-3">
+              <CardTitle className="text-sm">Documents</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2 p-3">
+              {documents.map((doc, i) => (
+                <button
+                  key={doc.label}
+                  type="button"
+                  onClick={() => doc.url && setActiveDoc(i)}
+                  disabled={!doc.url}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg border p-3 text-left transition-colors disabled:opacity-60",
+                    doc.url && "hover:bg-muted/50",
+                    i === activeDoc && doc.url && "border-foreground bg-muted/50",
+                  )}
+                >
+                  <FileText className="size-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">{doc.label}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {doc.url ? "Tap to view" : "Not uploaded"}
+                    </div>
+                  </div>
+                  <StatusBadge tone={doc.url ? "green" : "gray"}>
+                    {doc.url ? "View" : "Missing"}
+                  </StatusBadge>
+                </button>
+              ))}
+            </CardContent>
+          </Card>
 
+          {/* Actions */}
           {mode === "verify" ? (
-            <>
-              {rejecting && (
-                <textarea
-                  className="remarks"
-                  placeholder="Add a reason for rejecting this profile..."
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  autoFocus
-                />
-              )}
-              {(verifyMutation.isError || rejectMutation.isError) && (
-                <span className="field-error" style={{ padding: "0 20px" }}>
-                  {(verifyMutation.error ?? rejectMutation.error)?.message}
-                </span>
-              )}
-              <div className="verification-actions">
-                <button className="danger" type="button" onClick={handleReject} disabled={busy}>
-                  <XCircle size={17} /> {rejecting ? "Confirm reject" : "Reject"}
-                </button>
-                <button className="primary" type="button" onClick={handleVerify} disabled={busy}>
-                  <CheckCircle2 size={17} />
-                  {verifyMutation.isPending
-                    ? "Saving..."
-                    : role === "SPC"
-                      ? "Verify (SPC)"
-                      : "Verify (final)"}
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              {manageError && (
-                <span className="field-error" style={{ padding: "0 20px" }}>
-                  {manageError.message}
-                </span>
-              )}
-              <div className="verification-actions">
-                <button className="danger" type="button" onClick={handleDelete} disabled={busy}>
-                  <Trash2 size={16} /> Delete
-                </button>
-                {student.is_spc ? (
-                  <button className="secondary" type="button" onClick={handleDemote} disabled={busy}>
-                    <UserMinus size={16} /> Demote from SPC
-                  </button>
-                ) : (
-                  <button className="primary" type="button" onClick={handlePromote} disabled={busy}>
-                    <ShieldCheck size={16} /> Promote to SPC
-                  </button>
+            <Card>
+              <CardContent className="flex flex-col gap-3 p-4">
+                {rejecting && (
+                  <Textarea
+                    placeholder="Add a reason for rejecting this profile..."
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                    autoFocus
+                  />
                 )}
-              </div>
-            </>
+                {(verifyMutation.isError || rejectMutation.isError) && (
+                  <p className="text-sm text-destructive">
+                    {(verifyMutation.error ?? rejectMutation.error)?.message}
+                  </p>
+                )}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Button variant="destructive" type="button" onClick={handleReject} disabled={busy}>
+                    <XCircle /> {rejecting ? "Confirm reject" : "Reject"}
+                  </Button>
+                  <Button type="button" onClick={handleVerify} disabled={busy}>
+                    <CheckCircle2 />
+                    {verifyMutation.isPending
+                      ? "Saving..."
+                      : role === "SPC"
+                        ? "Verify (SPC)"
+                        : "Verify (final)"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : mode === "view" ? (
+            <Card>
+              <CardContent className="flex flex-col gap-3 p-4">
+                {removeStudent.error && (
+                  <p className="text-sm text-destructive">
+                    {removeStudent.error.message}
+                  </p>
+                )}
+                <ConfirmDialog
+                  trigger={
+                    <Button variant="destructive" type="button" disabled={busy}>
+                      <Trash2 /> Delete student
+                    </Button>
+                  }
+                  title="Delete this student?"
+                  description="This permanently deletes the student record. This action cannot be undone."
+                  confirmLabel="Delete"
+                  destructive
+                  onConfirm={handleDelete}
+                />
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="flex flex-col gap-3 p-4">
+                {manageError && (
+                  <p className="text-sm text-destructive">{manageError.message}</p>
+                )}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <ConfirmDialog
+                    trigger={
+                      <Button variant="destructive" type="button" disabled={busy}>
+                        <Trash2 /> Delete
+                      </Button>
+                    }
+                    title="Delete this student?"
+                    description="This permanently deletes the student record. This action cannot be undone."
+                    confirmLabel="Delete"
+                    destructive
+                    onConfirm={handleDelete}
+                  />
+                  {student.is_spc ? (
+                    <ConfirmDialog
+                      trigger={
+                        <Button variant="secondary" type="button" disabled={busy}>
+                          <UserMinus /> Demote from SPC
+                        </Button>
+                      }
+                      title="Demote this SPC?"
+                      description="They will return to being a regular student and lose verification access."
+                      confirmLabel="Demote"
+                      onConfirm={handleDemote}
+                    />
+                  ) : (
+                    <ConfirmDialog
+                      trigger={
+                        <Button type="button" disabled={busy}>
+                          <ShieldCheck /> Promote to SPC
+                        </Button>
+                      }
+                      title="Promote this student to SPC?"
+                      description="They will be able to verify other students in their department."
+                      confirmLabel="Promote"
+                      onConfirm={handlePromote}
+                    />
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           )}
-        </aside>
-      </div>
 
-      {nextId !== undefined && (
-        <button type="button" className="next-student-fab" onClick={goToNext} disabled={busy}>
-          Next student <ArrowRight size={15} />
-        </button>
-      )}
+          {nextId !== undefined && (
+            <Button
+              variant="outline"
+              type="button"
+              className="w-full"
+              onClick={goToNext}
+              disabled={busy}
+            >
+              Next student <ArrowRight />
+            </Button>
+          )}
+        </div>
+      </div>
     </>
   );
 }

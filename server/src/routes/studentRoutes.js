@@ -1,29 +1,37 @@
 import express from "express";
-import { getStudents,createStudent,getStudentById,updateStudent,deleteStudent,getMyProfile } from "../controllers/studentController.js";
-import { validateCreateStudent,validateUpdateStudent } from "../middleware/studentMiddleware.js";
-import {auth} from "../middleware/authMiddleware.js";
+import {
+  getStudents,
+  createStudent,
+  getStudentById,
+  updateStudent,
+  deleteStudent,
+  getMyProfile,
+  upsertMyProfile,
+} from "../controllers/studentController.js";
+import {
+  validateCreateStudent,
+  validateUpdateStudent,
+  validateUpdateMyProfile,
+} from "../middleware/studentMiddleware.js";
+import { auth } from "../middleware/authMiddleware.js";
 import { requireAdminTPC, requireAdminTPCSPC } from "../middleware/roleMiddleware.js";
 
 const router = express.Router();
 
-// CHANGE: GET / and GET /:id now use requireAdminTPCSPC (was requireAdminTPC).
-// PROBLEM: the SPC screens (roster + verification detail) read the student list
-//          and a single student to do their review, but requireAdminTPC returned
-//          403 "Admin or TPC access required" for SPCs.
-// FIX:     widen READ access to admin/TPC/SPC. SPC writes remain limited to
-//          PUT /spc/:id (requireSPC); DELETE stays admin-only.
-router.get("/", auth, requireAdminTPCSPC, getStudents);
+// --- Static /me routes MUST precede the "/:id" param routes -------------------
 
+// Self-service profile: read + partial upsert (the 4-part wizard).
 router.get("/me", auth, getMyProfile);
+router.put("/me", auth, validateUpdateMyProfile, upsertMyProfile);
 
+// --- List / create ------------------------------------------------------------
+router.get("/", auth, requireAdminTPCSPC, getStudents);
 router.post("/", auth, validateCreateStudent, createStudent);
 
-router.put("/:id", auth, validateUpdateStudent, updateStudent);
-
+// --- Single student by id ------------------------------------------------------
 router.get("/:id", auth, requireAdminTPCSPC, getStudentById);
-
-// TPC (and admin) can delete students - used by the TPC Students section's
-// "Delete student" action. Was admin-only before.
+// Staff edit only; students edit their own profile via PUT /me.
+router.put("/:id", auth, requireAdminTPC, validateUpdateStudent, updateStudent);
 router.delete("/:id", auth, requireAdminTPC, deleteStudent);
 
 export default router;

@@ -3,20 +3,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ApiError } from "../api/apiError";
 import {
   createPost,
-  deleteAttachment,
   deletePost,
-  getPostAttachments,
   getPostById,
   getPosts,
   updatePost,
   type CompanyPostRecord,
   type CreatePostPayload,
-  type PostAttachment,
   type UpdatePostPayload,
 } from "../services/companyPostService";
 import { queryKeys } from "./queryKeys";
 
-/** Purpose: TanStack Query wrappers over companyPostService.ts (posts CRUD + read/delete attachments). */
+/** Purpose: TanStack Query wrappers over companyPostService.ts (announcement CRUD; attachments travel with each post). */
 
 /** Purpose: GET /company-post - list all posts. Shared by the admin manager and the read-only announcements view. */
 export function useCompanyPosts() {
@@ -35,19 +32,27 @@ export function useCompanyPost(id: number | string | undefined) {
   });
 }
 
-/** Purpose: POST /company-post - create a post (Admin). Invalidates the posts list. */
+/**
+ * An announcement can be drive-linked, so post mutations also refresh the drive
+ * lists (their "Announcement" column) and any open drive detail.
+ */
+function invalidatePostsAndDrives(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: queryKeys.companyPosts });
+  queryClient.invalidateQueries({ queryKey: queryKeys.drives });
+  queryClient.invalidateQueries({ queryKey: queryKeys.myDrives });
+}
+
+/** Purpose: POST /company-post - create a post (Admin). Invalidates the posts list (+ drives if linked). */
 export function useCreatePost() {
   const queryClient = useQueryClient();
 
   return useMutation<CompanyPostRecord, ApiError, CreatePostPayload>({
     mutationFn: createPost,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.companyPosts });
-    },
+    onSuccess: () => invalidatePostsAndDrives(queryClient),
   });
 }
 
-/** Purpose: PUT /company-post/:postId - edit a post (Admin). Invalidates the list and that post's detail. */
+/** Purpose: PUT /company-post/:postId - edit a post (Admin). Invalidates the list, that post's detail (+ drives). */
 export function useUpdatePost() {
   const queryClient = useQueryClient();
 
@@ -58,41 +63,19 @@ export function useUpdatePost() {
   >({
     mutationFn: ({ id, payload }) => updatePost(id, payload),
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.companyPosts });
+      invalidatePostsAndDrives(queryClient);
       queryClient.invalidateQueries({ queryKey: queryKeys.companyPost(variables.id) });
     },
   });
 }
 
-/** Purpose: DELETE /company-post/:postId - remove a post (Admin). Invalidates the posts list. */
+/** Purpose: DELETE /company-post/:postId - remove a post (Admin). Invalidates the posts list (+ drives). */
 export function useDeletePost() {
   const queryClient = useQueryClient();
 
   return useMutation<{ message: string }, ApiError, number | string>({
     mutationFn: deletePost,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.companyPosts });
-    },
+    onSuccess: () => invalidatePostsAndDrives(queryClient),
   });
 }
 
-/** Purpose: GET /company-post/:postId/attachments - a post's attachments. */
-export function usePostAttachments(postId: number | string | undefined) {
-  return useQuery<PostAttachment[], ApiError>({
-    queryKey: queryKeys.postAttachments(postId ?? "unknown"),
-    queryFn: () => getPostAttachments(postId as number | string),
-    enabled: postId !== undefined,
-  });
-}
-
-/** Purpose: DELETE /company-post/attachments/:attachmentId - remove an attachment (Admin). Refreshes that post's attachment list. */
-export function useDeleteAttachment(postId: number | string) {
-  const queryClient = useQueryClient();
-
-  return useMutation<{ message: string }, ApiError, number | string>({
-    mutationFn: deleteAttachment,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.postAttachments(postId) });
-    },
-  });
-}

@@ -1,17 +1,39 @@
 import { axiosInstance } from "../api/axiosInstance";
 
 /**
- * Axios calls for the company-post feature
- * (server/src/routes/companyPostRoutes.js -> companyPostController.js):
- * announcement/email posts and their (read-only, for now) attachments. Upload
- * is intentionally omitted - the backend route has no multipart handler yet, so
- * attachments can only be listed and deleted, not created, from the client.
+ * Axios calls for the company-post ("announcement") feature
+ * (server/src/routes/companyPostRoutes.js -> companyPostController.js). Every
+ * post is an announcement (the old 'email' type was removed). Attachments are
+ * pasted Google Drive links (a name + a URL), NOT uploaded files, and they
+ * travel with the post: create/update accept the full attachment set and every
+ * read embeds `attachments[]`.
  */
 
-/** Post category (server/src/migrations/013_create_company_posts.sql CHECK). */
-export type PostType = "announcement" | "email";
+/** Post category. The 'email' type was removed; announcements are the only kind. */
+export type PostType = "announcement";
 
-/** Shape of a row from the `company_posts` table. */
+/**
+ * Shape of a row from the `company_post_attachments` table. file_name is the
+ * human-readable attachment name; file_url is the Google Drive URL.
+ */
+export interface PostAttachment {
+  attachment_id: number;
+  post_id: number;
+  file_name: string;
+  file_url: string;
+  display_order?: number;
+  /** Legacy columns, retained for back-compat; unused by the Drive-link flow. */
+  mime_type?: string | null;
+  uploaded_at?: string;
+}
+
+/** One attachment as submitted from a form (before it is saved). */
+export interface PostAttachmentInput {
+  file_name: string;
+  file_url: string;
+}
+
+/** Shape of a `company_posts` row, with its ordered attachments embedded. */
 export interface CompanyPostRecord {
   post_id: number;
   title: string;
@@ -20,27 +42,27 @@ export interface CompanyPostRecord {
   posted_by: string | null;
   created_at: string;
   updated_at: string;
+  attachments: PostAttachment[];
+  /** Phase 2: the drive this announcement belongs to, or null if standalone. */
+  drive_id?: number | null;
 }
 
 /** Body accepted by POST /company-post (createCompanyPostSchema). */
 export interface CreatePostPayload {
   title: string;
   content: string;
-  post_type?: PostType;
+  /** Full attachment set for the post; omit or [] for none. */
+  attachments?: PostAttachmentInput[];
+  /** Phase 2: link this announcement to a drive (one announcement per drive). */
+  drive_id?: number;
 }
 
-/** Body accepted by PUT /company-post/:postId (updateCompanyPostSchema) - every field optional. */
+/**
+ * Body accepted by PUT /company-post/:postId (updateCompanyPostSchema). Every
+ * field optional; sending `attachments` replaces the whole set, omitting it
+ * leaves them untouched.
+ */
 export type UpdatePostPayload = Partial<CreatePostPayload>;
-
-/** Shape of a row from the `company_post_attachments` table. */
-export interface PostAttachment {
-  attachment_id: number;
-  post_id: number;
-  file_name: string | null;
-  mime_type: string | null;
-  file_url: string;
-  uploaded_at: string;
-}
 
 /** Purpose: GET /company-post - list every post (any authenticated role). */
 export function getPosts() {
@@ -70,23 +92,9 @@ export function updatePost(postId: number | string, payload: UpdatePostPayload) 
     .then((res) => res.data);
 }
 
-/** Purpose: DELETE /company-post/:postId - remove a post (Admin only). */
+/** Purpose: DELETE /company-post/:postId - remove a post and its attachments (Admin only). */
 export function deletePost(postId: number | string) {
   return axiosInstance
     .delete<{ message: string }>(`/company-post/${postId}`)
-    .then((res) => res.data);
-}
-
-/** Purpose: GET /company-post/:postId/attachments - list a post's attachments. */
-export function getPostAttachments(postId: number | string) {
-  return axiosInstance
-    .get<PostAttachment[]>(`/company-post/${postId}/attachments`)
-    .then((res) => res.data);
-}
-
-/** Purpose: DELETE /company-post/attachments/:attachmentId - remove an attachment (Admin only). */
-export function deleteAttachment(attachmentId: number | string) {
-  return axiosInstance
-    .delete<{ message: string }>(`/company-post/attachments/${attachmentId}`)
     .then((res) => res.data);
 }

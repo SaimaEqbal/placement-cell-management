@@ -35,6 +35,9 @@ export interface CompleteRegistrationPayload {
   phone: string;
   /** For a TPC this is the department they oversee (stored in tpc.department). */
   department: string;
+  /** Optional specific branch within that department (stored in tpc.branch,
+   * which is nullable - a TPC may oversee a whole department). Omitted when blank. */
+  branch?: string;
   password: string;
 }
 

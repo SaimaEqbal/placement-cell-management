@@ -1,16 +1,26 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
-import Brand from "../../components/Brand";
+import { AuthShell } from "@/components/auth/AuthShell";
+import { AuthField, PasswordField } from "@/components/auth/AuthFields";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "../../context/AuthContext";
 import { useLogin, useResendVerification } from "../../hooks/useAuthMutations";
 import { decodeAccessToken } from "../../lib/jwt";
 import { validateEmail } from "../../lib/validation";
 import { homePathForRole, paths } from "../../routes/paths";
 import type { Role } from "../../types";
-
-import "../../styles/login.css";
 
 /** Purpose: /login - authenticate against POST /auth/login and route the student/SPC/TPC/admin to their own dashboard. */
 export default function LoginPage() {
@@ -21,7 +31,6 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | undefined>();
 
   /** Purpose: client-side check, then POST /auth/login; on success store the token and route by the role it decodes to. */
@@ -53,86 +62,104 @@ export default function LoginPage() {
       },
     );
   }
+
   const isUnverified = loginMutation.error?.status === 403;
+
   return (
-    <main className="login-page">
-      <div className="login-shell">
-        <section className="login-hero">
-          <div className="hero-grid" />
-          <Brand />
-          <div className="hero-copy">
-            <div className="eyebrow light">
-              <ShieldCheck size={15} /> Student placement portal
-            </div>
-            <h1>
-              Placeholder Text
-              <br />
-              <em>Placeholder Text</em>
-            </h1>
-            <p>Placeholder Text</p>
-          </div>
-          <p className="hero-foot">Jamia Millia Islamia · New Delhi</p>
-        </section>
+    <AuthShell>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-2xl">Sign in to your portal</CardTitle>
+          <CardDescription>Enter your credentials to continue.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form
+            onSubmit={handleSubmit}
+            noValidate
+            className="flex flex-col gap-4"
+          >
+            <AuthField id="email" label="Email">
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="username"
+              />
+            </AuthField>
 
-        <section className="login-panel">
-          <div className="login-card">
-            <div className="mobile-brand">
-              <Brand />
-            </div>
-            <div className="eyebrow">Welcome back</div>
-            <h2>Sign in to your portal</h2>
-            <p className="muted">Enter your credentials to continue.</p>
+            <PasswordField
+              id="password"
+              label="Password"
+              value={password}
+              onChange={setPassword}
+              autoComplete="current-password"
+            />
 
-            <form onSubmit={handleSubmit} noValidate>
-              <label>
-                Email
-                <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username"/>
-              </label>
-              <label>
-                Password
-                <div className="input-icon">
-                  <input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password"/>
-                  <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((prev) => !prev)}>
-                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                  </button>
-                </div>
-              </label>
+            {formError && (
+              <Alert variant="destructive">
+                <AlertDescription>{formError}</AlertDescription>
+              </Alert>
+            )}
 
-              {formError && <span className="field-error">{formError}</span>}
-              {!formError && loginMutation.isError && (
-                <span className="field-error">
-                  {loginMutation.error.message}
+            {!formError && loginMutation.isError && (
+              <Alert variant="destructive">
+                <AlertDescription className="flex flex-col gap-2">
+                  <span>{loginMutation.error.message}</span>
                   {isUnverified && (
-                    <>
-                      {" "}
-                      <button type="button" className="text-btn" disabled={resendMutation.isPending} onClick={() => resendMutation.mutate(email.trim().toLowerCase())}>
-                        Resend verification email <ArrowRight size={13} />
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      disabled={resendMutation.isPending}
+                      onClick={() =>
+                        resendMutation.mutate(email.trim().toLowerCase())
+                      }
+                      className="inline-flex w-fit items-center gap-1 font-medium underline underline-offset-4 disabled:opacity-50"
+                    >
+                      Resend verification email <ArrowRight className="size-3.5" />
+                    </button>
                   )}
-                </span>
-              )}
-              {resendMutation.isSuccess && ( <span className="field-error" style={{ color: "var(--green)" }}> Verification email sent - check your inbox. </span>)}
-              <button className="primary wide" type="submit" disabled={loginMutation.isPending}>
-                {loginMutation.isPending ? "Signing in..." : "Sign in"} <ArrowRight size={17} />
-              </button>
-            </form>
+                </AlertDescription>
+              </Alert>
+            )}
 
-            <div className="divider">
-              <span>Forgot your password?</span>
-            </div>
-            <Link className="text-btn" to={paths.forgotPassword}>
-              Reset your password <ArrowRight size={15} />
+            {resendMutation.isSuccess && (
+              <p className="text-sm text-muted-foreground">
+                Verification email sent — check your inbox.
+              </p>
+            )}
+
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full"
+              disabled={loginMutation.isPending}
+            >
+              {loginMutation.isPending ? "Signing in..." : "Sign in"}
+              <ArrowRight />
+            </Button>
+          </form>
+        </CardContent>
+        <CardFooter className="flex-col items-stretch gap-3 border-t pt-6 text-center text-sm text-muted-foreground">
+          <p>
+            Forgot your password?{" "}
+            <Link
+              to={paths.forgotPassword}
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+            >
+              Reset it
             </Link>
-            <div className="divider">
-              <span>New student?</span>
-            </div>
-            <Link className="text-btn" to={paths.register}>
-              Create your student profile <ArrowRight size={15} />
+          </p>
+          <p>
+            New student?{" "}
+            <Link
+              to={paths.register}
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+            >
+              Create your profile
             </Link>
-          </div>
-        </section>
-      </div>
-    </main>
+          </p>
+        </CardFooter>
+      </Card>
+    </AuthShell>
   );
 }

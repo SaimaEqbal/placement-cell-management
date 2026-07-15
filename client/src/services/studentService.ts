@@ -26,7 +26,15 @@ export interface StudentRecord {
   graduation_year: number | null;
   /** Postgres NUMERIC columns come back from `pg` as strings, not numbers - use Number(student.cgpa) before formatting/math. */
   cgpa: string | null;
-  placement_status: "unplaced" | "shortlisted" | "placed" | "rejected";
+  /**
+   * 'placed' = won a placement drive (placed_package records the CTC).
+   * 'second_chance' = won a >=2x drive while already placed - terminal state.
+   */
+  placement_status: "unplaced" | "shortlisted" | "placed" | "second_chance" | "rejected";
+  /** CTC (LPA) they were placed at; basis of the 2x second-chance rule. NUMERIC -> string. */
+  placed_package?: string | null;
+  /** Independent flag - selected in an internship drive; never affects placement state. */
+  selected_for_internship?: boolean;
   gender: string | null;
   region: string | null;
   religion: string | null;
@@ -156,10 +164,22 @@ export function createStudentProfile(payload: CreateStudentPayload) {
     .then((res) => res.data);
 }
 
-/** Purpose: PUT /students/:id - edit an existing student record (profile edits, and the base call behind SPC/TPC verification actions). */
+/** Purpose: PUT /students/:id - edit an existing student record (staff-only: SPC/TPC verification actions). Students edit their own profile via upsertMyProfile. */
 export function updateStudent(id: number | string, payload: UpdateStudentPayload) {
   return axiosInstance
     .put<StudentRecord>(`/students/${id}`, payload)
+    .then((res) => res.data);
+}
+
+/**
+ * Purpose: PUT /students/me - the self-scoped, partial upsert behind the 4-part
+ * profile wizard. Each wizard step sends only its own fields; the row is created
+ * on the first save. CGPA is derived server-side (never sent). Resolves by the
+ * authenticated user, so no student id is needed.
+ */
+export function upsertMyProfile(payload: UpdateStudentPayload) {
+  return axiosInstance
+    .put<StudentRecord>("/students/me", payload)
     .then((res) => res.data);
 }
 

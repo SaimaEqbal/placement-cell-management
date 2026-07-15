@@ -66,3 +66,18 @@ export function resetPassword(token: string, password: string) {
     .post<MessageResponse>("/auth/reset-password", { token, password })
     .then((res) => res.data);
 }
+
+/** A row from GET /auth/admins - an admin account (users carry only an email, no name). */
+export interface AdminAccountRow {
+  id: string;
+  email: string;
+  is_verified: boolean;
+  created_at: string;
+}
+
+/** Purpose: GET /auth/admins - every admin account (Admin only). */
+export function getAllAdmins() {
+  return axiosInstance
+    .get<AdminAccountRow[]>("/auth/admins")
+    .then((res) => res.data);
+}

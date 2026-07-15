@@ -75,32 +75,88 @@ export function validatePassword(value: string): string | undefined {
 export function validateConfirmPassword(password: string, confirm: string,): string | undefined {
   return password === confirm ? undefined : "Passwords do not match.";
 }
-/** Dropdown options in Complete Profile. */
-export const DEPARTMENTS = [ "Department Of Computer Engineering", "Department Of Electronics & Communication Engineering", "Department Of Electrical Engineering", "Department Of Mechanical Engineering", "Department Of Civil Engineering" ] as const;
+
+/** Purpose: generic "this field is required" rule for selects/inputs without a more specific check. */
+export function validateRequired(value: string, label: string): string | undefined {
+  return value.trim() ? undefined : `${label} is required.`;
+}
+
+/** Purpose: Branch field rule - required dropdown selection (options come from DEPARTMENT_BRANCHES). */
+export function validateBranch(value: string): string | undefined {
+  return value ? undefined : "Select a branch.";
+}
+
+/** Purpose: Graduation year rule - required 4-digit year within a sane range. */
+export function validateGraduationYear(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return "Graduation year is required.";
+  const num = Number(trimmed);
+  if (!Number.isInteger(num) || num < 2000 || num > 2100) {
+    return "Enter a valid graduation year.";
+  }
+  return undefined;
+}
+
+/** Purpose: 10th/12th percentage rule - required number between 0 and 100. */
+export function validatePercentage(value: string, label: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return `${label} is required.`;
+  const num = Number(trimmed);
+  if (!Number.isFinite(num) || num < 0 || num > 100) {
+    return `${label} must be between 0 and 100.`;
+  }
+  return undefined;
+}
+
+/** Purpose: Date of birth rule - required, must be a valid, past calendar date. */
+export function validateDateOfBirth(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return "Date of birth is required.";
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) return "Enter a valid date of birth.";
+  if (date.getTime() > Date.now()) return "Date of birth can't be in the future.";
+  return undefined;
+}
+
+/** Purpose: per-semester SPI rule - required number between 0 and 10. `label` names the semester. */
+export function validateSpi(value: string, label: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return `${label} is required.`;
+  const num = Number(trimmed);
+  if (!Number.isFinite(num) || num < 0 || num > 10) {
+    return `${label} must be between 0 and 10.`;
+  }
+  return undefined;
+}
 
 /**
  * Department -> the branches offered within it, for the student profile form.
  * The Branch dropdown is populated from the entry matching the chosen
  * Department, so a branch can never be selected without its department.
+ *
+ * Keys carry the "Department of" prefix - this is the single canonical form for
+ * a department across the whole app (student profile, TPC invite, admin filters,
+ * and the values stored in students/tpc/spc.department). Do not add a second,
+ * un-prefixed department vocabulary; every dropdown derives from these keys.
  */
 export const DEPARTMENT_BRANCHES: Record<string, readonly string[]> = {
-  "Computer Engineering": [
+  "Department of Computer Engineering": [
     "B.Tech. Computer Engineering",
     "B.Tech. Computer Science & Engineering (Data Sciences) (Self-financed)",
   ],
-  "Electronics & Communication Engineering": [
+  "Department of Electronics & Communication Engineering": [
     "B.Tech. (Electronics & Communication Engineering)",
     "B.Tech. Electronics (VLSI Design & Technology)",
   ],
-  "Electrical Engineering": [
+  "Department of Electrical Engineering": [
     "B.Tech. (Electrical Engineering)",
     "B.Tech. (Electrical & Computer Engineering)",
   ],
-  "Mechanical Engineering": [
+  "Department of Mechanical Engineering": [
     "B.Tech. (Mechanical Engineering)",
     "B.Tech. (Robotics & Artificial Intelligence) (Self-Financed)",
   ],
-  "Civil Engineering": [
+  "Department of Civil Engineering": [
     "B.Tech. (Civil Engineering)",
     "B.Tech. Civil Engineering (Construction Technology) (Self-Financed)",
   ],
@@ -108,5 +164,12 @@ export const DEPARTMENT_BRANCHES: Record<string, readonly string[]> = {
 
 /** Department options for the student profile form (the keys of DEPARTMENT_BRANCHES). */
 export const DEPARTMENT_OPTIONS = Object.keys(DEPARTMENT_BRANCHES);
+
+/**
+ * Dropdown options for admin filter pages. Aliased to DEPARTMENT_OPTIONS so
+ * there is exactly one department vocabulary - the admin filters now compare
+ * against the same strings students/TPCs are stored with.
+ */
+export const DEPARTMENTS = DEPARTMENT_OPTIONS;
 
 export const SEMESTERS = [5, 6, 7, 8] as const;

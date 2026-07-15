@@ -1,160 +1,88 @@
 import express from "express";
 
 import { auth } from "../middleware/authMiddleware.js";
-import {
-  requireAdminTPC,
-  requireAdmin,
-  requireAdminTPCSPC
-} from "../middleware/roleMiddleware.js";
+import { requireAdmin } from "../middleware/roleMiddleware.js";
 
 import {
   validateCreateDrive,
   validateUpdateDrive,
-  validateUpdateStudentRound
+  validateAttendance,
+  validateRoundDate,
+  validatePrefilterFinalize,
+  validateRoundResolve,
 } from "../middleware/driveMiddleware.js";
 
 import {
   createDrive,
   getDrives,
   getDriveById,
+  getDriveEligible,
   updateDrive,
   deleteDrive,
   getDriveStudents,
   confirmStudents,
-  markRejected,
-  markSelected,
-  removeStudent,
-  updateStudentRound,
+  startRoundZero,
+  finalizePrefilter,
+  finalizeAttendance,
+  advanceRound,
+  completeDrive,
+  markAttendance,
+  getRoundHistory,
+  getDriveRounds,
+  setRoundDate,
+  getMyDrives,
+  getMyDriveResults,
 } from "../controllers/driveController.js";
 
 const router = express.Router();
 
-router.post(
-  "/",
-  auth,
-  requireAdmin,
-  validateCreateDrive,
-  createDrive
-);
+// --- Drive CRUD ------------------------------------------------------------
+router.post("/", auth, requireAdmin, validateCreateDrive, createDrive);
+router.get("/", auth, getDrives);
+// Static routes must precede the "/:driveId" param route so "/my-drives" matches.
+router.get("/my-drives", auth, getMyDrives);
+router.get("/:driveId", auth, getDriveById);
+router.get("/:driveId/eligible", auth, requireAdmin, getDriveEligible);
+router.put("/:driveId", auth, requireAdmin, validateUpdateDrive, updateDrive);
+router.delete("/:driveId", auth, requireAdmin, deleteDrive);
 
-router.get(
-  "/",
-  auth,
-  getDrives
-);
+// --- Shortlist -------------------------------------------------------------
+router.get("/:driveId/students", auth, getDriveStudents);
+router.post("/:driveId/confirm-students", auth, requireAdmin, confirmStudents);
 
-router.get(
-  "/:driveId",
-  auth,
-  getDriveById
-);
+// --- Round-workflow transitions -------------------------------------------
+router.post("/:driveId/start-round-0", auth, requireAdmin, startRoundZero);
+router.post("/:driveId/finalize-prefilter", auth, requireAdmin, validatePrefilterFinalize, finalizePrefilter);
+router.post("/:driveId/finalize-attendance", auth, requireAdmin, finalizeAttendance);
+router.post("/:driveId/advance-round", auth, requireAdmin, validateRoundResolve, advanceRound);
+router.post("/:driveId/complete", auth, requireAdmin, validateRoundResolve, completeDrive);
 
-router.put(
-  "/:driveId",
-  auth,
-  requireAdmin,
-  validateUpdateDrive,
-  updateDrive
-);
-
-router.delete(
-  "/:driveId",
-  auth,
-  requireAdmin,
-  deleteDrive
-);
-
-router.get(
-  "/:driveId/students",
-  auth,
-  getDriveStudents
-);
-
-router.post(
-  "/:driveId/confirm-students",
-  auth,
-  requireAdmin,
-  confirmStudents
-);
-
+// --- Per-student round actions (nested so the parent drive state is checked) --
+// Prefilter removals and round results are committed in batch at the stage
+// finalize endpoints (finalize-prefilter / advance-round / complete); attendance
+// is the only remaining per-student toggle.
 router.patch(
-  "/students/:driveStudentId/round",
+  "/:driveId/students/:driveStudentId/attendance",
   auth,
   requireAdmin,
-  updateStudentRound
+  validateAttendance,
+  markAttendance
 );
 
+// --- Per-round dates -------------------------------------------------------
+router.get("/:driveId/rounds", auth, getDriveRounds);
 router.patch(
-  "/students/:driveStudentId/select",
+  "/:driveId/rounds/:roundNo/date",
   auth,
   requireAdmin,
-  markSelected
+  validateRoundDate,
+  setRoundDate
 );
 
-router.patch(
-  "/students/:driveStudentId/reject",
-  auth,
-  requireAdmin,
-  markRejected
-);
+// --- History ---------------------------------------------------------------
+router.get("/:driveId/history", auth, getRoundHistory);
 
-router.delete(
-  "/students/:driveStudentId",
-  auth,
-  requireAdmin,
-  removeStudent
-);
+// --- Student self-scoped reads ---------------------------------------------
+router.get("/:driveId/my-results", auth, getMyDriveResults);
 
 export default router;
-
-// router.get(
-//   "/:driveId/applications",
-//   auth,
-//   requireAdminTPCSPC,
-//   getAppliedStudents
-// );
-
-// router.put(
-//   "/applications/:applicationId/approve",
-//   auth,
-//   requireAdminTPC,
-//   approveApplication
-// );
-
-// router.put(
-//   "/applications/:applicationId/reject",
-//   auth,
-//   requireAdminTPC,
-//   rejectApplication
-// );
-
-// router.put(
-//   "/applications/:applicationId/round",
-//   auth,
-//   requireAdminTPCSPC,
-//   validateUpdateStudentRound,
-//   updateStudentRound
-// );
-
-// router.put(
-//   "/applications/:applicationId/select",
-//   auth,
-//   requireAdminTPC,
-//   markStudentSelected
-// );
-
-// router.put(
-//   "/applications/:applicationId/not-select",
-//   auth,
-//   requireAdminTPC,
-//   markStudentRejected
-// );
-
-// router.get(
-//   "/:driveId/results",
-//   auth,
-//   requireAdminTPCSPC,
-//   getDriveResults
-// );
-
-

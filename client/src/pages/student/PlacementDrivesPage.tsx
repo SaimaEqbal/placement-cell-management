@@ -1,54 +1,89 @@
-import { useMemo } from "react";
-import { Briefcase, CalendarClock, GraduationCap, IndianRupee } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { CalendarClock, ListChecks, Megaphone } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
-import { Badge, EmptyState, ErrorState, LoadingState } from "../../components/ui";
-import { useCompanies } from "../../hooks/useCompanies";
-import { useDrives } from "../../hooks/useDrives";
+import { PageContainer } from "@/components/dashboard/PageContainer";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { AnnouncementViewerDialog } from "@/components/dashboard/AnnouncementViewerDialog";
+import { DataTable, DataTableColumnHeader } from "@/components/dashboard/data-table";
+import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
+import { Button } from "@/components/ui/button";
 import {
-  useApplyForDrive,
-  useStudentApplications,
-  useWithdrawApplication,
-} from "../../hooks/useApplications";
-import { useProfile } from "../../hooks/useProfile";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useCompanies } from "../../hooks/useCompanies";
+import {
+  useDriveRounds,
+  useDrives,
+  useMyDrives,
+  useMyDriveResults,
+} from "../../hooks/useDrives";
 import { formatDate } from "../../lib/format";
-import type { ApplicationRecord } from "../../services/applicationService";
-import type { StatusTone } from "../../types";
+import {
+  driveStudentLabel,
+  driveStudentTone,
+  historyResultLabel,
+  historyResultTone,
+  historyStageLabel,
+  roundLabel,
+} from "../../lib/driveStatus";
+import type {
+  DriveRecord,
+  HistoryStage,
+  MyDrive,
+} from "../../services/driveService";
 
-import "../../styles/dashboard.css";
+/** Phases within a round, in the order they happen. */
+const STAGE_ORDER: HistoryStage[] = ["SHORTLIST", "PREFILTER", "ATTENDANCE", "RESULT"];
 
-/** Purpose: tone for an application's workflow status. */
-function statusTone(status: string): StatusTone {
-  switch (status) {
-    case "selected":
-    case "approved":
-      return "green";
-    case "rejected":
-    case "not_selected":
-      return "red";
-    case "pending":
-      return "amber";
-    default:
-      return "blue";
-  }
+type DriveView = "all" | "mine";
+
+/** The drive whose round-by-round results are open in the dialog. */
+interface ResultsTarget {
+  driveId: number;
+  label: string;
 }
 
 /**
- * Purpose: /Student/drives - lists real placement drives (GET /drive) and lets
- * the signed-in student apply (POST /application/apply/:driveId) or withdraw
- * (DELETE /application/:applicationId). Company names are resolved from the
- * cached GET /companies list; the student's numeric id (needed as student_id
- * when applying) comes from their profile (GET /students/me).
+ * Purpose: /Student/drives - a student's window into placement drives. A dropdown
+ * switches between "All drives" (everything the cell has announced) and "My drives"
+ * (the drives this student was shortlisted into). From My drives a student opens a
+ * table of their own round-by-round results. Every view reuses the shared DataTable;
+ * students never see other students' data (My drives / results are server self-scoped).
  */
 export default function PlacementDrivesPage() {
-  const { data: drives, isLoading, isError, error, refetch } = useDrives();
-  const { data: companies } = useCompanies();
-  const { data: profile } = useProfile();
-  const studentId = profile?.id;
+  const [view, setView] = useState<DriveView>("all");
+  const [results, setResults] = useState<ResultsTarget | null>(null);
+  /** The post_id of the drive-linked announcement open in the viewer, if any. */
+  const [announcementPostId, setAnnouncementPostId] = useState<number | null>(null);
 
-  const { data: applications } = useStudentApplications(studentId);
-  const applyForDrive = useApplyForDrive();
-  const withdraw = useWithdrawApplication(studentId);
+  /** Shared "Announcement" cell: a View action when linked, else a dash. */
+  const announcementCell = (announcementId: number | null | undefined) =>
+    announcementId ? (
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setAnnouncementPostId(announcementId)}
+      >
+        <Megaphone /> View announcement
+      </Button>
+    ) : (
+      <span className="text-muted-foreground">—</span>
+    );
+
+  const { data: companies } = useCompanies();
 
   const companyNameById = useMemo(() => {
     const map = new Map<number, string>();
@@ -56,168 +91,346 @@ export default function PlacementDrivesPage() {
     return map;
   }, [companies]);
 
-  /** drive_id -> the student's existing application, so we can show status/withdraw. */
-  const applicationByDrive = useMemo(() => {
-    const map = new Map<number, ApplicationRecord>();
-    applications?.forEach((a) => map.set(a.drive_id, a));
-    return map;
-  }, [applications]);
+  const companyOf = (companyId: number) =>
+    companyNameById.get(companyId) ?? `Company #${companyId}`;
+
+  // ---- All drives ---------------------------------------------------------
+  const allDrives = useDrives();
+
+  const allColumns: ColumnDef<DriveRecord>[] = [
+    {
+      id: "company",
+      accessorFn: (d) => companyOf(d.company_id),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Company" />,
+      meta: { label: "Company" },
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium">{companyOf(row.original.company_id)}</div>
+          {row.original.job_role && (
+            <div className="truncate text-xs text-muted-foreground">{row.original.job_role}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "employment_type",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Type" />,
+      meta: { label: "Type" },
+    },
+    {
+      id: "package",
+      accessorFn: (d) => d.package_ctc ?? "—",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Package (LPA)" />,
+      meta: { label: "Package (LPA)" },
+    },
+    {
+      id: "min_cgpa",
+      accessorFn: (d) => String(d.minimum_cgpa),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Min CGPA" />,
+      meta: { label: "Min CGPA" },
+    },
+    {
+      id: "branches",
+      accessorFn: (d) => d.allowed_branches?.join(", ") || "—",
+      header: "Branches",
+      meta: { label: "Branches" },
+      enableSorting: false,
+    },
+    {
+      id: "announcement",
+      header: "Announcement",
+      meta: { label: "Announcement" },
+      enableSorting: false,
+      cell: ({ row }) => announcementCell(row.original.announcement_id),
+    },
+  ];
+
+  // ---- My drives ----------------------------------------------------------
+  const myDrives = useMyDrives();
+
+  const driveLabel = (d: MyDrive) =>
+    d.job_role || companyOf(d.company_id) || `Drive #${d.drive_id}`;
+
+  const myColumns: ColumnDef<MyDrive>[] = [
+    {
+      id: "company",
+      accessorFn: (d) => companyOf(d.company_id),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Company" />,
+      meta: { label: "Company" },
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium">{companyOf(row.original.company_id)}</div>
+          {row.original.job_role && (
+            <div className="truncate text-xs text-muted-foreground">{row.original.job_role}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "employment_type",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Type" />,
+      meta: { label: "Type" },
+    },
+    {
+      id: "my_status",
+      accessorFn: (d) => driveStudentLabel(d.my_status),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="My status" />,
+      meta: { label: "My status" },
+      cell: ({ row }) => (
+        <StatusBadge tone={driveStudentTone(row.original.my_status)}>
+          {driveStudentLabel(row.original.my_status)}
+        </StatusBadge>
+      ),
+    },
+    {
+      id: "my_round",
+      accessorFn: (d) => roundLabel(d.my_current_round),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Current round" />,
+      meta: { label: "Current round" },
+    },
+    {
+      id: "announcement",
+      header: "Announcement",
+      meta: { label: "Announcement" },
+      enableSorting: false,
+      cell: ({ row }) => announcementCell(row.original.announcement_id),
+    },
+    {
+      id: "actions",
+      header: () => <div className="text-right">Rounds</div>,
+      enableSorting: false,
+      enableHiding: false,
+      meta: { align: "right" },
+      cell: ({ row }) => (
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setResults({ driveId: row.original.drive_id, label: driveLabel(row.original) })
+            }
+          >
+            <ListChecks /> View rounds
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  const active = view === "all" ? allDrives : myDrives;
 
   return (
     <>
       <Topbar
         title="Placement drives"
-        subtitle="Drives currently open through the placement cell."
+        subtitle="Drives announced by the placement cell. Track your progress in the ones you're shortlisted into."
       />
-      <div className="dashboard-content">
-        {!profile && (
-          <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>
-            Complete your profile to apply for drives.
-          </p>
-        )}
+      <PageContainer>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold tracking-tight">
+            {view === "all" ? "All drives" : "My drives"}
+          </h2>
+          <Select value={view} onValueChange={(v) => setView(v as DriveView)}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All drives</SelectItem>
+              <SelectItem value="mine">My drives</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-        {isLoading && <LoadingState label="Loading placement drives..." />}
-
-        {isError && (
+        {active.isLoading && <LoadingState label="Loading drives..." />}
+        {active.isError && (
           <ErrorState
-            message={error?.message ?? "Could not load placement drives."}
-            onRetry={refetch}
+            message={active.error?.message ?? "Could not load drives."}
+            onRetry={active.refetch}
           />
         )}
 
-        {!isLoading && !isError && (!drives || drives.length === 0) && (
+        {view === "all" && !allDrives.isLoading && !allDrives.isError && (
+          (allDrives.data?.length ?? 0) === 0 ? (
+            <EmptyState
+              icon={<ListChecks />}
+              title="No placement drives yet"
+              description="The placement cell hasn't announced any drives yet. Check back soon."
+            />
+          ) : (
+            <DataTable
+              columns={allColumns}
+              data={allDrives.data ?? []}
+              searchPlaceholder="Search company or role..."
+              enableExport
+              exportFileName="drives"
+            />
+          )
+        )}
+
+        {view === "mine" && !myDrives.isLoading && !myDrives.isError && (
+          (myDrives.data?.length ?? 0) === 0 ? (
+            <EmptyState
+              icon={<ListChecks />}
+              title="You're not shortlisted into any drives yet"
+              description="Once the placement cell shortlists you into a drive, it will appear here with your round-by-round progress."
+            />
+          ) : (
+            <DataTable
+              columns={myColumns}
+              data={myDrives.data ?? []}
+              searchPlaceholder="Search your drives..."
+            />
+          )
+        )}
+      </PageContainer>
+
+      <MyDriveResultsDialog
+        target={results}
+        onOpenChange={(open) => {
+          if (!open) setResults(null);
+        }}
+      />
+
+      <AnnouncementViewerDialog
+        postId={announcementPostId}
+        open={announcementPostId !== null}
+        onOpenChange={(open) => {
+          if (!open) setAnnouncementPostId(null);
+        }}
+      />
+    </>
+  );
+}
+
+/**
+ * Purpose: the student's own progression for one drive, organised by Round and
+ * then by phase (Shortlist / Pre-filter / Attendance / Results) so each phase is
+ * viewed on its own - the student sees exactly one entry per phase, never stacked.
+ */
+function MyDriveResultsDialog({
+  target,
+  onOpenChange,
+}: {
+  target: ResultsTarget | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const results = useMyDriveResults(target?.driveId);
+  const rounds = useDriveRounds(target?.driveId);
+
+  const [round, setRound] = useState<number | null>(null);
+  const [stage, setStage] = useState<HistoryStage | null>(null);
+
+  // Reset the selectors whenever a different drive's dialog opens.
+  useEffect(() => {
+    setRound(null);
+    setStage(null);
+  }, [target?.driveId]);
+
+  const data = results.data ?? [];
+  const roundNos = useMemo(
+    () => Array.from(new Set(data.map((r) => r.round_no))).sort((a, b) => a - b),
+    [data],
+  );
+  const activeRound = round ?? (roundNos.length ? roundNos[roundNos.length - 1] : null);
+
+  const roundRows = data.filter((r) => r.round_no === activeRound);
+  const stages = STAGE_ORDER.filter((s) => roundRows.some((r) => r.stage === s));
+  const activeStage =
+    stage && stages.includes(stage) ? stage : stages.length ? stages[stages.length - 1] : null;
+  const phaseRows = roundRows.filter((r) => r.stage === activeStage);
+
+  const roundDate = rounds.data?.find((r) => r.round_no === activeRound)?.round_date;
+
+  return (
+    <Dialog open={target !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
+        <DialogHeader>
+          <DialogTitle>My rounds</DialogTitle>
+          <DialogDescription>
+            {target ? `${target.label} · your progress, round by round.` : ""}
+          </DialogDescription>
+        </DialogHeader>
+
+        {results.isLoading && <LoadingState label="Loading your results..." />}
+        {results.isError && (
+          <ErrorState
+            message={results.error?.message ?? "Could not load your results."}
+            onRetry={results.refetch}
+          />
+        )}
+
+        {!results.isLoading && !results.isError && roundNos.length === 0 && (
           <EmptyState
-            icon={<Briefcase size={28} />}
-            title="No placement drives yet"
-            description="The placement cell hasn't announced any drives yet. Check back soon."
+            icon={<ListChecks />}
+            title="No round activity yet"
+            description="Your progress will appear here as the drive moves through its rounds."
           />
         )}
 
-        {!isLoading && !isError && drives && drives.length > 0 && (
-          <div className="two-column">
-            {drives.map((drive) => {
-              const application = applicationByDrive.get(drive.drive_id);
-              const companyName =
-                companyNameById.get(drive.company_id) ??
-                `Company #${drive.company_id}`;
-              return (
-                <section className="panel" key={drive.drive_id}>
-                  <div className="panel-head">
-                    <h2>{drive.job_role || companyName}</h2>
-                    {application ? (
-                      <Badge tone={statusTone(application.status)}>
-                        {application.status}
-                      </Badge>
-                    ) : (
-                      <Badge tone="blue">{drive.status}</Badge>
-                    )}
-                  </div>
-                  <div className="panel-body">
-                    <p
-                      style={{
-                        fontSize: 11,
-                        color: "var(--muted)",
-                        marginBottom: 12,
-                      }}
-                    >
-                      {drive.job_description ?? "No description provided."}
-                    </p>
-                    <div className="info-grid">
-                      <div>
-                        <span>Company</span>
-                        <b>{companyName}</b>
-                      </div>
-                      <div>
-                        <span>Type</span>
-                        <b>{drive.employment_type}</b>
-                      </div>
-                      <div>
-                        <span>
-                          <IndianRupee size={11} /> Package (LPA)
-                        </span>
-                        <b>{drive.package_ctc ?? "-"}</b>
-                      </div>
-                      <div>
-                        <span>
-                          <GraduationCap size={11} /> Min CGPA
-                        </span>
-                        <b>{drive.minimum_cgpa}</b>
-                      </div>
-                      <div>
-                        <span>
-                          <CalendarClock size={11} /> Deadline
-                        </span>
-                        <b>{formatDate(drive.application_deadline)}</b>
-                      </div>
-                      <div>
-                        <span>Role</span>
-                        <b>{drive.job_role ?? "-"}</b>
-                      </div>
-                      <div>
-                        <span>Drive date</span>
-                        <b>{formatDate(drive.drive_date)}</b>
-                      </div>
-                      <div>
-                        <span>Rounds</span>
-                        <b>{drive.number_of_rounds}</b>
-                      </div>
-                      <div>
-                        <span>Max active backlogs</span>
-                        <b>{drive.max_active_backlogs}</b>
-                      </div>
-                      <div>
-                        <span>Max passive backlogs</span>
-                        <b>{drive.max_passive_backlogs}</b>
-                      </div>
-                      <div>
-                        <span>Branches</span>
-                        <b>{drive.allowed_branches?.join(", ") || "-"}</b>
-                      </div>
-                    </div>
+        {!results.isLoading && !results.isError && activeRound !== null && (
+          <div className="flex flex-col gap-4 overflow-y-auto">
+            {/* Round selector */}
+            <div className="flex flex-wrap gap-2">
+              {roundNos.map((rn) => (
+                <Button
+                  key={rn}
+                  size="sm"
+                  variant={rn === activeRound ? "default" : "outline"}
+                  onClick={() => {
+                    setRound(rn);
+                    setStage(null);
+                  }}
+                >
+                  {rn === 0 ? "Round 0" : `Round ${rn}`}
+                </Button>
+              ))}
+            </div>
 
-                    <div className="form-actions" style={{ marginTop: 14 }}>
-                      <p />
-                      {application ? (
-                        <button
-                          className="secondary"
-                          type="button"
-                          disabled={withdraw.isPending}
-                          onClick={() =>
-                            withdraw.mutate(application.application_id)
-                          }
-                        >
-                          {withdraw.isPending ? "Withdrawing..." : "Withdraw"}
-                        </button>
-                      ) : (
-                        <button
-                          className="primary"
-                          type="button"
-                          disabled={!studentId || applyForDrive.isPending}
-                          onClick={() =>
-                            studentId &&
-                            applyForDrive.mutate({
-                              driveId: drive.drive_id,
-                              studentId,
-                            })
-                          }
-                        >
-                          {applyForDrive.isPending ? "Applying..." : "Apply"}
-                        </button>
-                      )}
-                    </div>
+            {/* Round date */}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <CalendarClock className="size-4" />
+              {roundDate ? `Scheduled for ${formatDate(roundDate)}` : "Date to be decided"}
+            </div>
+
+            {/* Phase selector */}
+            <div className="flex flex-wrap gap-2">
+              {stages.map((s) => (
+                <Button
+                  key={s}
+                  size="sm"
+                  variant={s === activeStage ? "secondary" : "ghost"}
+                  onClick={() => setStage(s)}
+                >
+                  {historyStageLabel(s)}
+                </Button>
+              ))}
+            </div>
+
+            {/* Selected phase - one entry per phase */}
+            <div className="flex flex-col gap-3">
+              {phaseRows.map((row) => (
+                <div
+                  key={row.history_id}
+                  className="flex flex-col gap-2 rounded-lg border p-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium">
+                      {activeStage ? historyStageLabel(activeStage) : ""}
+                    </span>
+                    <StatusBadge tone={historyResultTone(row.result)}>
+                      {historyResultLabel(row.result)}
+                    </StatusBadge>
                   </div>
-                </section>
-              );
-            })}
+                  {row.reason && (
+                    <p className="text-sm text-muted-foreground">Reason: {row.reason}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">{formatDate(row.recorded_at)}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
-
-        {(applyForDrive.isError || withdraw.isError) && (
-          <p style={{ fontSize: 11, color: "var(--red)", marginTop: 12 }}>
-            {applyForDrive.error?.message ?? withdraw.error?.message}
-          </p>
-        )}
-      </div>
-    </>
+      </DialogContent>
+    </Dialog>
   );
 }
