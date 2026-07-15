@@ -629,6 +629,7 @@ export const confirmStudents = async (req, res) => {
 
 export const getDriveStudents = async (req, res) => {
   try {
+
     const { driveId } = req.params;
 
     const result = await pool.query(
@@ -653,8 +654,10 @@ export const getDriveStudents = async (req, res) => {
       [driveId]
     );
 
-    return res.status(200).json(result.rows);
   } catch (error) {
+
+    await client.query("ROLLBACK");
+
     console.error(error);
     const { status, message } = pgErrorResponse(
       error,
@@ -849,6 +852,7 @@ export const finalizePrefilter = async (req, res) => {
   } finally {
     client.release();
   }
+
 };
 
 // Close attendance: everyone defaults to PRESENT (checkbox model) - only students
