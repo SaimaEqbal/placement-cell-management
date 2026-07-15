@@ -6,9 +6,6 @@ import {
   getPostById,
   updatePost,
   deletePost,
-  uploadAttachments,
-  getAttachmentsByPost,
-  deleteAttachment,
 } from "../controllers/companyPostController.js";
 
 import {
@@ -59,24 +56,8 @@ router.delete(
   deletePost
 );
 
-router.post(
-  "/:postId/attachments",
-  auth,
-  requireAdmin,
-  uploadAttachments
-);
-
-router.get(
-  "/:postId/attachments",
-  auth,
-  getAttachmentsByPost
-);
-
-router.delete(
-  "/attachments/:attachmentId",
-  auth,
-  requireAdmin,
-  deleteAttachment
-);
+// Attachments are managed transactionally through the post create/update bodies
+// (they are pasted Drive links, not uploads), so there are no separate
+// attachment routes.
 
 export default router;

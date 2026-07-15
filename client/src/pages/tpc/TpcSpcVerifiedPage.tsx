@@ -6,6 +6,7 @@ import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
 import { ListCard } from "@/components/dashboard/ListCard";
 import { BranchFilter } from "@/components/dashboard/BranchFilter";
+import { YearFilter } from "@/components/dashboard/YearFilter";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
 import { DataTable } from "@/components/dashboard/data-table";
@@ -22,9 +23,11 @@ import { paths } from "../../routes/paths";
  */
 export default function TpcSpcVerifiedPage() {
   const [branch, setBranch] = useState("");
+  const [year, setYear] = useState("");
   const { data: branches } = useTpcBranches();
   const { data: students, isLoading, isError, error, refetch } = useTpcSpcVerified(
     branch || undefined,
+    year || undefined,
   );
 
   const ids = (students ?? []).map((s) => s.id);
@@ -82,7 +85,10 @@ export default function TpcSpcVerifiedPage() {
                 enableExport
                 exportFileName="awaiting-tpc-verification"
                 toolbarActions={
-                  <BranchFilter branches={branches ?? []} value={branch} onChange={setBranch} />
+                  <>
+                    <BranchFilter branches={branches ?? []} value={branch} onChange={setBranch} />
+                    <YearFilter value={year} onChange={setYear} />
+                  </>
                 }
               />
             )}

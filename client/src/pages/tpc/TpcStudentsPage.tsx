@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 
@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { ErrorState, LoadingState } from "@/components/dashboard/states";
 import { DataTable } from "@/components/dashboard/data-table";
 import { makeStudentColumns } from "@/components/dashboard/studentColumns";
+import { YearFilter } from "@/components/dashboard/YearFilter";
 import { Button } from "@/components/ui/button";
 import { useTpcStudents } from "../../hooks/useVerification";
 import { reviewStatusLabel, reviewStatusTone } from "../../lib/reviewStatus";
@@ -20,7 +21,11 @@ import { paths } from "../../routes/paths";
  * demote / delete). SPC coordinators are tagged.
  */
 export default function TpcStudentsPage() {
-  const { data: students, isLoading, isError, error, refetch } = useTpcStudents();
+  const [year, setYear] = useState("");
+  const { data: students, isLoading, isError, error, refetch } = useTpcStudents(
+    undefined,
+    year || undefined,
+  );
 
   const ids = (students ?? []).map((s) => s.id);
 
@@ -71,6 +76,7 @@ export default function TpcStudentsPage() {
               enableExport
               exportFileName="department-students"
               emptyMessage="No students found."
+              toolbarActions={<YearFilter value={year} onChange={setYear} />}
             />
           </ListCard>
         )}

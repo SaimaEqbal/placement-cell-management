@@ -1,5 +1,11 @@
 import pool from "../config/db.js";
 import { pgErrorResponse } from "../lib/dbError.js";
+import { computeCgpaRounded } from "../lib/cgpa.js";
+
+const spiArrayOf = (src) => [
+  src.sem1_spi, src.sem2_spi, src.sem3_spi, src.sem4_spi,
+  src.sem5_spi, src.sem6_spi, src.sem7_spi, src.sem8_spi,
+];
 
 export const createStudent = async (req, res) => {
 
@@ -13,7 +19,6 @@ export const createStudent = async (req, res) => {
       branch,
       department,
       graduation_year,
-      cgpa,
 
       gender,
       region,
@@ -45,6 +50,9 @@ export const createStudent = async (req, res) => {
     } = req.body;
 
     const userId = req.user.userId;
+
+    // CGPA is derived server-side from the SPIs, never taken from the client.
+    const cgpa = computeCgpaRounded(spiArrayOf(req.body), semester);
 
     const result = await pool.query(
   `INSERT INTO students (
@@ -180,7 +188,6 @@ export const updateStudent = async (req, res) => {
       branch,
       department,
       graduation_year,
-      cgpa,
 
       gender,
       region,
@@ -257,6 +264,9 @@ export const updateStudent = async (req, res) => {
     const reviewedAt = requiresReview
       ? null
       : student.reviewed_at;
+
+    // CGPA is derived server-side from the SPIs, never taken from the client.
+    const cgpa = computeCgpaRounded(spiArrayOf(req.body), semester);
 
     const result = await pool.query(
       `UPDATE students
@@ -426,5 +436,149 @@ export const getMyProfile = async (req, res) => {
     return res.status(500).json({
       message: "Failed to fetch profile",
     });
+  }
+};
+
+// Columns the self-service profile wizard may write. SQL identifiers are only
+// ever taken from THIS allowlist - never from req.body keys - so a partial
+// UPDATE can't be used to inject column names. `cgpa` is intentionally absent
+// (derived server-side); the four document URLs are saved by the Documents step.
+const MY_PROFILE_COLUMNS = [
+  "roll_no", "name", "email", "phone",
+  "branch", "department", "graduation_year", "semester",
+  "gender", "region", "religion", "date_of_birth",
+  "active_backlogs", "passive_backlogs",
+  "tenth_percentage", "twelfth_percentage",
+  "sem1_spi", "sem2_spi", "sem3_spi", "sem4_spi",
+  "sem5_spi", "sem6_spi", "sem7_spi", "sem8_spi",
+  "resume_url", "tenth_marksheet_url", "twelfth_marksheet_url", "last_sem_marksheet_url",
+  "placement_status",
+];
+
+// Personal-info fields whose change does NOT require re-verification (mirrors
+// updateStudent's ignoredFields).
+const REVIEW_IGNORED_FIELDS = [
+  "roll_no", "name", "email", "phone",
+  "gender", "region", "religion", "date_of_birth",
+];
+
+/**
+ * Purpose: PUT /students/me - the self-scoped, PARTIAL upsert behind the 4-part
+ * profile wizard. Each wizard step sends only its own fields; only those columns
+ * are written (others are preserved). Resolves the row by the authenticated user,
+ * derives CGPA server-side whenever SPIs/semester are touched, and re-flags review
+ * when an academic/course field changes. Creates the row on first save.
+ */
+export const upsertMyProfile = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // Only allowlisted columns present in the validated body are considered.
+    const provided = MY_PROFILE_COLUMNS.filter((col) =>
+      Object.prototype.hasOwnProperty.call(req.body, col)
+    );
+
+    const existing = await pool.query(
+      `SELECT * FROM students WHERE user_id = $1`,
+      [userId]
+    );
+    const current = existing.rows[0] ?? null;
+
+    // Derive CGPA from the merged (existing + incoming) SPIs + semester whenever
+    // the save touches any SPI or the semester.
+    const touchesCgpa =
+      provided.includes("semester") ||
+      provided.some((c) => /^sem[1-8]_spi$/.test(c));
+
+    const merged = { ...(current ?? {}), ...req.body };
+
+    let derivedCgpa;
+    if (touchesCgpa) {
+      derivedCgpa = computeCgpaRounded(spiArrayOf(merged), merged.semester);
+    }
+
+    // SPI completeness is verified here (not at the schema level) because the
+    // wizard saves the semester (Course step) and the SPIs (Academic step) in
+    // separate requests. Only enforce when this save actually submits SPIs, and
+    // check against the merged/stored semester: a semester-n student must have
+    // an SPI for every completed semester (1 .. n-1).
+    const submitsSpis = provided.some((c) => /^sem[1-8]_spi$/.test(c));
+    if (submitsSpis && merged.semester != null) {
+      const missing = [];
+      for (let i = 1; i < merged.semester; i++) {
+        if (merged[`sem${i}_spi`] == null) {
+          missing.push({
+            path: [`sem${i}_spi`],
+            message: `Semester ${i} SPI is required for a semester ${merged.semester} student.`,
+          });
+        }
+      }
+      if (missing.length > 0) {
+        return res.status(400).json({ success: false, errors: missing });
+      }
+    }
+
+    if (!current) {
+      // First save: INSERT the provided columns + user_id (+ derived cgpa).
+      const cols = [...provided];
+      const values = provided.map((col) => req.body[col]);
+      if (touchesCgpa) {
+        cols.push("cgpa");
+        values.push(derivedCgpa);
+      }
+      cols.push("user_id");
+      values.push(userId);
+
+      const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
+      const colList = cols.map((c) => `"${c}"`).join(", ");
+
+      const inserted = await pool.query(
+        `INSERT INTO students (${colList}) VALUES (${placeholders}) RETURNING *`,
+        values
+      );
+      return res.status(201).json(inserted.rows[0]);
+    }
+
+    if (provided.length === 0 && !touchesCgpa) {
+      return res.status(400).json({ message: "No profile fields provided." });
+    }
+
+    // Re-verification: pending if any provided non-ignored field actually changed.
+    const requiresReview = provided.some(
+      (col) => !REVIEW_IGNORED_FIELDS.includes(col) && current[col] != req.body[col]
+    );
+
+    // Build the SET clause from the allowlist only.
+    const setCols = [...provided];
+    const setValues = provided.map((col) => req.body[col]);
+    if (touchesCgpa) {
+      setCols.push("cgpa");
+      setValues.push(derivedCgpa);
+    }
+    if (requiresReview) {
+      setCols.push("review_status");
+      setValues.push("pending");
+      setCols.push("reviewed_at");
+      setValues.push(null);
+    }
+
+    const setClause = setCols
+      .map((col, i) => `"${col}" = $${i + 1}`)
+      .join(", ");
+    setValues.push(userId);
+
+    const updated = await pool.query(
+      `UPDATE students SET ${setClause} WHERE user_id = $${setValues.length} RETURNING *`,
+      setValues
+    );
+
+    return res.status(200).json(updated.rows[0]);
+  } catch (error) {
+    console.error(error);
+    if (error.code === "23505") {
+      return res.status(409).json({ message: uniqueViolationMessage(error.constraint) });
+    }
+    const { status, message } = pgErrorResponse(error, "Failed to save profile");
+    return res.status(status).json({ message });
   }
 };

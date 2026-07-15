@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { UserX, Users } from "lucide-react";
+import { ArrowLeft, UserX, Users } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/dashboard/states";
+import { EmptyState, LoadingState } from "@/components/dashboard/states";
 import { useConfirmStudents } from "../../hooks/useDrives";
 import { formatCgpa, initialsFromName } from "../../lib/format";
 import type { EligibleStudent } from "../../services/driveService";
@@ -30,6 +30,8 @@ export function ShortlistReviewDialog({
   driveLabel,
   eligibleStudents,
   note,
+  loading = false,
+  onBack,
   onConfirmed,
 }: {
   open: boolean;
@@ -39,6 +41,10 @@ export function ShortlistReviewDialog({
   eligibleStudents: EligibleStudent[];
   /** Optional banner, e.g. to explain a previous shortlist was cleared on edit. */
   note?: string;
+  /** Show a loading state while the eligible list is being (re)generated. */
+  loading?: boolean;
+  /** Back returns to the drive constraints (create/edit) form. */
+  onBack?: () => void;
   onConfirmed?: () => void;
 }) {
   const confirm = useConfirmStudents();
@@ -106,7 +112,9 @@ export function ShortlistReviewDialog({
           </Alert>
         )}
 
-        {eligibleStudents.length === 0 ? (
+        {loading ? (
+          <LoadingState label="Generating eligible list..." />
+        ) : eligibleStudents.length === 0 ? (
           <EmptyState
             icon={<UserX />}
             title="No eligible students"
@@ -173,10 +181,14 @@ export function ShortlistReviewDialog({
         )}
 
         <DialogFooter className="gap-2 sm:gap-2">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            {eligibleStudents.length === 0 ? "Close" : "Cancel"}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => (onBack ? onBack() : onOpenChange(false))}
+          >
+            <ArrowLeft /> Back
           </Button>
-          {eligibleStudents.length > 0 && (
+          {!loading && eligibleStudents.length > 0 && (
             <Button
               type="button"
               onClick={handleConfirm}

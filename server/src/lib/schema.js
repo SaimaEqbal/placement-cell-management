@@ -1,5 +1,22 @@
 import { z } from "zod";
 
+// A single announcement attachment: a pasted Google Drive link with a human-
+// readable name. file_name/file_url mirror the company_post_attachments columns
+// (name / drive_url conceptually). No files are uploaded. Defined up here so both
+// the drive-creation schema and the announcement schemas can share it.
+const announcementAttachmentSchema = z.object({
+  file_name: z.string().min(1, "Attachment name is required"),
+  file_url: z.string().min(1, "Attachment Drive URL is required"),
+});
+
+// The announcement fields that may be created alongside a drive (Phase 2). The
+// drive link itself is set server-side, never from this body.
+const driveAnnouncementSchema = z.object({
+  title: z.string().min(1),
+  content: z.string().min(1),
+  attachments: z.array(announcementAttachmentSchema).optional().default([]),
+});
+
 // Placement students are in semesters 5-8; a student in semester n must have
 // SPIs for every completed semester (1 .. n-1). sem1-sem4 are always required
 // (n >= 5); sem5/sem6/sem7 become required at semester 6/7/8. Runs only when a
@@ -26,7 +43,8 @@ export const createStudentSchema = z.object({
   branch: z.string().min(1),
   department: z.string().min(1),
   graduation_year: z.number().int(),
-  cgpa: z.number().min(0).max(10),
+  // cgpa is NOT accepted from clients - it is derived server-side from the SPIs
+  // (see lib/cgpa.js). Do not add a cgpa field here.
   semester: z.number().int().min(5).max(8),
 
   gender: z.string(),
@@ -60,11 +78,16 @@ export const createStudentSchema = z.object({
     "unplaced",
     "shortlisted",
     "placed",
+    "second_chance",
     "rejected"
   ]).optional()
 }).superRefine(enforceSemesterSpis);
 
-export const updateStudentSchema = z.object({
+// Shared field shape for the partial-update flows. The cross-field SPI-
+// completeness rule (enforceSemesterSpis) is applied per-schema below, because
+// the self-service wizard saves semester and SPIs in SEPARATE requests and must
+// not require all SPIs the moment the semester alone is saved.
+const updateStudentShape = {
   roll_no: z.string().min(1).optional(),
   name: z.string().min(1).optional(),
   email: z.string().email().optional(),
@@ -73,7 +96,7 @@ export const updateStudentSchema = z.object({
   branch: z.string().min(1).optional(),
   department: z.string().min(1).optional(),
   graduation_year: z.number().int().optional(),
-  cgpa: z.number().min(0).max(10).optional(),
+  // cgpa is derived server-side (lib/cgpa.js); never accepted from clients.
   semester: z.number().int().min(5).max(8).optional(),
 
   gender: z.string().optional(),
@@ -107,9 +130,23 @@ export const updateStudentSchema = z.object({
     "unplaced",
     "shortlisted",
     "placed",
+    "second_chance",
     "rejected"
   ]).optional()
-}).superRefine(enforceSemesterSpis);
+};
+
+// Admin all-at-once update: the whole record arrives in one request, so the
+// cross-field SPI-completeness rule can run at the schema level.
+export const updateStudentSchema = z
+  .object(updateStudentShape)
+  .superRefine(enforceSemesterSpis);
+
+// The self-service "complete my profile" wizard saves one part at a time, so
+// every field is optional AND the cross-field SPI rule is NOT applied here -
+// semester (Course step) and SPIs (Academic step) arrive in separate requests.
+// SPI completeness is enforced in the controller against the merged/stored
+// semester (see upsertMyProfile). Present SPIs are still range-checked above.
+export const updateMyProfileSchema = z.object(updateStudentShape);
 
 export const createTPCSchema = z.object({
   user_id: z
@@ -256,9 +293,22 @@ export const createDriveSchema = z.object({
     .min(0)
     .max(10),
 
+  // Optional: minimum SPI required in EVERY recorded semester (see driveController
+  // eligibility). Blank/omitted = no throughout constraint.
+  minimum_cgpa_throughout: z
+    .number()
+    .min(0)
+    .max(10)
+    .optional(),
+
   allowed_branches: z
     .array(z.string())
     .min(1, "At least one branch is required"),
+
+  // Batches (student graduation years) this drive targets; at least one required.
+  allowed_batches: z
+    .array(z.number().int())
+    .min(1, "At least one batch is required"),
 
   max_active_backlogs: z
     .number()
@@ -274,6 +324,11 @@ export const createDriveSchema = z.object({
     .number()
     .int()
     .min(0).optional(),
+
+  // Optional: create an announcement for this drive in the same request. When
+  // present, the drive and its announcement are created atomically (see
+  // driveController.createDrive). Omit for a drive with no announcement.
+  announcement: driveAnnouncementSchema.optional(),
 });
 
 export const updateDriveSchema = z
@@ -300,8 +355,19 @@ export const updateDriveSchema = z
       .max(10)
       .optional(),
 
+    minimum_cgpa_throughout: z
+      .number()
+      .min(0)
+      .max(10)
+      .optional(),
+
     allowed_branches: z
       .array(z.string())
+      .min(1)
+      .optional(),
+
+    allowed_batches: z
+      .array(z.number().int())
       .min(1)
       .optional(),
 
@@ -334,12 +400,7 @@ export const updateDriveSchema = z
   })
   .strict();
 
-// --- Round-workflow per-student action bodies -----------------------------
-// A pre-filter removal always requires a reason (stored in drive_round_history).
-export const prefilterSchema = z.object({
-  reason: z.string().min(1, "A removal reason is required"),
-});
-
+// --- Round-workflow action bodies -----------------------------------------
 // Attendance is a simple present/absent toggle; the round is derived server-side.
 export const attendanceSchema = z.object({
   present: z.boolean(),
@@ -350,26 +411,38 @@ export const roundDateSchema = z.object({
   round_date: z.string(),
 });
 
-// A round result. A rejection always requires a reason; a selection does not.
-export const resultSchema = z
-  .object({
-    result: z.enum(["SELECTED", "REJECTED"]),
-    reason: z.string().min(1).optional(),
-  })
-  .superRefine((val, ctx) => {
-    if (val.result === "REJECTED" && !val.reason) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["reason"],
-        message: "A rejection reason is required.",
-      });
-    }
-  });
-
-export const createCompanyPostSchema = z.object({
-  title: z.string().min(1),
-  post_type: z.enum(["announcement", "email"]).optional(),
-  content: z.string().min(1),
+// Batch stage-finalize bodies. The checkbox workflow keeps decisions local until
+// the stage is finalized, then commits the whole set at once: `removed`/`rejected`
+// list the driveStudentIds being taken out, each with a mandatory reason. An empty
+// list means everyone still active passes/clears the stage.
+const roundDecisionSchema = z.object({
+  driveStudentId: z.number().int().positive(),
+  reason: z.string().min(1, "A reason is required"),
 });
 
-export const updateCompanyPostSchema = createCompanyPostSchema.partial();
+export const prefilterFinalizeSchema = z.object({
+  removed: z.array(roundDecisionSchema).optional().default([]),
+});
+
+export const roundResolveSchema = z.object({
+  rejected: z.array(roundDecisionSchema).optional().default([]),
+});
+
+// The 'email' post type has been removed; every post is an announcement. When
+// `attachments` is provided it is the COMPLETE set for the post (the controller
+// replaces the post's attachments with exactly this list, in order). An optional
+// `drive_id` links the announcement to a drive (Phase 2); the DB enforces one
+// announcement per drive.
+export const createCompanyPostSchema = z.object({
+  title: z.string().min(1),
+  content: z.string().min(1),
+  attachments: z.array(announcementAttachmentSchema).optional().default([]),
+  drive_id: z.number().int().positive().optional(),
+});
+
+export const updateCompanyPostSchema = z.object({
+  title: z.string().min(1).optional(),
+  content: z.string().min(1).optional(),
+  // Omit to leave attachments untouched; send [] to clear them all.
+  attachments: z.array(announcementAttachmentSchema).optional(),
+});

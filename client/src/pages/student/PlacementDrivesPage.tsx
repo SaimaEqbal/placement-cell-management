@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CalendarClock, ListChecks } from "lucide-react";
+import { CalendarClock, ListChecks, Megaphone } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { AnnouncementViewerDialog } from "@/components/dashboard/AnnouncementViewerDialog";
 import { DataTable, DataTableColumnHeader } from "@/components/dashboard/data-table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
 import { Button } from "@/components/ui/button";
@@ -65,6 +66,22 @@ interface ResultsTarget {
 export default function PlacementDrivesPage() {
   const [view, setView] = useState<DriveView>("all");
   const [results, setResults] = useState<ResultsTarget | null>(null);
+  /** The post_id of the drive-linked announcement open in the viewer, if any. */
+  const [announcementPostId, setAnnouncementPostId] = useState<number | null>(null);
+
+  /** Shared "Announcement" cell: a View action when linked, else a dash. */
+  const announcementCell = (announcementId: number | null | undefined) =>
+    announcementId ? (
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setAnnouncementPostId(announcementId)}
+      >
+        <Megaphone /> View announcement
+      </Button>
+    ) : (
+      <span className="text-muted-foreground">—</span>
+    );
 
   const { data: companies } = useCompanies();
 
@@ -119,6 +136,13 @@ export default function PlacementDrivesPage() {
       meta: { label: "Branches" },
       enableSorting: false,
     },
+    {
+      id: "announcement",
+      header: "Announcement",
+      meta: { label: "Announcement" },
+      enableSorting: false,
+      cell: ({ row }) => announcementCell(row.original.announcement_id),
+    },
   ];
 
   // ---- My drives ----------------------------------------------------------
@@ -163,6 +187,13 @@ export default function PlacementDrivesPage() {
       accessorFn: (d) => roundLabel(d.my_current_round),
       header: ({ column }) => <DataTableColumnHeader column={column} title="Current round" />,
       meta: { label: "Current round" },
+    },
+    {
+      id: "announcement",
+      header: "Announcement",
+      meta: { label: "Announcement" },
+      enableSorting: false,
+      cell: ({ row }) => announcementCell(row.original.announcement_id),
     },
     {
       id: "actions",
@@ -257,6 +288,14 @@ export default function PlacementDrivesPage() {
         target={results}
         onOpenChange={(open) => {
           if (!open) setResults(null);
+        }}
+      />
+
+      <AnnouncementViewerDialog
+        postId={announcementPostId}
+        open={announcementPostId !== null}
+        onOpenChange={(open) => {
+          if (!open) setAnnouncementPostId(null);
         }}
       />
     </>

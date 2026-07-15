@@ -1,9 +1,10 @@
 import { Link } from "react-router-dom";
-import { Edit3, ExternalLink, FileText } from "lucide-react";
+import { Edit3 } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
 import { InfoGrid } from "@/components/dashboard/InfoGrid";
+import { DocumentPreview } from "@/components/dashboard/DocumentPreview";
 import { ErrorState, LoadingState } from "@/components/dashboard/states";
 import { Button } from "@/components/ui/button";
 import {
@@ -133,9 +134,9 @@ export default function ProfilePage() {
           <CardHeader className="border-b">
             <CardTitle className="text-lg">Documents</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-2 pt-6">
+          <CardContent className="grid gap-4 pt-6 sm:grid-cols-2">
             {documents.map((doc) => (
-              <DocumentRow key={doc.label} label={doc.label} url={doc.url} />
+              <DocumentPreview key={doc.label} label={doc.label} url={doc.url} />
             ))}
           </CardContent>
         </Card>
@@ -154,29 +155,5 @@ export default function ProfilePage() {
         </Card>
       </PageContainer>
     </>
-  );
-}
-
-/** One row in the Documents card - shows upload state, links out to the stored URL when present. */
-function DocumentRow({ label, url }: { label: string; url: string | null }) {
-  return (
-    <div className="flex items-center gap-3 rounded-lg border p-3">
-      <div className="grid size-9 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
-        <FileText className="size-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium">{label}</div>
-        <div className="text-xs text-muted-foreground">
-          {url ? "Uploaded" : "Not uploaded yet"}
-        </div>
-      </div>
-      {url && (
-        <Button asChild variant="outline" size="sm">
-          <a href={url} target="_blank" rel="noreferrer">
-            View <ExternalLink />
-          </a>
-        </Button>
-      )}
-    </div>
   );
 }

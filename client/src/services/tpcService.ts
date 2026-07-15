@@ -31,6 +31,7 @@ export interface TpcSpcRow {
   branch: string | null;
   roll_no: string | null;
   semester: number | null;
+  graduation_year: number | null;
 }
 
 /** Body accepted by POST /tpc (createTPCSchema). */
@@ -86,27 +87,36 @@ export function demoteFromSpc(studentId: number | string) {
 
 // ---- Verification pipeline ------------------------------------------------
 
-/** Purpose: GET /tpc/students?rollNo= - all students in the TPC's department. */
-export function getTpcStudents(rollNo?: string) {
+/** Build a query-param object from optional filters, omitting blank ones. */
+function filterParams(filters: Record<string, string | number | undefined>) {
+  const params: Record<string, string | number> = {};
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "") params[key] = value;
+  }
+  return params;
+}
+
+/** Purpose: GET /tpc/students?rollNo=&year= - all students in the TPC's department. */
+export function getTpcStudents(rollNo?: string, year?: string) {
   return axiosInstance
-    .get<StudentRecord[]>("/tpc/students", { params: rollNo ? { rollNo } : {} })
+    .get<StudentRecord[]>("/tpc/students", { params: filterParams({ rollNo, year }) })
     .then((res) => res.data);
 }
 
-/** Purpose: GET /tpc/verification-queue?branch= - students the SPC rejected. */
-export function getTpcQueue(branch?: string) {
+/** Purpose: GET /tpc/verification-queue?branch=&year= - students the SPC rejected. */
+export function getTpcQueue(branch?: string, year?: string) {
   return axiosInstance
     .get<StudentRecord[]>("/tpc/verification-queue", {
-      params: branch ? { branch } : {},
+      params: filterParams({ branch, year }),
     })
     .then((res) => res.data);
 }
 
-/** Purpose: GET /tpc/spc-verified?branch= - SPC-verified students + SPC coordinators awaiting the TPC. */
-export function getTpcSpcVerified(branch?: string) {
+/** Purpose: GET /tpc/spc-verified?branch=&year= - SPC-verified students + SPC coordinators awaiting the TPC. */
+export function getTpcSpcVerified(branch?: string, year?: string) {
   return axiosInstance
     .get<StudentRecord[]>("/tpc/spc-verified", {
-      params: branch ? { branch } : {},
+      params: filterParams({ branch, year }),
     })
     .then((res) => res.data);
 }
@@ -116,10 +126,10 @@ export function getTpcBranches() {
   return axiosInstance.get<string[]>("/tpc/branches").then((res) => res.data);
 }
 
-/** Purpose: GET /tpc/spcs?branch= - the SPCs in a given branch, ordered by spc_id. */
-export function getTpcSpcs(branch: string) {
+/** Purpose: GET /tpc/spcs?branch=&year= - the SPCs in a given branch, ordered by spc_id. */
+export function getTpcSpcs(branch: string, year?: string) {
   return axiosInstance
-    .get<TpcSpcRow[]>("/tpc/spcs", { params: { branch } })
+    .get<TpcSpcRow[]>("/tpc/spcs", { params: filterParams({ branch, year }) })
     .then((res) => res.data);
 }
 

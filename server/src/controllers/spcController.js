@@ -8,6 +8,25 @@ import pool from "../config/db.js";
  * TPC's verification queue with the reason attached).
  */
 
+// GET /spc - every SPC across all departments (Admin roster view), each joined
+// to their own student row for roll number / semester / batch context.
+export const getAllSpcs = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT s.spc_id, s.name, s.email, s.phone, s.department, s.branch,
+              s.created_at,
+              st.roll_no, st.semester, st.graduation_year
+       FROM spc s
+       LEFT JOIN students st ON st.user_id = s.user_id
+       ORDER BY s.department, s.branch, s.spc_id`
+    );
+    return res.status(200).json(result.rows);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to fetch SPCs" });
+  }
+};
+
 // Resolve the spc_id for the authenticated SPC user. Returns null if there is no
 // spc row (shouldn't happen behind requireSPC, but guard anyway).
 const getSpcId = async (userId) => {

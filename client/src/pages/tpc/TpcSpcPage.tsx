@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { YearFilter } from "@/components/dashboard/YearFilter";
 import { useAssignSpc, useTpcBranches, useTpcSpcs } from "../../hooks/useVerification";
 import type { TpcSpcRow } from "../../services/tpcService";
 import { initialsFromName } from "../../lib/format";
@@ -35,8 +36,12 @@ import { initialsFromName } from "../../lib/format";
  */
 export default function TpcSpcPage() {
   const [branch, setBranch] = useState("");
+  const [year, setYear] = useState("");
   const { data: branches } = useTpcBranches();
-  const { data: spcs, isLoading, isError, error, refetch } = useTpcSpcs(branch || undefined);
+  const { data: spcs, isLoading, isError, error, refetch } = useTpcSpcs(
+    branch || undefined,
+    year || undefined,
+  );
   const assign = useAssignSpc();
   const result = assign.data;
 
@@ -84,6 +89,14 @@ export default function TpcSpcPage() {
       ),
     },
     {
+      accessorKey: "graduation_year",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Batch" />,
+      meta: { label: "Batch" },
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{row.original.graduation_year ?? "—"}</span>
+      ),
+    },
+    {
       id: "assigned",
       header: () => <div className="text-right">Assigned</div>,
       enableSorting: false,
@@ -123,7 +136,7 @@ export default function TpcSpcPage() {
           </CardHeader>
 
           <CardContent className="flex flex-col gap-4">
-            <div className="flex">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Select
                 value={branch}
                 onValueChange={(next) => {
@@ -142,6 +155,7 @@ export default function TpcSpcPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <YearFilter value={year} onChange={setYear} placeholder="Batch year (e.g. 2027)" />
             </div>
 
             {assign.isError && (

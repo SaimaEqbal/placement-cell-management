@@ -1,18 +1,15 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   ArrowLeft,
   ArrowRight,
   CalendarClock,
-  Check,
   Download,
   Flag,
   Pencil,
   Trophy,
-  UserMinus,
   Users,
-  X,
 } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
@@ -21,6 +18,7 @@ import { InfoGrid } from "@/components/dashboard/InfoGrid";
 import { ListCard } from "@/components/dashboard/ListCard";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
+import { ShortlistReviewDialog } from "@/components/dashboard/ShortlistReviewDialog";
 import { DataTable, DataTableColumnHeader } from "@/components/dashboard/data-table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -42,13 +40,12 @@ import {
   useAdvanceRound,
   useCompleteDrive,
   useDrive,
+  useDriveEligible,
   useDriveRounds,
   useDriveStudents,
   useFinalizeAttendance,
   useFinalizePrefilter,
   useMarkAttendance,
-  usePrefilterRemove,
-  useRecordResult,
   useRoundHistory,
   useSetRoundDate,
   useStartRoundZero,
@@ -70,6 +67,7 @@ import type {
   DriveRecord,
   DriveStudent,
   HistoryStage,
+  RoundDecision,
   RoundHistoryRow,
 } from "../../services/driveService";
 
@@ -124,6 +122,8 @@ export default function DriveStudentsPage() {
 
         {drive.data && (
           <>
+            <RoundDatePrompt driveId={id} drive={drive.data} />
+
             <DriveDetailsCard drive={drive.data} companyName={companyName} />
 
             {students.isLoading && <LoadingState label="Loading students..." />}
@@ -189,6 +189,14 @@ function DriveDetailsCard({
             ["Package (LPA)", drive.package_ctc ?? "—"],
             ["Min CGPA", String(drive.minimum_cgpa)],
             [
+              "Min CGPA (throughout)",
+              drive.minimum_cgpa_throughout != null ? String(drive.minimum_cgpa_throughout) : "—",
+            ],
+            [
+              "Batches",
+              drive.allowed_batches?.length ? drive.allowed_batches.join(", ") : "—",
+            ],
+            [
               "Rounds held",
               drive.drive_state === "COMPLETED" ? String(drive.number_of_rounds ?? 0) : "—",
             ],
@@ -215,7 +223,7 @@ function WorkflowSection({
   onViewRound: (round: number | null) => void;
 }) {
   if (drive.drive_state === "SHORTLISTING") {
-    return <ShortlistingPanel driveId={driveId} students={students} />;
+    return <ShortlistingPanel driveId={driveId} drive={drive} students={students} />;
   }
 
   // In progress or completed: rounds 0..current_round are viewable.
@@ -225,6 +233,8 @@ function WorkflowSection({
 
   return (
     <div className="flex flex-col gap-4">
+      <RoundsSummaryBar driveId={driveId} drive={drive} students={students} />
+
       <RoundTabs
         current={drive.current_round}
         selected={selectedRound}
@@ -239,6 +249,42 @@ function WorkflowSection({
         <RoundHistoryTable driveId={driveId} round={selectedRound} />
       )}
     </div>
+  );
+}
+
+/**
+ * Purpose: an at-a-glance rounds summary derived from existing round + candidate
+ * data: the current round, how many candidates are still in it, and that round's
+ * scheduled (next) date.
+ */
+function RoundsSummaryBar({
+  driveId,
+  drive,
+  students,
+}: {
+  driveId: string;
+  drive: DriveRecord;
+  students: DriveStudent[];
+}) {
+  const rounds = useDriveRounds(driveId);
+  const completed = drive.drive_state === "COMPLETED";
+  const inRound = students.filter((s) => s.status === "ACTIVE").length;
+  const currentDate =
+    rounds.data?.find((r) => r.round_no === drive.current_round)?.round_date ?? null;
+
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <InfoGrid
+          className="sm:grid-cols-3"
+          items={[
+            ["Current round", completed ? "Completed" : roundLabel(drive.current_round)],
+            ["Students in round", completed ? "—" : String(inRound)],
+            ["Next round date", currentDate ? formatDate(currentDate) : "TBD"],
+          ]}
+        />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -296,6 +342,69 @@ function RoundDateBar({ driveId, roundNo }: { driveId: string; roundNo: number }
   );
 }
 
+/**
+ * Purpose: prompt the admin to set the current round's date when it's missing.
+ * A round may not proceed past the attendance stage without a date, so this opens
+ * automatically whenever the drive is opened during attendance and the current
+ * round has no date, and keeps reappearing (on each visit) until one is set.
+ * Dismissible per visit.
+ */
+function RoundDatePrompt({ driveId, drive }: { driveId: string; drive: DriveRecord }) {
+  const rounds = useDriveRounds(driveId);
+  const setDate = useSetRoundDate(driveId);
+
+  const currentDate =
+    rounds.data?.find((r) => r.round_no === drive.current_round)?.round_date ?? null;
+
+  const needsDate =
+    drive.drive_state === "ROUND_IN_PROGRESS" &&
+    drive.round_stage === "ATTENDANCE" &&
+    rounds.data !== undefined &&
+    currentDate === null;
+
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+
+  // Open automatically whenever a date becomes needed (i.e. each time the drive
+  // is opened while the current round still lacks a date).
+  useEffect(() => {
+    if (needsDate) setOpen(true);
+  }, [needsDate]);
+
+  if (!needsDate) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Set the Round {drive.current_round} date</DialogTitle>
+          <DialogDescription>
+            This round needs a scheduled date before you can finalise attendance.
+            Students still in the round are notified when you set it.
+          </DialogDescription>
+        </DialogHeader>
+        <DatePicker id="round-date-prompt" value={value} onChange={setValue} />
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Later
+          </Button>
+          <Button
+            disabled={!value || setDate.isPending}
+            onClick={() =>
+              setDate.mutate(
+                { roundNo: drive.current_round, round_date: value },
+                { onSuccess: () => setOpen(false) },
+              )
+            }
+          >
+            {setDate.isPending ? "Saving..." : "Save & notify"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** Purpose: a button-group of round tabs (Round 0 .. current). */
 function RoundTabs({
   current,
@@ -324,23 +433,53 @@ function RoundTabs({
   );
 }
 
-/** Purpose: SHORTLISTING - show the confirmed shortlist and the Start Round 0 action. */
+/** Purpose: SHORTLISTING - show the confirmed shortlist, edit it, and start Round 0. */
 function ShortlistingPanel({
   driveId,
+  drive,
   students,
 }: {
   driveId: string;
+  drive: DriveRecord;
   students: DriveStudent[];
 }) {
   const start = useStartRoundZero(driveId);
 
+  // Edit-shortlist reuses the shared review dialog + on-demand eligible list.
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const eligible = useDriveEligible(reviewOpen ? driveId : undefined);
+
+  const driveLabel = drive.job_role || `Drive #${drive.drive_id}`;
+
+  const editButton = (
+    <Button variant="outline" onClick={() => setReviewOpen(true)}>
+      <Pencil /> {students.length === 0 ? "Review shortlist" : "Edit shortlist"}
+    </Button>
+  );
+
+  const reviewDialog = (
+    <ShortlistReviewDialog
+      open={reviewOpen}
+      onOpenChange={setReviewOpen}
+      driveId={driveId}
+      driveLabel={driveLabel}
+      eligibleStudents={eligible.data?.eligibleStudents ?? []}
+      loading={eligible.isLoading}
+      onConfirmed={() => setReviewOpen(false)}
+    />
+  );
+
   if (students.length === 0) {
     return (
-      <EmptyState
-        icon={<Users />}
-        title="No students confirmed yet"
-        description="Edit this drive from the Drives page to generate the eligible list, then review and confirm the shortlist."
-      />
+      <>
+        <EmptyState
+          icon={<Users />}
+          title="No students confirmed yet"
+          description="Review the eligible list and confirm a shortlist to begin. You can also edit the drive's constraints from the Drives page."
+        />
+        <div className="flex justify-center">{editButton}</div>
+        {reviewDialog}
+      </>
     );
   }
 
@@ -357,7 +496,8 @@ function ShortlistingPanel({
           </AlertDescription>
         </Alert>
       )}
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap gap-2">
+        {editButton}
         <ConfirmDialog
           trigger={
             <Button disabled={start.isPending}>
@@ -375,6 +515,7 @@ function ShortlistingPanel({
           <StudentRow key={s.drive_student_id} student={s} />
         ))}
       </div>
+      {reviewDialog}
     </ListCard>
   );
 }
@@ -392,62 +533,69 @@ function LiveRoundPanel({
   const round = drive.current_round;
   const stage = drive.round_stage;
 
-  const prefilter = usePrefilterRemove(driveId);
   const attendance = useMarkAttendance(driveId);
-  const result = useRecordResult(driveId);
   const finalizePre = useFinalizePrefilter(driveId);
   const finalizeAtt = useFinalizeAttendance(driveId);
   const advance = useAdvanceRound(driveId);
   const complete = useCompleteDrive(driveId);
 
-  /** { driveStudentId, name, kind } for the reason dialog (reject / remove). */
+  // Which stage this round is in (round 0 = screening = a results stage).
+  const rowMode: "screening" | "prefilter" | "attendance" | "result" =
+    round === 0 ? "screening" : stage === "PREFILTER" ? "prefilter" : stage === "ATTENDANCE" ? "attendance" : "result";
+
+  // Screening and results fork: run another round OR place the cleared + complete.
+  const isResultStage = rowMode === "screening" || rowMode === "result";
+  // Prefilter and results use default-checked "remove/reject" checkboxes.
+  const isCheckboxStage = isResultStage || rowMode === "prefilter";
+
+  // Only candidates still in the running are shown in the live workflow; anyone
+  // removed/rejected in a previous round is no longer ACTIVE and stays hidden.
+  const activeStudents = students.filter((s) => s.status === "ACTIVE");
+
+  // Checkbox decisions are held locally until the stage is finalized, so they are
+  // reversible until then. Map: driveStudentId -> reason. Present in the map =
+  // unchecked (being removed/rejected).
+  const [unchecked, setUnchecked] = useState<Map<number, string>>(new Map());
+
+  // Reset the local decisions whenever the round or stage changes (i.e. finalize).
+  useEffect(() => {
+    setUnchecked(new Map());
+  }, [round, stage]);
+
+  // The reason popup shown when a checked candidate is unchecked.
   const [reasonTarget, setReasonTarget] = useState<{
     driveStudentId: number;
     name: string;
     kind: "reject" | "remove";
   } | null>(null);
 
-  const active = students.filter((s) => s.status === "ACTIVE");
-  const selectedCount = students.filter((s) => s.status === "SELECTED").length;
-  const allResolved = active.length === 0;
+  const clearedCount = activeStudents.length - unchecked.size;
+  const uncheckKind: "reject" | "remove" = rowMode === "prefilter" ? "remove" : "reject";
 
-  // Which per-student actions each active row shows in this stage.
-  const rowMode: "screening" | "prefilter" | "attendance" | "result" =
-    round === 0 ? "screening" : stage === "PREFILTER" ? "prefilter" : stage === "ATTENDANCE" ? "attendance" : "result";
+  const decisions: RoundDecision[] = useMemo(
+    () => Array.from(unchecked, ([driveStudentId, reason]) => ({ driveStudentId, reason })),
+    [unchecked],
+  );
 
-  // The results stage (screening or a later round's results) is the only stage
-  // that forks: run another round OR place the selected and complete the drive.
-  const isResultStage = rowMode === "screening" || rowMode === "result";
+  function handleToggle(student: DriveStudent, checked: boolean) {
+    if (checked) {
+      // Re-checking undoes the pending removal/rejection.
+      setUnchecked((prev) => {
+        const next = new Map(prev);
+        next.delete(student.drive_student_id);
+        return next;
+      });
+    } else {
+      // Unchecking requires a reason before it takes effect.
+      setReasonTarget({ driveStudentId: student.drive_student_id, name: student.name, kind: uncheckKind });
+    }
+  }
 
   const anyBusy =
-    prefilter.isPending || attendance.isPending || result.isPending;
+    attendance.isPending || finalizePre.isPending || finalizeAtt.isPending || advance.isPending || complete.isPending;
 
   const actionError =
-    prefilter.error ?? attendance.error ?? result.error ??
-    finalizePre.error ?? finalizeAtt.error ?? advance.error ?? complete.error;
-
-  // The single forward transition for the non-results stages (pre-filter/attendance).
-  let footer: { label: string; pending: boolean; disabled: boolean; onConfirm: () => void; title: string; description: string } | null = null;
-
-  if (rowMode === "prefilter") {
-    footer = {
-      label: "Finalise pre-filter → Attendance",
-      pending: finalizePre.isPending,
-      disabled: finalizePre.isPending,
-      onConfirm: () => finalizePre.mutate(),
-      title: "Finalise pre-filter?",
-      description: "No more students can be removed for this round after this. Attendance opens next.",
-    };
-  } else if (rowMode === "attendance") {
-    footer = {
-      label: "Finalise attendance → Results",
-      pending: finalizeAtt.isPending,
-      disabled: finalizeAtt.isPending,
-      onConfirm: () => finalizeAtt.mutate(),
-      title: "Finalise attendance?",
-      description: "Everyone stays present unless you unticked them. Absentees are recorded and drop out of the round; only present students continue to results.",
-    };
-  }
+    attendance.error ?? finalizePre.error ?? finalizeAtt.error ?? advance.error ?? complete.error;
 
   const heading =
     round === 0
@@ -456,12 +604,12 @@ function LiveRoundPanel({
 
   const description =
     rowMode === "screening"
-      ? "Mark each shortlisted student selected or rejected based on the company's screening."
+      ? "Every shortlisted student is kept by default. Untick anyone the company screened out (a reason is required), then run the next round or complete the drive."
       : rowMode === "prefilter"
-        ? "Remove any students who should not sit this round (a reason is required)."
+        ? "Everyone is kept by default. Untick anyone who should not sit this round (a reason is required), then finalise."
         : rowMode === "attendance"
           ? "Everyone is present by default — untick the students who were absent, then finalise."
-          : "Record each present student's result.";
+          : "Every candidate clears by default. Untick anyone rejected this round (a reason is required), then run the next round or complete the drive.";
 
   const driveLabelText = drive.job_role || `Drive #${drive.drive_id}`;
 
@@ -473,90 +621,103 @@ function LiveRoundPanel({
         </Alert>
       )}
 
-      {(rowMode === "prefilter" || rowMode === "attendance") && active.length > 0 && (
+      {rowMode === "attendance" && activeStudents.length > 0 && (
         <div className="mb-3">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => exportAttendanceSheet(active, driveLabelText, round)}
+            onClick={() => exportAttendanceSheet(activeStudents, driveLabelText, round)}
           >
             <Download /> Export attendance sheet
           </Button>
         </div>
       )}
 
-      <div className="flex flex-col gap-3">
-        {students.map((s) => {
-          const isActive = s.status === "ACTIVE";
-          return (
-            <StudentRow key={s.drive_student_id} student={s}>
-              {isActive && rowMode === "screening" && (
-                <ResultActions
-                  busy={anyBusy}
-                  onSelect={() =>
-                    result.mutate({ driveStudentId: s.drive_student_id, result: "SELECTED" })
-                  }
-                  onReject={() =>
-                    setReasonTarget({ driveStudentId: s.drive_student_id, name: s.name, kind: "reject" })
-                  }
-                />
-              )}
-              {isActive && rowMode === "prefilter" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={anyBusy}
-                  onClick={() =>
-                    setReasonTarget({ driveStudentId: s.drive_student_id, name: s.name, kind: "remove" })
-                  }
-                >
-                  <UserMinus /> Remove
-                </Button>
-              )}
-              {isActive && rowMode === "attendance" && (
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={s.attendance_mark !== "ABSENT"}
-                    disabled={anyBusy}
-                    onCheckedChange={(checked) =>
-                      attendance.mutate({
-                        driveStudentId: s.drive_student_id,
-                        present: checked === true,
-                      })
-                    }
-                  />
-                  {s.attendance_mark === "ABSENT" ? "Absent" : "Present"}
-                </label>
-              )}
-              {isActive && rowMode === "result" && (
-                <ResultActions
-                  busy={anyBusy}
-                  onSelect={() =>
-                    result.mutate({ driveStudentId: s.drive_student_id, result: "SELECTED" })
-                  }
-                  onReject={() =>
-                    setReasonTarget({ driveStudentId: s.drive_student_id, name: s.name, kind: "reject" })
-                  }
-                />
-              )}
-            </StudentRow>
-          );
-        })}
-      </div>
+      {activeStudents.length === 0 ? (
+        <EmptyState
+          icon={<Users />}
+          title="No active candidates"
+          description="No candidates remain active in this round."
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          {activeStudents.map((s) => {
+            const isChecked = !unchecked.has(s.drive_student_id);
+            const reason = unchecked.get(s.drive_student_id);
+            return (
+              <StudentRow key={s.drive_student_id} student={s}>
+                {isCheckboxStage && (
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={isChecked}
+                      disabled={anyBusy}
+                      onCheckedChange={(checked) => handleToggle(s, checked === true)}
+                    />
+                    <span className={isChecked ? "" : "font-medium text-destructive"}>
+                      {isChecked
+                        ? rowMode === "prefilter"
+                          ? "Keeping"
+                          : "Clearing"
+                        : rowMode === "prefilter"
+                          ? "Removing"
+                          : "Rejecting"}
+                    </span>
+                    {!isChecked && reason && (
+                      <span className="truncate text-xs text-muted-foreground">· {reason}</span>
+                    )}
+                  </label>
+                )}
+                {rowMode === "attendance" && (
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={s.attendance_mark !== "ABSENT"}
+                      disabled={anyBusy}
+                      onCheckedChange={(checked) =>
+                        attendance.mutate({
+                          driveStudentId: s.drive_student_id,
+                          present: checked === true,
+                        })
+                      }
+                    />
+                    {s.attendance_mark === "ABSENT" ? "Absent" : "Present"}
+                  </label>
+                )}
+              </StudentRow>
+            );
+          })}
+        </div>
+      )}
 
-      {footer && (
+      {rowMode === "prefilter" && (
         <div className="mt-5 flex justify-end border-t pt-4">
           <ConfirmDialog
             trigger={
-              <Button disabled={footer.disabled}>
+              <Button disabled={finalizePre.isPending}>
                 <ArrowRight />
-                {footer.pending ? "Working..." : footer.label}
+                {finalizePre.isPending ? "Working..." : "Finalise pre-filter → Attendance"}
               </Button>
             }
-            title={footer.title}
-            description={footer.description}
-            confirmLabel={footer.label}
-            onConfirm={footer.onConfirm}
+            title="Finalise pre-filter?"
+            description={`${unchecked.size} student(s) will be removed from this round; the rest proceed to attendance. This can't be undone after finalising.`}
+            confirmLabel="Finalise pre-filter"
+            onConfirm={() => finalizePre.mutate(decisions)}
+          />
+        </div>
+      )}
+
+      {rowMode === "attendance" && (
+        <div className="mt-5 flex justify-end border-t pt-4">
+          <ConfirmDialog
+            trigger={
+              <Button disabled={finalizeAtt.isPending}>
+                <ArrowRight />
+                {finalizeAtt.isPending ? "Working..." : "Finalise attendance → Results"}
+              </Button>
+            }
+            title="Finalise attendance?"
+            description="Everyone stays present unless you unticked them. Absentees drop out of the round; only present students continue to results."
+            confirmLabel="Finalise attendance"
+            onConfirm={() => finalizeAtt.mutate()}
           />
         </div>
       )}
@@ -565,27 +726,27 @@ function LiveRoundPanel({
         <div className="mt-5 flex flex-col gap-2 border-t pt-4 sm:flex-row sm:justify-end">
           <ConfirmDialog
             trigger={
-              <Button variant="outline" disabled={advance.isPending || !allResolved || selectedCount === 0}>
+              <Button variant="outline" disabled={advance.isPending || clearedCount === 0}>
                 <ArrowRight />
                 {advance.isPending ? "Working..." : `Run Round ${round + 1}`}
               </Button>
             }
             title={`Run Round ${round + 1}?`}
-            description="The selected students move on to a new round; everyone else is out. You can run as many rounds as you need."
+            description={`${clearedCount} checked student(s) clear this round and move on; ${unchecked.size} unticked student(s) are rejected. You can run as many rounds as you need.`}
             confirmLabel={`Run Round ${round + 1}`}
-            onConfirm={() => advance.mutate()}
+            onConfirm={() => advance.mutate(decisions)}
           />
           <ConfirmDialog
             trigger={
-              <Button disabled={complete.isPending || !allResolved}>
+              <Button disabled={complete.isPending}>
                 <Trophy />
-                {complete.isPending ? "Working..." : "Place selected & complete"}
+                {complete.isPending ? "Working..." : "Place cleared & complete"}
               </Button>
             }
             title="Complete this drive?"
-            description={`${selectedCount} selected student(s) will be marked Placed and the drive will be completed. This cannot be undone.`}
+            description={`${clearedCount} checked student(s) will be placed and ${unchecked.size} unticked student(s) rejected. This cannot be undone.`}
             confirmLabel="Complete drive"
-            onConfirm={() => complete.mutate()}
+            onConfirm={() => complete.mutate(decisions)}
           />
         </div>
       )}
@@ -594,48 +755,17 @@ function LiveRoundPanel({
         open={reasonTarget !== null}
         name={reasonTarget?.name}
         kind={reasonTarget?.kind}
-        pending={prefilter.isPending || result.isPending}
+        pending={false}
         onOpenChange={(open) => {
           if (!open) setReasonTarget(null);
         }}
         onConfirm={(reason) => {
           if (!reasonTarget) return;
-          if (reasonTarget.kind === "remove") {
-            prefilter.mutate(
-              { driveStudentId: reasonTarget.driveStudentId, reason },
-              { onSuccess: () => setReasonTarget(null) },
-            );
-          } else {
-            result.mutate(
-              { driveStudentId: reasonTarget.driveStudentId, result: "REJECTED", reason },
-              { onSuccess: () => setReasonTarget(null) },
-            );
-          }
+          setUnchecked((prev) => new Map(prev).set(reasonTarget.driveStudentId, reason));
+          setReasonTarget(null);
         }}
       />
     </ListCard>
-  );
-}
-
-/** Purpose: the Select / Reject pair used in screening and result stages. */
-function ResultActions({
-  busy,
-  onSelect,
-  onReject,
-}: {
-  busy: boolean;
-  onSelect: () => void;
-  onReject: () => void;
-}) {
-  return (
-    <div className="flex gap-2">
-      <Button variant="outline" size="sm" disabled={busy} onClick={onSelect}>
-        <Check /> Select
-      </Button>
-      <Button variant="outline" size="sm" disabled={busy} onClick={onReject}>
-        <X /> Reject
-      </Button>
-    </div>
   );
 }
 
@@ -744,6 +874,22 @@ function RoundHistoryTable({ driveId, round }: { driveId: string; round: number 
   const activeStage = stage && stages.includes(stage) ? stage : stages[0] ?? null;
   const phaseRows = rows.filter((r) => r.stage === activeStage);
 
+  // Summary derived from the round's history: how many were present, and how many
+  // cleared. Round 0 has no attendance, so "present" is the number screened.
+  const presentCount =
+    round === 0
+      ? new Set(rows.filter((r) => r.stage === "SHORTLIST").map((r) => r.student_id)).size
+      : new Set(
+          rows
+            .filter((r) => r.stage === "ATTENDANCE" && r.result === "PRESENT")
+            .map((r) => r.student_id),
+        ).size;
+  const clearedCount = new Set(
+    rows
+      .filter((r) => r.stage === "RESULT" && (r.result === "SELECTED" || r.result === "PLACED"))
+      .map((r) => r.student_id),
+  ).size;
+
   const columns: ColumnDef<RoundHistoryRow>[] = [
     {
       id: "student",
@@ -809,6 +955,14 @@ function RoundHistoryTable({ driveId, round }: { driveId: string; round: number 
         />
       ) : (
         <div className="flex flex-col gap-4">
+          <InfoGrid
+            className="sm:grid-cols-2"
+            items={[
+              ["Present", String(presentCount)],
+              ["Cleared", String(clearedCount)],
+            ]}
+          />
+
           <div className="flex flex-wrap gap-2">
             {stages.map((s) => (
               <Button

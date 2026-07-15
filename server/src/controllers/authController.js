@@ -628,3 +628,20 @@ export const resetPassword = async (req, res) => {
   }
 };
 
+
+// GET /auth/admins - every admin account (Admin roster view). Users only carry
+// an email (no name), so the roster shows email + verification + created date.
+export const getAllAdmins = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, email, is_verified, created_at
+       FROM users
+       WHERE role = 'admin'
+       ORDER BY created_at`
+    );
+    return res.status(200).json(result.rows);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to fetch admins" });
+  }
+};

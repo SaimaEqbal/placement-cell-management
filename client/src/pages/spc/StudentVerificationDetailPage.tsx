@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { toDrivePreviewUrl } from "@/lib/drivePreview";
 import { useStudent, useDeleteStudent } from "../../hooks/useStudents";
 import {
   useDemoteSpc,
@@ -238,7 +239,7 @@ export default function StudentVerificationDetailPage({
             {active.url ? (
               <iframe
                 title={active.label}
-                src={active.url}
+                src={toDrivePreviewUrl(active.url)}
                 className="h-[60vh] w-full rounded-md border bg-white lg:h-[calc(100vh-13rem)]"
               />
             ) : (

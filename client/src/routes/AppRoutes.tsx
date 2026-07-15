@@ -33,6 +33,9 @@ import DriveStudentsPage from "../pages/admin/DriveStudentsPage";
 import AdminStudentsPage from "../pages/admin/AdminStudentsPage";
 import InvitationsPage from "../pages/admin/InvitationsPage";
 import CompanyPostsPage from "../pages/admin/CompanyPostsPage";
+import AdminSpcsPage from "../pages/admin/AdminSpcsPage";
+import AdminTpcsPage from "../pages/admin/AdminTpcsPage";
+import AdminAdminsPage from "../pages/admin/AdminAdminsPage";
 
 import { homePathForRole, paths } from "./paths";
 import ProtectedRoute from "./ProtectedRoute";
@@ -156,6 +159,9 @@ export default function AppRoutes() {
           />
           <Route path={paths.adminInvitations} element={<InvitationsPage />} />
           <Route path={paths.adminPosts} element={<CompanyPostsPage />} />
+          <Route path={paths.adminSpcs} element={<AdminSpcsPage />} />
+          <Route path={paths.adminTpcs} element={<AdminTpcsPage />} />
+          <Route path={paths.adminAdmins} element={<AdminAdminsPage />} />
         </Route>
       </Route>
 

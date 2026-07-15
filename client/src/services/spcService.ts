@@ -11,6 +11,25 @@ import type { StudentRecord } from "./studentService";
  * - spcReject:    reject with a reason (-> 'spc_rejected', routed to the TPC).
  */
 
+/** A row from GET /spc - an SPC coordinator joined to their student record (Admin roster). */
+export interface AdminSpcRow {
+  spc_id: number;
+  name: string;
+  email: string;
+  phone: string | null;
+  department: string;
+  branch: string | null;
+  created_at: string;
+  roll_no: string | null;
+  semester: number | null;
+  graduation_year: number | null;
+}
+
+/** Purpose: GET /spc - every SPC across all departments (Admin only). */
+export function getAllSpcs() {
+  return axiosInstance.get<AdminSpcRow[]>("/spc").then((res) => res.data);
+}
+
 /** Purpose: GET /spc/verification-queue - this SPC's assigned + pending students. */
 export function getSpcQueue() {
   return axiosInstance

@@ -40,6 +40,9 @@ export const paths = {
   adminStudents: "/Admin/students",
   adminInvitations: "/Admin/invitations",
   adminPosts: "/Admin/posts",
+  adminSpcs: "/Admin/spcs",
+  adminTpcs: "/Admin/tpcs",
+  adminAdmins: "/Admin/admins",
 } as const;
 
 /** Purpose: where to land a freshly-authenticated user (or anyone hitting a route their role can't see), based on their role. */

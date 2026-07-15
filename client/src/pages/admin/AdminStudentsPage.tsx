@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { ErrorState, LoadingState } from "@/components/dashboard/states";
 import { DataTable } from "@/components/dashboard/data-table";
 import { makeStudentColumns } from "@/components/dashboard/studentColumns";
+import { YearFilter } from "@/components/dashboard/YearFilter";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,40 @@ import {
 import { useStudents } from "../../hooks/useStudents";
 import { DEPARTMENTS } from "../../lib/validation";
 import { paths } from "../../routes/paths";
+import type { StudentRecord } from "../../services/studentService";
+
+type StudentView =
+  | "all"
+  | "placed"
+  | "interns"
+  | "verified"
+  | "awaiting"
+  | "incomplete";
+
+/**
+ * The quick roster views. "Placed" includes second chances (still placed
+ * students); "Awaiting review" is anyone whose verification isn't finally
+ * decided (pending SPC, SPC-approved awaiting TPC, or SPC-rejected).
+ */
+const STUDENT_VIEWS: { value: StudentView; label: string; match: (s: StudentRecord) => boolean }[] = [
+  { value: "all", label: "All students", match: () => true },
+  {
+    value: "placed",
+    label: "Placed",
+    match: (s) => s.placement_status === "placed" || s.placement_status === "second_chance",
+  },
+  { value: "interns", label: "Internship selections", match: (s) => Boolean(s.selected_for_internship) },
+  { value: "verified", label: "Verified", match: (s) => s.review_status === "verified" },
+  {
+    value: "awaiting",
+    label: "Awaiting review",
+    match: (s) =>
+      s.review_status === "pending" ||
+      s.review_status === "spc_verified" ||
+      s.review_status === "spc_rejected",
+  },
+  { value: "incomplete", label: "Incomplete profiles", match: (s) => !s.is_profile_complete },
+];
 
 /**
  * Purpose: /Admin/students - the Admin's student roster in a data table
@@ -34,18 +69,23 @@ export default function AdminStudentsPage() {
 
   const [department, setDepartment] = useState("");
   const [minCgpa, setMinCgpa] = useState("");
+  const [year, setYear] = useState("");
   const [noBacklogsOnly, setNoBacklogsOnly] = useState(false);
+  const [view, setView] = useState<StudentView>("all");
 
   const filtered = useMemo(() => {
     if (!students) return [];
     const minCgpaNum = Number(minCgpa) || 0;
+    const yearTrimmed = year.trim();
     return students.filter((s) => {
+      if (!STUDENT_VIEWS.find((v) => v.value === view)!.match(s)) return false;
       if (department && s.department !== department) return false;
       if (minCgpaNum && Number(s.cgpa ?? 0) < minCgpaNum) return false;
+      if (yearTrimmed && String(s.graduation_year ?? "") !== yearTrimmed) return false;
       if (noBacklogsOnly && s.active_backlogs > 0) return false;
       return true;
     });
-  }, [students, department, minCgpa, noBacklogsOnly]);
+  }, [students, view, department, minCgpa, year, noBacklogsOnly]);
 
   const ids = filtered.map((s) => s.id);
 
@@ -53,8 +93,14 @@ export default function AdminStudentsPage() {
     () =>
       makeStudentColumns({
         status: (s) => (
-          <StatusBadge tone={s.placement_status === "placed" ? "green" : "blue"}>
-            {s.placement_status}
+          <StatusBadge
+            tone={
+              s.placement_status === "placed" || s.placement_status === "second_chance"
+                ? "green"
+                : "blue"
+            }
+          >
+            {s.placement_status === "second_chance" ? "second chance" : s.placement_status}
           </StatusBadge>
         ),
         action: (s) => (
@@ -83,9 +129,22 @@ export default function AdminStudentsPage() {
         {!isLoading && !isError && (
           <ListCard
             eyebrow="Student roster"
-            title="All students"
+            title={STUDENT_VIEWS.find((v) => v.value === view)!.label}
             description={`${filtered.length} of ${students?.length ?? 0} students match the current filter.`}
           >
+            <div className="mb-4 flex flex-wrap gap-2">
+              {STUDENT_VIEWS.map((v) => (
+                <Button
+                  key={v.value}
+                  type="button"
+                  size="sm"
+                  variant={view === v.value ? "default" : "outline"}
+                  onClick={() => setView(v.value)}
+                >
+                  {v.label}
+                </Button>
+              ))}
+            </div>
             <DataTable
               columns={columns}
               data={filtered}
@@ -117,6 +176,7 @@ export default function AdminStudentsPage() {
                     onChange={(e) => setMinCgpa(e.target.value)}
                     className="h-9 w-28"
                   />
+                  <YearFilter value={year} onChange={setYear} />
                   <label className="flex items-center gap-2 whitespace-nowrap text-sm">
                     <Checkbox
                       checked={noBacklogsOnly}

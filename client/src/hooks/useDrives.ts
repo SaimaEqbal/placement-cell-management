@@ -6,6 +6,7 @@ import {
   createDrive,
   deleteDrive,
   getDriveById,
+  getDriveEligible,
   getDriveStudents,
   getDrives,
   getMyDrives,
@@ -15,9 +16,7 @@ import {
   finalizeAttendance,
   advanceRound,
   completeDrive,
-  prefilterRemoveStudent,
   markAttendance,
-  recordResult,
   getRoundHistory,
   getDriveRounds,
   setRoundDate,
@@ -30,6 +29,7 @@ import {
   type DriveWithEligible,
   type MyDrive,
   type MyDriveResult,
+  type RoundDecision,
   type RoundHistoryRow,
   type UpdateDrivePayload,
 } from "../services/driveService";
@@ -50,6 +50,19 @@ export function useDrive(id: number | string | undefined) {
   return useQuery<DriveRecord, ApiError>({
     queryKey: queryKeys.drive(id ?? "unknown"),
     queryFn: () => getDriveById(id as number | string),
+    enabled: id !== undefined,
+  });
+}
+
+/**
+ * Purpose: GET /drive/:driveId/eligible - the freshly-generated eligible list for
+ * an existing drive, for on-demand shortlist review. Only enabled when an id is
+ * provided (e.g. the review dialog is open for that drive).
+ */
+export function useDriveEligible(id: number | string | undefined) {
+  return useQuery<DriveWithEligible, ApiError>({
+    queryKey: queryKeys.driveEligible(id ?? "unknown"),
+    queryFn: () => getDriveEligible(id as number | string),
     enabled: id !== undefined,
   });
 }
@@ -165,11 +178,11 @@ export function useStartRoundZero(driveId: number | string) {
   });
 }
 
-/** Purpose: POST /drive/:driveId/finalize-prefilter. */
+/** Purpose: POST /drive/:driveId/finalize-prefilter with the unchecked (removed) batch. */
 export function useFinalizePrefilter(driveId: number | string) {
   const invalidate = useDriveWorkflowInvalidator(driveId);
-  return useMutation<DriveTransitionResult, ApiError, void>({
-    mutationFn: () => finalizePrefilter(driveId),
+  return useMutation<DriveTransitionResult, ApiError, RoundDecision[] | void>({
+    mutationFn: (removed) => finalizePrefilter(driveId, removed ?? []),
     onSuccess: invalidate,
   });
 }
@@ -183,34 +196,20 @@ export function useFinalizeAttendance(driveId: number | string) {
   });
 }
 
-/** Purpose: POST /drive/:driveId/advance-round. */
+/** Purpose: POST /drive/:driveId/advance-round with the unchecked (rejected) batch. */
 export function useAdvanceRound(driveId: number | string) {
   const invalidate = useDriveWorkflowInvalidator(driveId);
-  return useMutation<DriveTransitionResult, ApiError, void>({
-    mutationFn: () => advanceRound(driveId),
+  return useMutation<DriveTransitionResult, ApiError, RoundDecision[] | void>({
+    mutationFn: (rejected) => advanceRound(driveId, rejected ?? []),
     onSuccess: invalidate,
   });
 }
 
-/** Purpose: POST /drive/:driveId/complete. */
+/** Purpose: POST /drive/:driveId/complete with the unchecked (rejected) batch. */
 export function useCompleteDrive(driveId: number | string) {
   const invalidate = useDriveWorkflowInvalidator(driveId);
-  return useMutation<DriveTransitionResult, ApiError, void>({
-    mutationFn: () => completeDrive(driveId),
-    onSuccess: invalidate,
-  });
-}
-
-/** Purpose: PATCH .../prefilter - remove one student before a round (reason required). */
-export function usePrefilterRemove(driveId: number | string) {
-  const invalidate = useDriveWorkflowInvalidator(driveId);
-  return useMutation<
-    { message: string },
-    ApiError,
-    { driveStudentId: number | string; reason: string }
-  >({
-    mutationFn: ({ driveStudentId, reason }) =>
-      prefilterRemoveStudent(driveId, driveStudentId, reason),
+  return useMutation<DriveTransitionResult, ApiError, RoundDecision[] | void>({
+    mutationFn: (rejected) => completeDrive(driveId, rejected ?? []),
     onSuccess: invalidate,
   });
 }
@@ -225,20 +224,6 @@ export function useMarkAttendance(driveId: number | string) {
   >({
     mutationFn: ({ driveStudentId, present }) =>
       markAttendance(driveId, driveStudentId, present),
-    onSuccess: invalidate,
-  });
-}
-
-/** Purpose: PATCH .../result - record one student's round result (reject needs a reason). */
-export function useRecordResult(driveId: number | string) {
-  const invalidate = useDriveWorkflowInvalidator(driveId);
-  return useMutation<
-    { message: string },
-    ApiError,
-    { driveStudentId: number | string; result: "SELECTED" | "REJECTED"; reason?: string }
-  >({
-    mutationFn: ({ driveStudentId, result, reason }) =>
-      recordResult(driveId, driveStudentId, result, reason),
     onSuccess: invalidate,
   });
 }

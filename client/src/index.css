@@ -5,51 +5,54 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Black & white theme (shadcn "neutral" scale): white background, near-black
-   foreground, greys in between. The old green/teal theme is retired. */
+/* Brand palette (applied via shadcn semantic tokens, so it flows app-wide):
+     #1491ea bright blue · #64c8fa light blue · #3a4b9a indigo
+     #6381a1 slate · #eedbe1 pale pink · #29366f dark navy
+   Light: white surfaces, navy text, blue primary, pale-pink accent. */
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --background: #ffffff;
+  --foreground: #29366f;
+  --card: #ffffff;
+  --card-foreground: #29366f;
+  --popover: #ffffff;
+  --popover-foreground: #29366f;
+  --primary: #1491ea;
+  --primary-foreground: #ffffff;
+  --secondary: #e7f2fd;
+  --secondary-foreground: #29366f;
+  --muted: #eef1f7;
+  --muted-foreground: #6381a1;
+  --accent: #eedbe1;
+  --accent-foreground: #29366f;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #dbe3ee;
+  --input: #dbe3ee;
+  --ring: #1491ea;
 }
 
+/* Dark: navy surfaces, light-blue text, blue primary, indigo accent. */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --background: #1b2444;
+  --foreground: #eaf0fb;
+  --card: #29366f;
+  --card-foreground: #eaf0fb;
+  --popover: #29366f;
+  --popover-foreground: #eaf0fb;
+  --primary: #1491ea;
+  --primary-foreground: #ffffff;
+  --secondary: #3a4b9a;
+  --secondary-foreground: #eaf0fb;
+  --muted: #33406f;
+  --muted-foreground: #a7b6d6;
+  --accent: #3a4b9a;
+  --accent-foreground: #eaf0fb;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: rgba(255, 255, 255, 0.12);
+  --input: rgba(255, 255, 255, 0.16);
+  --ring: #64c8fa;
 }
 
 @theme inline {

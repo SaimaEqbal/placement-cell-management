@@ -8,11 +8,15 @@ import { PageContainer } from "@/components/dashboard/PageContainer";
 import { Field } from "@/components/dashboard/Field";
 import { ShortlistReviewDialog } from "@/components/dashboard/ShortlistReviewDialog";
 import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
+import { AttachmentEditor } from "@/components/dashboard/AttachmentEditor";
+import { AnnouncementFormDialog } from "@/components/dashboard/AnnouncementFormDialog";
+import { AnnouncementViewerDialog } from "@/components/dashboard/AnnouncementViewerDialog";
 import { DataTable, DataTableColumnHeader } from "@/components/dashboard/data-table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +43,7 @@ import { useCompanies } from "../../hooks/useCompanies";
 import {
   useCreateDrive,
   useDeleteDrive,
+  useDriveEligible,
   useDrives,
   useUpdateDrive,
 } from "../../hooks/useDrives";
@@ -47,11 +52,35 @@ import { paths } from "../../routes/paths";
 import type {
   CreateDrivePayload,
   DriveRecord,
-  EligibleStudent,
   EmploymentType,
 } from "../../services/driveService";
+import type { PostAttachmentInput } from "../../services/companyPostService";
 
 const EMPLOYMENT_TYPES: EmploymentType[] = ["FTE", "Internship", "Internship + PPO"];
+
+/** The only batch choices allowed by the form (enforced on the frontend). */
+type BatchChoice = "2027" | "2028" | "both";
+const BATCH_OPTIONS: { value: BatchChoice; label: string }[] = [
+  { value: "2027", label: "2027" },
+  { value: "2028", label: "2028" },
+  { value: "both", label: "Both (2027 & 2028)" },
+];
+
+/** Map a batch choice to the allowed_batches array the API expects. */
+function batchToYears(batch: BatchChoice): number[] {
+  if (batch === "2027") return [2027];
+  if (batch === "2028") return [2028];
+  return [2027, 2028];
+}
+
+/** Map a drive's stored allowed_batches back to a batch choice (defaults to Both). */
+function yearsToBatch(years: number[] | null | undefined): BatchChoice {
+  const has27 = years?.includes(2027);
+  const has28 = years?.includes(2028);
+  if (has27 && !has28) return "2027";
+  if (has28 && !has27) return "2028";
+  return "both";
+}
 
 /** Local form state - all inputs are strings/arrays and get coerced to the API's number/array shape on submit. */
 interface DriveFormState {
@@ -61,9 +90,18 @@ interface DriveFormState {
   package_ctc: string;
   employment_type: EmploymentType;
   minimum_cgpa: string;
+  // Optional per-semester minimum SPI ("throughout"); blank = no constraint.
+  minimum_cgpa_throughout: string;
   allowed_branches: string[];
+  // Target batch: "2027" | "2028" | "both". Constrained to these on the frontend.
+  batch: BatchChoice;
   max_active_backlogs: string;
   max_passive_backlogs: string;
+  // Optional announcement created together with the drive (create mode only).
+  include_announcement: boolean;
+  announcement_title: string;
+  announcement_content: string;
+  announcement_attachments: PostAttachmentInput[];
 }
 
 const EMPTY_FORM: DriveFormState = {
@@ -73,9 +111,15 @@ const EMPTY_FORM: DriveFormState = {
   package_ctc: "",
   employment_type: "FTE",
   minimum_cgpa: "",
+  minimum_cgpa_throughout: "",
   allowed_branches: [],
+  batch: "both",
   max_active_backlogs: "",
   max_passive_backlogs: "",
+  include_announcement: false,
+  announcement_title: "",
+  announcement_content: "",
+  announcement_attachments: [],
 };
 
 /**
@@ -98,9 +142,17 @@ function formFromDrive(drive: DriveRecord): DriveFormState {
     package_ctc: numToInput(drive.package_ctc),
     employment_type: drive.employment_type,
     minimum_cgpa: numToInput(drive.minimum_cgpa),
+    minimum_cgpa_throughout: numToInput(drive.minimum_cgpa_throughout),
     allowed_branches: drive.allowed_branches ?? [],
+    batch: yearsToBatch(drive.allowed_batches),
     max_active_backlogs: numToInput(drive.max_active_backlogs),
     max_passive_backlogs: numToInput(drive.max_passive_backlogs),
+    // Announcements are not created/edited from the drive EDIT form; that is
+    // handled by the per-drive announcement actions in the drives table.
+    include_announcement: false,
+    announcement_title: "",
+    announcement_content: "",
+    announcement_attachments: [],
   };
 }
 
@@ -115,7 +167,13 @@ function toCreatePayload(form: DriveFormState): CreateDrivePayload {
     employment_type: form.employment_type,
     minimum_cgpa: Number(form.minimum_cgpa),
     allowed_branches: form.allowed_branches,
+    allowed_batches: batchToYears(form.batch),
   };
+
+  if (form.minimum_cgpa_throughout.trim() !== "") {
+    const n = Number(form.minimum_cgpa_throughout);
+    if (Number.isFinite(n)) payload.minimum_cgpa_throughout = n;
+  }
 
   /** Only forward an optional number when it parses to a finite value, so we can never serialise NaN as JSON null (which the backend rejects). */
   const setNum = (raw: string, key: "package_ctc") => {
@@ -164,13 +222,19 @@ export default function DrivesPage() {
   /** The drive pending deletion (opens the irreversible-delete confirm dialog). */
   const [deleteTarget, setDeleteTarget] = useState<DriveRecord | null>(null);
 
-  /** After a successful create/edit, hold the drive + eligible list for the review dialog. */
-  const [review, setReview] = useState<{
-    driveId: number;
-    label: string;
-    eligibleStudents: EligibleStudent[];
-    note?: string;
-  } | null>(null);
+  // Per-drive announcement actions: view an existing one, edit an existing one,
+  // or create one for a drive that has none. All reuse the shared dialogs.
+  const [viewAnnouncementId, setViewAnnouncementId] = useState<number | null>(null);
+  const [editAnnouncementId, setEditAnnouncementId] = useState<number | null>(null);
+  const [createAnnouncementDriveId, setCreateAnnouncementDriveId] = useState<number | null>(null);
+
+  /**
+   * Shortlist review is decoupled from create/edit: it opens on demand for a
+   * chosen drive and (re)generates the eligible list via GET /drive/:id/eligible.
+   */
+  const [reviewDriveId, setReviewDriveId] = useState<number | null>(null);
+  const eligibleQuery = useDriveEligible(reviewDriveId ?? undefined);
+  const reviewDrive = drives?.find((d) => d.drive_id === reviewDriveId);
 
   /** Drives only carry company_id; map to a name for display via the cached companies list. */
   const companyNameById = useMemo(() => {
@@ -220,6 +284,12 @@ export default function DrivesPage() {
     if (form.minimum_cgpa === "") return setFormError("Enter the minimum CGPA.");
     if (form.allowed_branches.length === 0)
       return setFormError("Select at least one eligible branch.");
+    // Optional "minimum CGPA throughout" must be a valid 0-10 value when provided.
+    if (form.minimum_cgpa_throughout.trim() !== "") {
+      const t = Number(form.minimum_cgpa_throughout);
+      if (Number.isNaN(t) || t < 0 || t > 10)
+        return setFormError("Minimum CGPA throughout must be a number between 0 and 10 (or leave it blank).");
+    }
     // Mirror the backend's create/updateDriveSchema (server/src/lib/schema.js)
     // exactly so an invalid value shows a clear message here instead of a bare
     // 400 whose body the form can't otherwise explain.
@@ -240,14 +310,33 @@ export default function DrivesPage() {
         return setFormError(`${label} must be a whole number (0 or more), or leave it blank.`);
     }
 
-    setFormError(undefined);
+    // Optional announcement (create mode only): validate and attach it so the
+    // backend creates the drive and its announcement atomically.
     const payload = toCreatePayload(form);
+    if (!editingId && form.include_announcement) {
+      const annTitle = form.announcement_title.trim();
+      const annContent = form.announcement_content.trim();
+      if (!annTitle) return setFormError("Announcement title is required.");
+      if (!annContent) return setFormError("Announcement content is required.");
+      const attachments = form.announcement_attachments.map((a) => ({
+        file_name: a.file_name.trim(),
+        file_url: a.file_url.trim(),
+      }));
+      if (attachments.some((a) => !a.file_name || !a.file_url))
+        return setFormError("Each attachment needs both a name and a Google Drive URL.");
+      payload.announcement = { title: annTitle, content: annContent, attachments };
+    }
+
+    setFormError(undefined);
 
     if (editingId) {
       /**
        * updateDrive overwrites every column, including status. The form never
        * edits status, so carry the drive's current status through - otherwise
        * the omitted field is written as NULL, wiping the drive's lifecycle state.
+       * Shortlist review is now decoupled: editing just saves and closes. The
+       * backend still clears the old shortlist, and the admin reviews on demand
+       * via "Review shortlist".
        */
       const editingDrive = drives?.find((d) => d.drive_id === editingId);
       updateMutation.mutate(
@@ -255,28 +344,13 @@ export default function DrivesPage() {
           id: editingId,
           payload: editingDrive ? { ...payload, status: editingDrive.status } : payload,
         },
-        {
-          onSuccess: (data) => {
-            setOpen(false);
-            setReview({
-              driveId: data.drive.drive_id,
-              label: driveLabel(data.drive),
-              eligibleStudents: data.eligibleStudents,
-              note: "Eligibility criteria changed, so the previous shortlist was cleared. Review and confirm the new list.",
-            });
-          },
-        },
+        { onSuccess: () => setOpen(false) },
       );
     } else {
       createMutation.mutate(payload, {
-        onSuccess: (data) => {
+        onSuccess: () => {
           setOpen(false);
           setForm(EMPTY_FORM);
-          setReview({
-            driveId: data.drive.drive_id,
-            label: driveLabel(data.drive),
-            eligibleStudents: data.eligibleStudents,
-          });
         },
       });
     }
@@ -321,9 +395,32 @@ export default function DrivesPage() {
               <DropdownMenuItem onClick={() => openEdit(row.original)}>
                 Edit drive
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setReviewDriveId(row.original.drive_id)}>
+                Review shortlist
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to={`${driveBasePath}/${row.original.drive_id}`}>Manage drive</Link>
               </DropdownMenuItem>
+              {row.original.announcement_id ? (
+                <>
+                  <DropdownMenuItem
+                    onClick={() => setViewAnnouncementId(row.original.announcement_id ?? null)}
+                  >
+                    View announcement
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setEditAnnouncementId(row.original.announcement_id ?? null)}
+                  >
+                    Edit announcement
+                  </DropdownMenuItem>
+                </>
+              ) : (
+                <DropdownMenuItem
+                  onClick={() => setCreateAnnouncementDriveId(row.original.drive_id)}
+                >
+                  Create announcement
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
                 onClick={() => setDeleteTarget(row.original)}
@@ -446,6 +543,24 @@ export default function DrivesPage() {
                   onChange={(e) => setForm({ ...form, minimum_cgpa: e.target.value })}
                 />
               </Field>
+              <Field
+                label="Minimum CGPA throughout"
+                htmlFor="minimum_cgpa_throughout"
+                hint="Optional — every semester SPI must be at least this value."
+              >
+                <Input
+                  id="minimum_cgpa_throughout"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="10"
+                  placeholder="Optional"
+                  value={form.minimum_cgpa_throughout}
+                  onChange={(e) =>
+                    setForm({ ...form, minimum_cgpa_throughout: e.target.value })
+                  }
+                />
+              </Field>
               <Field label="Max active backlogs" htmlFor="max_active_backlogs">
                 <Input
                   id="max_active_backlogs"
@@ -475,6 +590,24 @@ export default function DrivesPage() {
               />
             </Field>
 
+            <Field label="Target batch (graduation year)" htmlFor="batch">
+              <Select
+                value={form.batch}
+                onValueChange={(value) => setForm({ ...form, batch: value as BatchChoice })}
+              >
+                <SelectTrigger id="batch" className="w-full sm:w-64">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BATCH_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+
             <div className="flex flex-col gap-2">
               <Label>Eligible branches</Label>
               {/* Branches are grouped under their department. allowed_branches holds
@@ -499,6 +632,50 @@ export default function DrivesPage() {
                 ))}
               </div>
             </div>
+
+            {!editingId && (
+              <div className="flex flex-col gap-3 rounded-lg border p-3">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <Checkbox
+                    checked={form.include_announcement}
+                    onCheckedChange={(checked) =>
+                      setForm({ ...form, include_announcement: checked === true })
+                    }
+                  />
+                  Create announcement for this drive
+                </label>
+
+                {form.include_announcement && (
+                  <div className="flex flex-col gap-4">
+                    <Field label="Title" htmlFor="drive-ann-title">
+                      <Input
+                        id="drive-ann-title"
+                        value={form.announcement_title}
+                        onChange={(e) =>
+                          setForm({ ...form, announcement_title: e.target.value })
+                        }
+                      />
+                    </Field>
+                    <Field label="Content" htmlFor="drive-ann-content">
+                      <Textarea
+                        id="drive-ann-content"
+                        className="min-h-24"
+                        value={form.announcement_content}
+                        onChange={(e) =>
+                          setForm({ ...form, announcement_content: e.target.value })
+                        }
+                      />
+                    </Field>
+                    <AttachmentEditor
+                      value={form.announcement_attachments}
+                      onChange={(announcement_attachments) =>
+                        setForm({ ...form, announcement_attachments })
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             {(formError || mutation.isError) && (
               <Alert variant="destructive">
@@ -536,14 +713,20 @@ export default function DrivesPage() {
       </Dialog>
 
       <ShortlistReviewDialog
-        open={review !== null}
+        open={reviewDriveId !== null}
         onOpenChange={(next) => {
-          if (!next) setReview(null);
+          if (!next) setReviewDriveId(null);
         }}
-        driveId={review?.driveId}
-        driveLabel={review?.label}
-        eligibleStudents={review?.eligibleStudents ?? []}
-        note={review?.note}
+        driveId={reviewDriveId ?? undefined}
+        driveLabel={reviewDrive ? driveLabel(reviewDrive) : undefined}
+        eligibleStudents={eligibleQuery.data?.eligibleStudents ?? []}
+        loading={eligibleQuery.isLoading}
+        onBack={() => {
+          const d = reviewDrive;
+          setReviewDriveId(null);
+          if (d) openEdit(d);
+        }}
+        onConfirmed={() => setReviewDriveId(null)}
       />
 
       <ConfirmDialog
@@ -560,6 +743,33 @@ export default function DrivesPage() {
           deleteMutation.mutate(deleteTarget.drive_id, {
             onSuccess: () => setDeleteTarget(null),
           });
+        }}
+      />
+
+      {/* View a drive's linked announcement (shared read-only viewer). */}
+      <AnnouncementViewerDialog
+        postId={viewAnnouncementId}
+        open={viewAnnouncementId !== null}
+        onOpenChange={(next) => {
+          if (!next) setViewAnnouncementId(null);
+        }}
+      />
+
+      {/* Edit a drive's linked announcement (shared editor, fetched by id). */}
+      <AnnouncementFormDialog
+        open={editAnnouncementId !== null}
+        editingPostId={editAnnouncementId}
+        onOpenChange={(next) => {
+          if (!next) setEditAnnouncementId(null);
+        }}
+      />
+
+      {/* Create an announcement for a drive that has none (auto-linked via driveId). */}
+      <AnnouncementFormDialog
+        open={createAnnouncementDriveId !== null}
+        driveId={createAnnouncementDriveId ?? undefined}
+        onOpenChange={(next) => {
+          if (!next) setCreateAnnouncementDriveId(null);
         }}
       />
     </>

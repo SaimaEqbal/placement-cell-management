@@ -1,8 +1,8 @@
-import { Mail, Megaphone } from "lucide-react";
+import { Megaphone } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
-import { FeedItem } from "@/components/dashboard/FeedItem";
+import { AnnouncementViewer } from "@/components/dashboard/AnnouncementViewer";
 import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
 import {
   Card,
@@ -14,10 +14,11 @@ import { useCompanyPosts } from "../../hooks/useCompanyPosts";
 import { formatDate } from "../../lib/format";
 
 /**
- * Purpose: /Student/announcements - a read-only feed of company posts
- * (announcements / emails) from GET /company-post. This is the placement
- * cell's broadcast channel; personal notifications live on the separate
- * Notifications page (opened from the topbar bell).
+ * Purpose: /Student/announcements - a read-only feed of announcements from GET
+ * /company-post. Each announcement is rendered with the shared AnnouncementViewer
+ * (Title / Content / named attachment actions that open the shared preview pane),
+ * so students never see raw Drive URLs. This is the placement cell's broadcast
+ * channel; personal notifications live on the separate Notifications page.
  */
 export default function AnnouncementsPage() {
   const { data: posts, isLoading, isError, error, refetch } = useCompanyPosts();
@@ -51,14 +52,14 @@ export default function AnnouncementsPage() {
             <CardHeader className="border-b">
               <CardTitle className="text-lg">Recent announcements</CardTitle>
             </CardHeader>
-            <CardContent className="flex flex-col gap-2 pt-6">
+            <CardContent className="flex flex-col divide-y pt-0">
               {posts.map((post) => (
-                <FeedItem
-                  key={post.post_id}
-                  icon={post.post_type === "email" ? <Mail /> : <Megaphone />}
-                  title={post.title}
-                  meta={`${post.content} · ${formatDate(post.created_at)}`}
-                />
+                <div key={post.post_id} className="flex flex-col gap-2 py-6 first:pt-6">
+                  <AnnouncementViewer post={post} />
+                  <p className="text-xs text-muted-foreground">
+                    Posted {formatDate(post.created_at)}
+                  </p>
+                </div>
               ))}
             </CardContent>
           </Card>

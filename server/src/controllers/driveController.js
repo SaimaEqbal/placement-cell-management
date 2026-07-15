@@ -1,5 +1,7 @@
 import pool from "../config/db.js";
 import { pgErrorResponse } from "../lib/dbError.js";
+import { insertAnnouncement, replaceAttachments } from "../lib/announcements.js";
+import { isPlacementDrive, SECOND_CHANCE_MULTIPLIER } from "../lib/placementRules.js";
 
 // ---------------------------------------------------------------------------
 // Eligibility engine. A student is eligible for a drive when they are verified,
@@ -27,12 +29,50 @@ async function getEligibleStudentsForDrive(drive) {
         AND active_backlogs <= $2
         AND passive_backlogs <= $3
         AND branch = ANY($4)
+        -- Batch filter: restrict to the drive's target graduation years. A NULL
+        -- allowed_batches (legacy drives created before this column) means no
+        -- batch restriction.
+        AND ($5::int[] IS NULL OR graduation_year = ANY($5))
+        -- "Minimum CGPA throughout": when set, every RECORDED (non-null) semester
+        -- SPI must be >= the value. NULL = no throughout constraint.
+        AND (
+          $6::numeric IS NULL OR (
+            (sem1_spi IS NULL OR sem1_spi >= $6) AND
+            (sem2_spi IS NULL OR sem2_spi >= $6) AND
+            (sem3_spi IS NULL OR sem3_spi >= $6) AND
+            (sem4_spi IS NULL OR sem4_spi >= $6) AND
+            (sem5_spi IS NULL OR sem5_spi >= $6) AND
+            (sem6_spi IS NULL OR sem6_spi >= $6) AND
+            (sem7_spi IS NULL OR sem7_spi >= $6) AND
+            (sem8_spi IS NULL OR sem8_spi >= $6)
+          )
+        )
+        -- Second-chance rule (placement drives only; $7 = FALSE for internships,
+        -- which are open regardless of placement state):
+        --   * second_chance students are done - never eligible again.
+        --   * placed students are eligible only when this drive's package is
+        --     >= MULTIPLIER x the package they were placed at.
+        AND (
+          $7::boolean = FALSE
+          OR placement_status IS NULL
+          OR placement_status NOT IN ('placed', 'second_chance')
+          OR (
+            placement_status = 'placed'
+            AND placed_package IS NOT NULL
+            AND $8::numeric IS NOT NULL
+            AND $8::numeric >= placed_package * ${SECOND_CHANCE_MULTIPLIER}
+          )
+        )
      ORDER BY cgpa DESC`,
     [
       drive.minimum_cgpa,
       drive.max_active_backlogs,
       drive.max_passive_backlogs,
       drive.allowed_branches,
+      drive.allowed_batches ?? null,
+      drive.minimum_cgpa_throughout ?? null,
+      isPlacementDrive(drive.employment_type),
+      drive.package_ctc ?? null,
     ]
   );
 
@@ -128,13 +168,23 @@ async function notifyRoundResults(client, drive, { final = false } = {}) {
   const rejectedIds = rows.rows.filter((r) => r.status === "REJECTED").map((r) => r.student_id);
 
   if (final) {
-    await notifyStudentsByIds(
-      client,
-      selectedIds,
-      "You've been placed!",
-      `Congratulations! You have been placed via ${label}.`,
-      "green"
-    );
+    if (isPlacementDrive(drive.employment_type)) {
+      await notifyStudentsByIds(
+        client,
+        selectedIds,
+        "You've been placed!",
+        `Congratulations! You have been placed via ${label}.`,
+        "green"
+      );
+    } else {
+      await notifyStudentsByIds(
+        client,
+        selectedIds,
+        "Selected for internship!",
+        `Congratulations! You have been selected for the internship via ${label}.`,
+        "green"
+      );
+    }
   } else {
     await notifyStudentsByIds(
       client,
@@ -154,11 +204,71 @@ async function notifyRoundResults(client, drive, { final = false } = {}) {
   );
 }
 
+/**
+ * Batch-resolve the current round's results from the checkbox decisions. Every
+ * still-ACTIVE student in the current round is resolved: those listed in
+ * `rejected` (each { driveStudentId, reason }) become REJECTED with their reason;
+ * everyone else becomes SELECTED. Both outcomes are written to RESULT history.
+ * Returns the number of SELECTED (cleared) students. Runs on the caller's txn.
+ */
+async function resolveRoundResults(client, drive, rejected, recordedBy) {
+  const reasonById = new Map(rejected.map((r) => [r.driveStudentId, r.reason]));
+
+  const active = await client.query(
+    `SELECT drive_student_id, student_id
+       FROM drive_students
+      WHERE drive_id = $1 AND status = 'ACTIVE' AND current_round = $2
+      FOR UPDATE`,
+    [drive.drive_id, drive.current_round]
+  );
+
+  let selectedCount = 0;
+  for (const row of active.rows) {
+    if (reasonById.has(row.drive_student_id)) {
+      const reason = reasonById.get(row.drive_student_id);
+      await client.query(
+        `UPDATE drive_students SET status = 'REJECTED', remarks = $2 WHERE drive_student_id = $1`,
+        [row.drive_student_id, reason]
+      );
+      await recordHistory(client, {
+        driveId: drive.drive_id,
+        studentId: row.student_id,
+        roundNo: drive.current_round,
+        stage: "RESULT",
+        result: "REJECTED",
+        reason,
+        recordedBy,
+      });
+    } else {
+      await client.query(
+        `UPDATE drive_students SET status = 'SELECTED' WHERE drive_student_id = $1`,
+        [row.drive_student_id]
+      );
+      await recordHistory(client, {
+        driveId: drive.drive_id,
+        studentId: row.student_id,
+        roundNo: drive.current_round,
+        stage: "RESULT",
+        result: "SELECTED",
+        recordedBy,
+      });
+      selectedCount++;
+    }
+  }
+  return selectedCount;
+}
+
 // ---------------------------------------------------------------------------
 // Drive CRUD
 // ---------------------------------------------------------------------------
 
+// Create a drive, optionally with an announcement in the SAME request. The drive
+// and its announcement (+ attachments) are created atomically: if the requested
+// announcement fails to save, the whole operation rolls back and no drive is
+// left behind. The announcement, when present, is automatically linked to the
+// new drive via company_posts.drive_id.
 export const createDrive = async (req, res) => {
+  const client = await pool.connect();
   try {
     const {
       company_id,
@@ -167,13 +277,18 @@ export const createDrive = async (req, res) => {
       package_ctc,
       employment_type,
       minimum_cgpa,
+      minimum_cgpa_throughout,
       allowed_branches,
+      allowed_batches,
       max_active_backlogs,
       max_passive_backlogs,
       number_of_rounds,
+      announcement,
     } = req.body;
 
-    const result = await pool.query(
+    await client.query("BEGIN");
+
+    const result = await client.query(
       `INSERT INTO drives (
         company_id,
         job_role,
@@ -181,14 +296,16 @@ export const createDrive = async (req, res) => {
         package_ctc,
         employment_type,
         minimum_cgpa,
+        minimum_cgpa_throughout,
         allowed_branches,
+        allowed_batches,
         max_active_backlogs,
         max_passive_backlogs,
         number_of_rounds,
         created_by
       )
       VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13
       )
       RETURNING *`,
       [
@@ -198,7 +315,9 @@ export const createDrive = async (req, res) => {
         package_ctc,
         employment_type,
         minimum_cgpa,
+        minimum_cgpa_throughout ?? null,
         allowed_branches,
+        allowed_batches,
         max_active_backlogs,
         max_passive_backlogs,
         number_of_rounds,
@@ -208,23 +327,51 @@ export const createDrive = async (req, res) => {
 
     const drive = result.rows[0];
 
+    let createdAnnouncement = null;
+    if (announcement) {
+      const post = await insertAnnouncement(client, {
+        title: announcement.title,
+        content: announcement.content,
+        postedBy: req.user.userId,
+        driveId: drive.drive_id,
+      });
+      const attachments = await replaceAttachments(
+        client,
+        post.post_id,
+        announcement.attachments ?? []
+      );
+      createdAnnouncement = { ...post, attachments };
+    }
+
+    await client.query("COMMIT");
+
     const eligibleStudents = await getEligibleStudentsForDrive(drive);
 
     return res.status(201).json({
       drive,
       eligibleStudents,
+      announcement: createdAnnouncement,
     });
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error(error);
     const { status, message } = pgErrorResponse(error, "Failed to create drive");
     return res.status(status).json({ message });
+  } finally {
+    client.release();
   }
 };
 
 export const getDrives = async (req, res) => {
   try {
+    // announcement_id exposes whether a drive has a linked announcement (and
+    // which one) without the client fetching/matching all announcements. The
+    // UNIQUE(drive_id) constraint guarantees at most one match per drive.
     const result = await pool.query(
-      `SELECT * FROM drives ORDER BY created_at DESC`
+      `SELECT d.*, cp.post_id AS announcement_id
+         FROM drives d
+         LEFT JOIN company_posts cp ON cp.drive_id = d.drive_id
+        ORDER BY d.created_at DESC`
     );
 
     return res.status(200).json(result.rows);
@@ -252,6 +399,37 @@ export const getDriveById = async (req, res) => {
   } catch (error) {
     console.error(error);
     const { status, message } = pgErrorResponse(error, "Failed to fetch drive");
+    return res.status(status).json({ message });
+  }
+};
+
+// GET /drive/:driveId/eligible - regenerate the on-the-fly eligible-students list
+// for an existing drive. This decouples shortlist review from drive creation: the
+// admin can create a drive now and review/confirm its shortlist later. The list
+// is computed fresh (never stored), same as the create/update responses.
+export const getDriveEligible = async (req, res) => {
+  try {
+    const { driveId } = req.params;
+
+    const result = await pool.query(
+      `SELECT * FROM drives WHERE drive_id = $1`,
+      [driveId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ message: "Drive not found" });
+    }
+
+    const drive = result.rows[0];
+    const eligibleStudents = await getEligibleStudentsForDrive(drive);
+
+    return res.status(200).json({ drive, eligibleStudents });
+  } catch (error) {
+    console.error(error);
+    const { status, message } = pgErrorResponse(
+      error,
+      "Failed to fetch eligible students"
+    );
     return res.status(status).json({ message });
   }
 };
@@ -286,7 +464,9 @@ export const updateDrive = async (req, res) => {
       package_ctc,
       employment_type,
       minimum_cgpa,
+      minimum_cgpa_throughout,
       allowed_branches,
+      allowed_batches,
       max_active_backlogs,
       max_passive_backlogs,
       number_of_rounds,
@@ -301,13 +481,15 @@ export const updateDrive = async (req, res) => {
            package_ctc = $4,
            employment_type = $5,
            minimum_cgpa = $6,
-           allowed_branches = $7,
-           max_active_backlogs = $8,
-           max_passive_backlogs = $9,
-           number_of_rounds = $10,
-           status = $11,
+           minimum_cgpa_throughout = $7,
+           allowed_branches = $8,
+           allowed_batches = $9,
+           max_active_backlogs = $10,
+           max_passive_backlogs = $11,
+           number_of_rounds = $12,
+           status = $13,
            updated_at = NOW()
-       WHERE drive_id = $12
+       WHERE drive_id = $14
        RETURNING *`,
       [
         company_id,
@@ -316,7 +498,9 @@ export const updateDrive = async (req, res) => {
         package_ctc,
         employment_type,
         minimum_cgpa,
+        minimum_cgpa_throughout ?? null,
         allowed_branches,
+        allowed_batches,
         max_active_backlogs,
         max_passive_backlogs,
         number_of_rounds,
@@ -417,6 +601,16 @@ export const confirmStudents = async (req, res) => {
         [driveId, studentId, req.user.userId]
       );
     }
+
+    // Notify every confirmed student that they've been shortlisted for the drive.
+    const label = await getDriveLabel(client, drive);
+    await notifyStudentsByIds(
+      client,
+      studentIds,
+      "You've been shortlisted",
+      `You have been shortlisted for ${label}. Watch for round schedules and updates.`,
+      "green"
+    );
 
     await client.query("COMMIT");
 
@@ -564,12 +758,16 @@ export const startRoundZero = async (req, res) => {
   }
 };
 
-// Close the pre-filter stage (rounds >= 1) and open attendance.
+// Close the pre-filter stage (rounds >= 1) and open attendance. The checkbox UI
+// keeps decisions local until here, then commits the whole `removed` set at once:
+// each listed (still-active) student is marked REMOVED with its reason + history,
+// everyone left checked stays ACTIVE, and the removed students are notified.
 export const finalizePrefilter = async (req, res) => {
   const client = await pool.connect();
 
   try {
     const { driveId } = req.params;
+    const { removed = [] } = req.body;
 
     await client.query("BEGIN");
 
@@ -591,17 +789,35 @@ export const finalizePrefilter = async (req, res) => {
       });
     }
 
+    // Batch-commit the removals for the current round. Non-active rows are skipped
+    // so the operation is idempotent if the same finalize is retried.
+    const removedIds = [];
+    for (const { driveStudentId, reason } of removed) {
+      const student = await loadDriveStudent(client, driveStudentId, driveId);
+      if (!student || student.status !== "ACTIVE") continue;
+
+      await client.query(
+        `UPDATE drive_students SET status = 'REMOVED', remarks = $2 WHERE drive_student_id = $1`,
+        [driveStudentId, reason]
+      );
+      await recordHistory(client, {
+        driveId,
+        studentId: student.student_id,
+        roundNo: drive.current_round,
+        stage: "PREFILTER",
+        result: "REMOVED",
+        reason,
+        recordedBy: req.user.userId,
+      });
+      removedIds.push(student.student_id);
+    }
+
     // Notify the students removed during this round's pre-filter.
-    const removed = await client.query(
-      `SELECT student_id FROM drive_students
-        WHERE drive_id = $1 AND status = 'REMOVED' AND current_round = $2`,
-      [driveId, drive.current_round]
-    );
-    if (removed.rows.length > 0) {
+    if (removedIds.length > 0) {
       const label = await getDriveLabel(client, drive);
       await notifyStudentsByIds(
         client,
-        removed.rows.map((r) => r.student_id),
+        removedIds,
         "Removed from a drive round",
         `You have been removed before Round ${drive.current_round} of ${label} and are no longer progressing in this drive.`,
         "red"
@@ -660,6 +876,19 @@ export const finalizeAttendance = async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(409).json({
         message: "Drive is not in the attendance stage.",
+      });
+    }
+
+    // A round may not proceed past attendance until its date is set. (Round 0 is
+    // exempt, but it never reaches the attendance stage.)
+    const dateRow = await client.query(
+      `SELECT round_date FROM drive_rounds WHERE drive_id = $1 AND round_no = $2`,
+      [driveId, drive.current_round]
+    );
+    if (!dateRow.rows[0] || dateRow.rows[0].round_date == null) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        message: "Set this round's date before finalising attendance.",
       });
     }
 
@@ -759,33 +988,15 @@ export const advanceRound = async (req, res) => {
       });
     }
 
-    // Every student who reached the results stage must be resolved (SELECTED or
-    // REJECTED). An ACTIVE row means an undecided result.
-    const undecided = await client.query(
-      `SELECT COUNT(*)::int AS n
-         FROM drive_students
-        WHERE drive_id = $1 AND status = 'ACTIVE'`,
-      [driveId]
-    );
+    // Batch-resolve the round from the checkbox decisions: unchecked students
+    // (in `rejected`, each with a reason) become REJECTED; everyone still active
+    // clears the round as SELECTED. Both are written to history now.
+    const selectedCount = await resolveRoundResults(client, drive, req.body.rejected ?? [], req.user.userId);
 
-    if (undecided.rows[0].n > 0) {
+    if (selectedCount === 0) {
       await client.query("ROLLBACK");
       return res.status(409).json({
-        message: `Record a result for all ${undecided.rows[0].n} remaining student(s) first.`,
-      });
-    }
-
-    const selectedCount = await client.query(
-      `SELECT COUNT(*)::int AS n
-         FROM drive_students
-        WHERE drive_id = $1 AND status = 'SELECTED'`,
-      [driveId]
-    );
-
-    if (selectedCount.rows[0].n === 0) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        message: "Select at least one student to run another round, or complete the drive.",
+        message: "At least one student must clear the round to run another round, or complete the drive.",
       });
     }
 
@@ -866,40 +1077,56 @@ export const completeDrive = async (req, res) => {
       });
     }
 
-    const undecided = await client.query(
-      `SELECT COUNT(*)::int AS n
-         FROM drive_students
-        WHERE drive_id = $1 AND status = 'ACTIVE'`,
-      [driveId]
-    );
-
-    if (undecided.rows[0].n > 0) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        message: `Record a result for all ${undecided.rows[0].n} remaining student(s) first.`,
-      });
-    }
+    // Batch-resolve from the checkbox decisions: unchecked students become
+    // REJECTED (with reason + history); everyone still active becomes SELECTED
+    // and is placed below.
+    await resolveRoundResults(client, drive, req.body.rejected ?? [], req.user.userId);
 
     // Publish results before placing: selected -> placed (congrats), rejected -> out.
     await notifyRoundResults(client, drive, { final: true });
 
     const selected = await client.query(
-      `SELECT drive_student_id, student_id
-         FROM drive_students
-        WHERE drive_id = $1 AND status = 'SELECTED'
-        FOR UPDATE`,
+      `SELECT ds.drive_student_id, ds.student_id, st.placement_status
+         FROM drive_students ds
+         JOIN students st ON st.id = ds.student_id
+        WHERE ds.drive_id = $1 AND ds.status = 'SELECTED'
+        FOR UPDATE OF ds`,
       [driveId]
     );
+
+    const placement = isPlacementDrive(drive.employment_type);
 
     for (const row of selected.rows) {
       await client.query(
         `UPDATE drive_students SET status = 'PLACED' WHERE drive_student_id = $1`,
         [row.drive_student_id]
       );
-      await client.query(
-        `UPDATE students SET placement_status = 'placed' WHERE id = $1`,
-        [row.student_id]
-      );
+
+      if (!placement) {
+        // Internship (incl. Internship+PPO while treated as internship): only
+        // the independent flag is set; placement state is untouched.
+        await client.query(
+          `UPDATE students SET selected_for_internship = TRUE WHERE id = $1`,
+          [row.student_id]
+        );
+      } else if (row.placement_status === "placed") {
+        // An already-placed student winning a >=2x drive uses their one second
+        // chance: terminal state, package updated to the new offer.
+        await client.query(
+          `UPDATE students
+              SET placement_status = 'second_chance', placed_package = $2
+            WHERE id = $1`,
+          [row.student_id, drive.package_ctc ?? null]
+        );
+      } else {
+        await client.query(
+          `UPDATE students
+              SET placement_status = 'placed', placed_package = $2
+            WHERE id = $1`,
+          [row.student_id, drive.package_ctc ?? null]
+        );
+      }
+
       await recordHistory(client, {
         driveId,
         studentId: row.student_id,
@@ -925,7 +1152,7 @@ export const completeDrive = async (req, res) => {
     await client.query("COMMIT");
 
     return res.status(200).json({
-      message: `Drive completed. ${selected.rows.length} student(s) placed.`,
+      message: `Drive completed. ${selected.rows.length} student(s) ${placement ? "placed" : "selected for the internship"}.`,
       drive: updated.rows[0],
     });
   } catch (error) {
@@ -941,79 +1168,6 @@ export const completeDrive = async (req, res) => {
 // ---------------------------------------------------------------------------
 // Per-student round actions
 // ---------------------------------------------------------------------------
-
-// Remove a student during the pre-filter stage (rounds >= 1). Soft state change
-// that preserves history - the student appears in this round's history as REMOVED.
-export const prefilterRemove = async (req, res) => {
-  const client = await pool.connect();
-
-  try {
-    const { driveId, driveStudentId } = req.params;
-    const { reason } = req.body;
-
-    await client.query("BEGIN");
-
-    const drive = await loadDriveForUpdate(client, driveId);
-
-    if (!drive) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ message: "Drive not found" });
-    }
-
-    if (
-      drive.drive_state !== "ROUND_IN_PROGRESS" ||
-      drive.round_stage !== "PREFILTER" ||
-      drive.current_round < 1
-    ) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        message: "Students can only be removed during the pre-filter stage.",
-      });
-    }
-
-    const student = await loadDriveStudent(client, driveStudentId, driveId);
-
-    if (!student) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ message: "Student not found in this drive" });
-    }
-
-    if (student.status !== "ACTIVE") {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        message: "Only active students can be removed.",
-      });
-    }
-
-    await client.query(
-      `UPDATE drive_students
-         SET status = 'REMOVED', remarks = $2
-       WHERE drive_student_id = $1`,
-      [driveStudentId, reason]
-    );
-
-    await recordHistory(client, {
-      driveId,
-      studentId: student.student_id,
-      roundNo: drive.current_round,
-      stage: "PREFILTER",
-      result: "REMOVED",
-      reason,
-      recordedBy: req.user.userId,
-    });
-
-    await client.query("COMMIT");
-
-    return res.status(200).json({ message: "Student removed for this round." });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    console.error(error);
-    const { status, message } = pgErrorResponse(error, "Failed to remove student");
-    return res.status(status).json({ message });
-  } finally {
-    client.release();
-  }
-};
 
 // Set a student's attendance mark (rounds >= 1). Transient - no status change or
 // history until finalize-attendance batches it.
@@ -1077,81 +1231,6 @@ export const markAttendance = async (req, res) => {
   }
 };
 
-// Record a round result for one student (RESULT stage; valid in round 0 too).
-// SELECTED -> status SELECTED (carried forward on advance). REJECTED needs a reason.
-export const recordResult = async (req, res) => {
-  const client = await pool.connect();
-
-  try {
-    const { driveId, driveStudentId } = req.params;
-    const { result, reason } = req.body;
-
-    await client.query("BEGIN");
-
-    const drive = await loadDriveForUpdate(client, driveId);
-
-    if (!drive) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ message: "Drive not found" });
-    }
-
-    if (
-      drive.drive_state !== "ROUND_IN_PROGRESS" ||
-      drive.round_stage !== "RESULT"
-    ) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        message: "Drive is not in the results stage.",
-      });
-    }
-
-    const student = await loadDriveStudent(client, driveStudentId, driveId);
-
-    if (!student) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ message: "Student not found in this drive" });
-    }
-
-    if (student.status !== "ACTIVE") {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        message: "A result can only be recorded for active students.",
-      });
-    }
-
-    const newStatus = result === "SELECTED" ? "SELECTED" : "REJECTED";
-
-    await client.query(
-      `UPDATE drive_students
-         SET status = $2, remarks = $3
-       WHERE drive_student_id = $1`,
-      [driveStudentId, newStatus, result === "REJECTED" ? reason : student.remarks]
-    );
-
-    await recordHistory(client, {
-      driveId,
-      studentId: student.student_id,
-      roundNo: drive.current_round,
-      stage: "RESULT",
-      result: newStatus,
-      reason: result === "REJECTED" ? reason : null,
-      recordedBy: req.user.userId,
-    });
-
-    await client.query("COMMIT");
-
-    return res.status(200).json({
-      message: result === "SELECTED" ? "Marked selected." : "Marked rejected.",
-    });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    console.error(error);
-    const { status, message } = pgErrorResponse(error, "Failed to record result");
-    return res.status(status).json({ message });
-  } finally {
-    client.release();
-  }
-};
 
 // ---------------------------------------------------------------------------
 // Student-facing (self-scoped) reads
@@ -1166,10 +1245,12 @@ export const getMyDrives = async (req, res) => {
       `SELECT
           d.*,
           ds.status        AS my_status,
-          ds.current_round AS my_current_round
+          ds.current_round AS my_current_round,
+          cp.post_id       AS announcement_id
        FROM drive_students ds
        JOIN drives d   ON ds.drive_id = d.drive_id
        JOIN students s ON ds.student_id = s.id
+       LEFT JOIN company_posts cp ON cp.drive_id = d.drive_id
        WHERE s.user_id = $1
        ORDER BY d.created_at DESC`,
       [req.user.userId]

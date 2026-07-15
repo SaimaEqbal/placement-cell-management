@@ -1,4 +1,5 @@
 import { axiosInstance } from "../api/axiosInstance";
+import type { CompanyPostRecord, PostAttachmentInput } from "./companyPostService";
 
 /**
  * Purpose: every Axios call for the `drives` resource and its shortlist
@@ -33,7 +34,11 @@ export interface DriveRecord {
   package_ctc: string | number | null;
   employment_type: EmploymentType;
   minimum_cgpa: string | number;
+  /** Optional: minimum SPI required in every recorded semester; null = no constraint. */
+  minimum_cgpa_throughout: string | number | null;
   allowed_branches: string[];
+  /** Target student batches (graduation years); null on legacy drives = unrestricted. */
+  allowed_batches: number[] | null;
   max_active_backlogs: number;
   max_passive_backlogs: number;
   number_of_rounds: number;
@@ -45,6 +50,19 @@ export interface DriveRecord {
   drive_state: DriveState;
   round_stage: RoundStage | null;
   is_locked: boolean;
+  /** Phase 2: the linked announcement's post_id, or null if the drive has none. */
+  announcement_id?: number | null;
+}
+
+/**
+ * The announcement fields optionally created alongside a drive (Phase 2). The
+ * drive link is set server-side, so this carries only the announcement body +
+ * attachments — the same shape the standalone announcement form produces.
+ */
+export interface DriveAnnouncementInput {
+  title: string;
+  content: string;
+  attachments?: PostAttachmentInput[];
 }
 
 /**
@@ -59,10 +77,16 @@ export interface CreateDrivePayload {
   package_ctc?: number;
   employment_type: EmploymentType;
   minimum_cgpa: number;
+  /** Optional: minimum SPI required in every recorded semester. Omit for none. */
+  minimum_cgpa_throughout?: number;
   allowed_branches: string[];
+  /** Target student batches (graduation years); at least one required. */
+  allowed_batches: number[];
   max_active_backlogs?: number;
   max_passive_backlogs?: number;
   number_of_rounds?: number;
+  /** Optional: create an announcement for this drive atomically in the same request. */
+  announcement?: DriveAnnouncementInput;
 }
 
 /** Body accepted by PUT /drive/:driveId (updateDriveSchema) - every field optional, plus status. */
@@ -182,6 +206,8 @@ export interface DriveWithEligible {
   message?: string;
   drive: DriveRecord;
   eligibleStudents: EligibleStudent[];
+  /** Present (Phase 2) when the drive was created with an announcement. */
+  announcement?: CompanyPostRecord | null;
 }
 
 /** Purpose: GET /drive - list every drive (any authenticated role). */
@@ -192,6 +218,18 @@ export function getDrives() {
 /** Purpose: GET /drive/:driveId - fetch one drive's full detail. */
 export function getDriveById(id: number | string) {
   return axiosInstance.get<DriveRecord>(`/drive/${id}`).then((res) => res.data);
+}
+
+/**
+ * Purpose: GET /drive/:driveId/eligible - (re)generate the eligible-students list
+ * for an existing drive, so shortlist review can happen any time after creation
+ * (decoupled from create/update). Returns the same { drive, eligibleStudents }
+ * shape as create/update.
+ */
+export function getDriveEligible(id: number | string) {
+  return axiosInstance
+    .get<DriveWithEligible>(`/drive/${id}/eligible`)
+    .then((res) => res.data);
 }
 
 /**
@@ -266,10 +304,26 @@ export function startRoundZero(driveId: number | string) {
     .then((res) => res.data);
 }
 
-/** Purpose: POST /drive/:driveId/finalize-prefilter - close pre-filter, open attendance (rounds >= 1). */
-export function finalizePrefilter(driveId: number | string) {
+/**
+ * One checkbox decision committed at a stage finalize: the drive_student being
+ * removed/rejected, plus the mandatory reason. An empty list at finalize means
+ * every still-active candidate passes/clears the stage.
+ */
+export interface RoundDecision {
+  driveStudentId: number;
+  reason: string;
+}
+
+/**
+ * Purpose: POST /drive/:driveId/finalize-prefilter - close pre-filter, open
+ * attendance (rounds >= 1). `removed` are the unchecked candidates (batch commit).
+ */
+export function finalizePrefilter(
+  driveId: number | string,
+  removed: RoundDecision[] = [],
+) {
   return axiosInstance
-    .post<DriveTransitionResult>(`/drive/${driveId}/finalize-prefilter`)
+    .post<DriveTransitionResult>(`/drive/${driveId}/finalize-prefilter`, { removed })
     .then((res) => res.data);
 }
 
@@ -280,31 +334,29 @@ export function finalizeAttendance(driveId: number | string) {
     .then((res) => res.data);
 }
 
-/** Purpose: POST /drive/:driveId/advance-round - open a fresh next round with the selected students. */
-export function advanceRound(driveId: number | string) {
-  return axiosInstance
-    .post<DriveTransitionResult>(`/drive/${driveId}/advance-round`)
-    .then((res) => res.data);
-}
-
-/** Purpose: POST /drive/:driveId/complete - place all selected students and finish the drive. */
-export function completeDrive(driveId: number | string) {
-  return axiosInstance
-    .post<DriveTransitionResult>(`/drive/${driveId}/complete`)
-    .then((res) => res.data);
-}
-
-/** Purpose: PATCH /drive/:driveId/students/:driveStudentId/prefilter - remove a student before a round (reason required). */
-export function prefilterRemoveStudent(
+/**
+ * Purpose: POST /drive/:driveId/advance-round - resolve the round (unchecked
+ * `rejected` candidates are eliminated, the rest clear) and open the next round.
+ */
+export function advanceRound(
   driveId: number | string,
-  driveStudentId: number | string,
-  reason: string,
+  rejected: RoundDecision[] = [],
 ) {
   return axiosInstance
-    .patch<{ message: string }>(
-      `/drive/${driveId}/students/${driveStudentId}/prefilter`,
-      { reason },
-    )
+    .post<DriveTransitionResult>(`/drive/${driveId}/advance-round`, { rejected })
+    .then((res) => res.data);
+}
+
+/**
+ * Purpose: POST /drive/:driveId/complete - resolve the round then place all
+ * cleared students and finish the drive. `rejected` are the unchecked candidates.
+ */
+export function completeDrive(
+  driveId: number | string,
+  rejected: RoundDecision[] = [],
+) {
+  return axiosInstance
+    .post<DriveTransitionResult>(`/drive/${driveId}/complete`, { rejected })
     .then((res) => res.data);
 }
 
@@ -318,21 +370,6 @@ export function markAttendance(
     .patch<{ message: string }>(
       `/drive/${driveId}/students/${driveStudentId}/attendance`,
       { present },
-    )
-    .then((res) => res.data);
-}
-
-/** Purpose: PATCH /drive/:driveId/students/:driveStudentId/result - record a round result (reject needs a reason). */
-export function recordResult(
-  driveId: number | string,
-  driveStudentId: number | string,
-  result: "SELECTED" | "REJECTED",
-  reason?: string,
-) {
-  return axiosInstance
-    .patch<{ message: string }>(
-      `/drive/${driveId}/students/${driveStudentId}/result`,
-      { result, reason },
     )
     .then((res) => res.data);
 }
