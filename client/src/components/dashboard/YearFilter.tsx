@@ -1,29 +1,42 @@
-import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { BATCH_OPTIONS } from "@/lib/validation";
 
 /**
- * A numeric "graduation year" filter input, shared by the admin students roster
- * and the TPC pages. An empty string means "no year filter". Kept as a plain
- * text/number input (not a dropdown) so any batch year can be typed, including
- * ones not yet present in the data.
+ * Batch ("Batch of …") filter dropdown, shared by the admin students roster and
+ * the TPC pages. Options come from BATCH_OPTIONS (the single source of truth in
+ * validation.ts); the value is the underlying graduation year as a string, and
+ * an empty string means "All batches". Radix Select can't use "" as an item
+ * value, so the sentinel "all" is translated at the boundary (like BranchFilter).
  */
 export function YearFilter({
   value,
   onChange,
-  placeholder = "Year (e.g. 2027)",
 }: {
   value: string;
   onChange: (value: string) => void;
-  placeholder?: string;
 }) {
   return (
-    <Input
-      type="number"
-      inputMode="numeric"
-      placeholder={placeholder}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-9 w-full sm:w-40"
-      aria-label="Filter by graduation year"
-    />
+    <Select
+      value={value || "all"}
+      onValueChange={(next) => onChange(next === "all" ? "" : next)}
+    >
+      <SelectTrigger className="h-9 w-full sm:w-44" aria-label="Filter by batch">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">All batches</SelectItem>
+        {BATCH_OPTIONS.map((b) => (
+          <SelectItem key={b.year} value={String(b.year)}>
+            {b.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

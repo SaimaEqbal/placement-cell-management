@@ -32,7 +32,7 @@ async function getEligibleStudentsForDrive(drive) {
         -- Batch filter: restrict to the drive's target graduation years. A NULL
         -- allowed_batches (legacy drives created before this column) means no
         -- batch restriction.
-        AND ($5::int[] IS NULL OR graduation_year = ANY($5))
+        AND ($5::int[] IS NULL OR batch = ANY($5))
         -- "Minimum CGPA throughout": when set, every RECORDED (non-null) semester
         -- SPI must be >= the value. NULL = no throughout constraint.
         AND (
@@ -82,6 +82,12 @@ async function getEligibleStudentsForDrive(drive) {
 // A drive's date/deadline can be "TBD" (or blank) when not yet finalised; store
 // that as NULL rather than writing a non-date string into a DATE column.
 const dateOrNull = (value) => (value && value !== "TBD" ? value : null);
+
+// Human label for a round in user-facing text: round 0 is the company screening.
+const roundText = (roundNo) =>
+  roundNo === 0 ? "the company screening" : `Round ${roundNo}`;
+const roundTextCap = (roundNo) =>
+  roundNo === 0 ? "The company screening" : `Round ${roundNo}`;
 
 // ---------------------------------------------------------------------------
 // Transaction helpers shared by the round-workflow endpoints. Every mutating
@@ -190,7 +196,7 @@ async function notifyRoundResults(client, drive, { final = false } = {}) {
       client,
       selectedIds,
       "You cleared a round",
-      `You cleared Round ${round} of ${label} and move on to the next round.`,
+      `You cleared ${roundText(round)} of ${label} and move on to the next round.`,
       "green"
     );
   }
@@ -199,7 +205,7 @@ async function notifyRoundResults(client, drive, { final = false } = {}) {
     client,
     rejectedIds,
     "Round result",
-    `You did not clear Round ${round} of ${label}.`,
+    `You did not clear ${roundText(round)} of ${label}.`,
     "red"
   );
 }
@@ -224,8 +230,11 @@ async function resolveRoundResults(client, drive, rejected, recordedBy) {
 
   let selectedCount = 0;
   for (const row of active.rows) {
-    if (reasonById.has(row.drive_student_id)) {
-      const reason = reasonById.get(row.drive_student_id);
+    // drive_student_id is a bigint (string from node-pg); the decision ids were
+    // coerced to numbers by the schema, so normalise for the lookup.
+    const key = Number(row.drive_student_id);
+    if (reasonById.has(key)) {
+      const reason = reasonById.get(key);
       await client.query(
         `UPDATE drive_students SET status = 'REJECTED', remarks = $2 WHERE drive_student_id = $1`,
         [row.drive_student_id, reason]
@@ -368,9 +377,19 @@ export const getDrives = async (req, res) => {
     // which one) without the client fetching/matching all announcements. The
     // UNIQUE(drive_id) constraint guarantees at most one match per drive.
     const result = await pool.query(
-      `SELECT d.*, cp.post_id AS announcement_id
+      `SELECT d.*, cp.post_id AS announcement_id,
+              cr.round_date AS current_round_date,
+              cr.round_name AS current_round_name,
+              COALESCE((
+                SELECT COUNT(*)::int FROM drive_students ds
+                WHERE ds.drive_id = d.drive_id
+                  AND ds.status = 'ACTIVE'
+                  AND ds.current_round = d.current_round
+              ), 0) AS current_round_count
          FROM drives d
          LEFT JOIN company_posts cp ON cp.drive_id = d.drive_id
+         LEFT JOIN drive_rounds cr
+           ON cr.drive_id = d.drive_id AND cr.round_no = d.current_round
         ORDER BY d.created_at DESC`
     );
 
@@ -453,7 +472,7 @@ export const updateDrive = async (req, res) => {
     if (existing.rows[0].is_locked) {
       return res.status(409).json({
         message:
-          "Drive is locked. Eligibility criteria cannot be changed after Round 0 has started.",
+          "Drive is locked. Eligibility criteria cannot be changed after drive has been locked has started.",
       });
     }
 
@@ -586,7 +605,7 @@ export const confirmStudents = async (req, res) => {
     if (drive.drive_state !== "SHORTLISTING") {
       await client.query("ROLLBACK");
       return res.status(409).json({
-        message: "Shortlist is locked. Round 0 has already started.",
+        message: "Shortlist is locked. Company screening has already started.",
       });
     }
 
@@ -691,7 +710,7 @@ export const startRoundZero = async (req, res) => {
 
     if (drive.drive_state !== "SHORTLISTING") {
       await client.query("ROLLBACK");
-      return res.status(409).json({ message: "Round 0 has already started." });
+      return res.status(409).json({ message: "Company screening has already started." });
     }
 
     const students = await client.query(
@@ -702,7 +721,7 @@ export const startRoundZero = async (req, res) => {
     if (students.rows.length === 0) {
       await client.query("ROLLBACK");
       return res.status(400).json({
-        message: "Confirm at least one student before starting Round 0.",
+        message: "Confirm at least one student before company screening.",
       });
     }
 
@@ -724,11 +743,13 @@ export const startRoundZero = async (req, res) => {
       });
     }
 
-    // Round 0 owns a date row too (TBD until the admin schedules screening).
+    // Round 0 (the company screening) owns a date row too (TBD until scheduled).
+    // Confirming the screening is what STARTS it, so stamp started_at now.
     await client.query(
-      `INSERT INTO drive_rounds (drive_id, round_no)
-       VALUES ($1, 0)
-       ON CONFLICT (drive_id, round_no) DO NOTHING`,
+      `INSERT INTO drive_rounds (drive_id, round_no, started_at)
+       VALUES ($1, 0, NOW())
+       ON CONFLICT (drive_id, round_no)
+       DO UPDATE SET started_at = COALESCE(drive_rounds.started_at, NOW())`,
       [driveId]
     );
 
@@ -748,13 +769,13 @@ export const startRoundZero = async (req, res) => {
     await client.query("COMMIT");
 
     return res.status(200).json({
-      message: "Round 0 started. Shortlist locked.",
+      message: "Company screening started. Shortlist locked.",
       drive: updated.rows[0],
     });
   } catch (error) {
     await client.query("ROLLBACK");
     console.error(error);
-    const { status, message } = pgErrorResponse(error, "Failed to start Round 0");
+    const { status, message } = pgErrorResponse(error, "Failed to confirm for company screening");
     return res.status(status).json({ message });
   } finally {
     client.release();
@@ -822,7 +843,7 @@ export const finalizePrefilter = async (req, res) => {
         client,
         removedIds,
         "Removed from a drive round",
-        `You have been removed before Round ${drive.current_round} of ${label} and are no longer progressing in this drive.`,
+        `You have been removed before ${roundText(drive.current_round)} of ${label} and are no longer progressing in this drive.`,
         "red"
       );
     }
@@ -932,7 +953,7 @@ export const finalizeAttendance = async (req, res) => {
         client,
         absentIds,
         "Marked absent",
-        `You were marked absent for Round ${drive.current_round} of ${label} and are no longer in the process.`,
+        `You were marked absent for ${roundText(drive.current_round)} of ${label} and are no longer in the process.`,
         "red"
       );
     }
@@ -1019,11 +1040,21 @@ export const advanceRound = async (req, res) => {
       [driveId, nextRound]
     );
 
-    // The new round starts with a TBD date.
+    // Running the next round CONCLUDES the round just resolved...
     await client.query(
-      `INSERT INTO drive_rounds (drive_id, round_no)
-       VALUES ($1, $2)
-       ON CONFLICT (drive_id, round_no) DO NOTHING`,
+      `INSERT INTO drive_rounds (drive_id, round_no, concluded_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (drive_id, round_no)
+       DO UPDATE SET concluded_at = COALESCE(drive_rounds.concluded_at, NOW())`,
+      [driveId, drive.current_round]
+    );
+
+    // ...and STARTS the new one (with a TBD date until scheduled).
+    await client.query(
+      `INSERT INTO drive_rounds (drive_id, round_no, started_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (drive_id, round_no)
+       DO UPDATE SET started_at = COALESCE(drive_rounds.started_at, NOW())`,
       [driveId, nextRound]
     );
 
@@ -1141,6 +1172,15 @@ export const completeDrive = async (req, res) => {
       });
     }
 
+    // Completing the drive CONCLUDES the final round.
+    await client.query(
+      `INSERT INTO drive_rounds (drive_id, round_no, concluded_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (drive_id, round_no)
+       DO UPDATE SET concluded_at = COALESCE(drive_rounds.concluded_at, NOW())`,
+      [driveId, drive.current_round]
+    );
+
     const updated = await client.query(
       `UPDATE drives
          SET drive_state = 'COMPLETED',
@@ -1250,11 +1290,21 @@ export const getMyDrives = async (req, res) => {
           d.*,
           ds.status        AS my_status,
           ds.current_round AS my_current_round,
-          cp.post_id       AS announcement_id
+          cp.post_id       AS announcement_id,
+          cr.round_date    AS current_round_date,
+          cr.round_name    AS current_round_name,
+          COALESCE((
+            SELECT COUNT(*)::int FROM drive_students dss
+            WHERE dss.drive_id = d.drive_id
+              AND dss.status = 'ACTIVE'
+              AND dss.current_round = d.current_round
+          ), 0) AS current_round_count
        FROM drive_students ds
        JOIN drives d   ON ds.drive_id = d.drive_id
        JOIN students s ON ds.student_id = s.id
        LEFT JOIN company_posts cp ON cp.drive_id = d.drive_id
+       LEFT JOIN drive_rounds cr
+         ON cr.drive_id = d.drive_id AND cr.round_no = d.current_round
        WHERE s.user_id = $1
        ORDER BY d.created_at DESC`,
       [req.user.userId]
@@ -1358,7 +1408,7 @@ export const getDriveRounds = async (req, res) => {
     const { driveId } = req.params;
 
     const result = await pool.query(
-      `SELECT round_no, round_date
+      `SELECT round_no, round_date, round_name, started_at, concluded_at
          FROM drive_rounds
         WHERE drive_id = $1
         ORDER BY round_no`,
@@ -1380,8 +1430,9 @@ export const setRoundDate = async (req, res) => {
 
   try {
     const { driveId, roundNo } = req.params;
-    const { round_date } = req.body;
+    const { round_date, round_name } = req.body;
     const date = dateOrNull(round_date);
+    const name = round_name && round_name.trim() ? round_name.trim() : null;
     const round = Number(roundNo);
 
     await client.query("BEGIN");
@@ -1399,10 +1450,12 @@ export const setRoundDate = async (req, res) => {
     }
 
     await client.query(
-      `INSERT INTO drive_rounds (drive_id, round_no, round_date)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (drive_id, round_no) DO UPDATE SET round_date = EXCLUDED.round_date`,
-      [driveId, round, date]
+      `INSERT INTO drive_rounds (drive_id, round_no, round_date, round_name)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (drive_id, round_no)
+       DO UPDATE SET round_date = EXCLUDED.round_date,
+                     round_name = EXCLUDED.round_name`,
+      [driveId, round, date, name]
     );
 
     // Only notify when an actual date is set (not when cleared to TBD).
@@ -1418,7 +1471,7 @@ export const setRoundDate = async (req, res) => {
           client,
           active.rows.map((r) => r.student_id),
           "Round scheduled",
-          `Round ${round} of ${label} is scheduled for ${date}. Please check your dashboard for details.`,
+          `${roundTextCap(round)} of ${label} is scheduled for ${date}. Please check your dashboard for details.`,
           "blue"
         );
       }

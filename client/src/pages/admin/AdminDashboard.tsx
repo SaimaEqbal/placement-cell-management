@@ -33,12 +33,17 @@ import { useCompanies } from "../../hooks/useCompanies";
 import { useDrives } from "../../hooks/useDrives";
 import { useStudents } from "../../hooks/useStudents";
 import { useAllAdmins, useAllSpcs, useAllTpcs } from "../../hooks/useVerification";
+import { computeStudentStats } from "../../lib/studentStats";
 import { paths } from "../../routes/paths";
 
 const quickLinks = [
   { label: "Manage companies", to: paths.adminCompanies, icon: Building2 },
   { label: "Manage drives", to: paths.adminDrives, icon: Megaphone },
   { label: "Browse students", to: paths.adminStudents, icon: Users },
+  { label: "TPCs", to: paths.adminTpcs, icon: Landmark },
+  { label: "SPCs", to: paths.adminSpcs, icon: UserCog },
+  { label: "Admins", to: paths.adminAdmins, icon: ShieldCheck },
+  { label: "Announcements", to: paths.adminPosts, icon: ClipboardList },
   { label: "Invite TPC / SPC / Admin", to: paths.adminInvitations, icon: UserPlus },
 ];
 
@@ -63,20 +68,7 @@ export default function AdminDashboard() {
    * - awaiting TPC = SPC approved ('spc_verified'); awaiting SPC = 'pending'.
    * - incomplete = registered a profile but is_profile_complete is still false.
    */
-  const stats = useMemo(() => {
-    const all = students.data ?? [];
-    return {
-      placed: all.filter(
-        (s) => s.placement_status === "placed" || s.placement_status === "second_chance",
-      ).length,
-      secondChances: all.filter((s) => s.placement_status === "second_chance").length,
-      interns: all.filter((s) => s.selected_for_internship).length,
-      verified: all.filter((s) => s.review_status === "verified").length,
-      awaitingTpc: all.filter((s) => s.review_status === "spc_verified").length,
-      awaitingSpc: all.filter((s) => s.review_status === "pending").length,
-      incomplete: all.filter((s) => !s.is_profile_complete).length,
-    };
-  }, [students.data]);
+  const stats = useMemo(() => computeStudentStats(students.data), [students.data]);
 
   const isLoading = students.isLoading || companies.isLoading || drives.isLoading;
   const isError = students.isError || companies.isError;
@@ -113,6 +105,32 @@ export default function AdminDashboard() {
     <>
       <Topbar title="Placement cell overview" subtitle="Companies, drives, and student placement at a glance." />
       <PageContainer>
+
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Quick links</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            {quickLinks.map(({ label, to, icon: Icon }) => (
+              <Button
+                key={to}
+                asChild
+                variant="outline"
+                className="h-auto justify-between px-4 py-3"
+              >
+                <Link to={to}>
+                  <span className="flex items-center gap-2.5">
+                    <Icon className="size-4 text-muted-foreground" />
+                    {label}
+                  </span>
+                  <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+            ))}
+          </CardContent>
+        </Card>
+        Quick Stats
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <StatCard
             label="Companies"
@@ -193,30 +211,6 @@ export default function AdminDashboard() {
             icon={<ShieldCheck />}
           />
         </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Quick links</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
-            {quickLinks.map(({ label, to, icon: Icon }) => (
-              <Button
-                key={to}
-                asChild
-                variant="outline"
-                className="h-auto justify-between px-4 py-3"
-              >
-                <Link to={to}>
-                  <span className="flex items-center gap-2.5">
-                    <Icon className="size-4 text-muted-foreground" />
-                    {label}
-                  </span>
-                  <ArrowRight className="size-4" />
-                </Link>
-              </Button>
-            ))}
-          </CardContent>
-        </Card>
       </PageContainer>
     </>
   );

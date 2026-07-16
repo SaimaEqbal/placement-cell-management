@@ -334,7 +334,7 @@ export const getTpcStudents = async (req, res) => {
     const yr = parseYear(year);
     if (yr !== null) {
       params.push(yr);
-      sql += ` AND st.graduation_year = $${params.length}`;
+      sql += ` AND st.batch = $${params.length}`;
     }
     sql += ` ORDER BY st.roll_no`;
 
@@ -366,7 +366,7 @@ export const getTpcQueue = async (req, res) => {
     const yr = parseYear(year);
     if (yr !== null) {
       params.push(yr);
-      sql += ` AND graduation_year = $${params.length}`;
+      sql += ` AND batch = $${params.length}`;
     }
     sql += ` ORDER BY roll_no`;
 
@@ -405,7 +405,7 @@ export const getTpcSpcVerified = async (req, res) => {
     const yr = parseYear(year);
     if (yr !== null) {
       params.push(yr);
-      sql += ` AND st.graduation_year = $${params.length}`;
+      sql += ` AND st.batch = $${params.length}`;
     }
     sql += ` ORDER BY st.roll_no`;
 
@@ -456,14 +456,14 @@ export const getTpcSpcs = async (req, res) => {
 
     const params = [dept, branch];
     let sql = `SELECT s.spc_id, s.name, s.email, s.department, s.branch,
-                      st.roll_no, st.semester, st.graduation_year
+                      st.roll_no, st.semester, st.batch
                FROM spc s
                LEFT JOIN students st ON st.user_id = s.user_id
                WHERE s.department = $1 AND s.branch = $2`;
     const yr = parseYear(year);
     if (yr !== null) {
       params.push(yr);
-      sql += ` AND st.graduation_year = $${params.length}`;
+      sql += ` AND st.batch = $${params.length}`;
     }
     sql += ` ORDER BY s.spc_id`;
 

@@ -255,11 +255,15 @@ export function useSetRoundDate(driveId: number | string) {
   return useMutation<
     { message: string },
     ApiError,
-    { roundNo: number; round_date: string }
+    { roundNo: number; round_date: string; round_name?: string }
   >({
-    mutationFn: ({ roundNo, round_date }) => setRoundDate(driveId, roundNo, round_date),
+    mutationFn: ({ roundNo, round_date, round_name }) =>
+      setRoundDate(driveId, roundNo, round_date, round_name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.driveRounds(driveId) });
+      // The drives lists show the current round's date/name, so refresh them too.
+      queryClient.invalidateQueries({ queryKey: queryKeys.drives });
+      queryClient.invalidateQueries({ queryKey: queryKeys.myDrives });
     },
   });
 }

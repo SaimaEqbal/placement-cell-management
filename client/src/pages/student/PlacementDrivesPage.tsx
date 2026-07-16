@@ -37,6 +37,7 @@ import {
   historyResultLabel,
   historyResultTone,
   historyStageLabel,
+  roundDisplayName,
   roundLabel,
 } from "../../lib/driveStatus";
 import type {
@@ -94,6 +95,30 @@ export default function PlacementDrivesPage() {
   const companyOf = (companyId: number) =>
     companyNameById.get(companyId) ?? `Company #${companyId}`;
 
+  // Shared cells for the drive status, current-round roster size, and the next
+  // round's name + date (works for DriveRecord and MyDrive, which extends it).
+  const statusCell = (d: DriveRecord) => {
+    const s = d.status;
+    const tone =
+      s === "completed" ? "green" : s === "ongoing" ? "blue" : s === "cancelled" ? "red" : "gray";
+    return <StatusBadge tone={tone}>{s}</StatusBadge>;
+  };
+  const inRoundCell = (d: DriveRecord) =>
+    d.drive_state === "SHORTLISTING" ? "—" : String(d.current_round_count ?? 0);
+  const nextRoundCell = (d: DriveRecord) =>
+    d.drive_state !== "ROUND_IN_PROGRESS" ? (
+      <span className="text-muted-foreground">—</span>
+    ) : (
+      <div className="min-w-0">
+        <div className="truncate">
+          {roundDisplayName(d.current_round, d.current_round_name)}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {d.current_round_date ? formatDate(d.current_round_date) : "TBD"}
+        </div>
+      </div>
+    );
+
   // ---- All drives ---------------------------------------------------------
   const allDrives = useDrives();
 
@@ -135,6 +160,28 @@ export default function PlacementDrivesPage() {
       header: "Branches",
       meta: { label: "Branches" },
       enableSorting: false,
+    },
+    {
+      id: "status",
+      accessorFn: (d) => d.status,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+      meta: { label: "Status" },
+      cell: ({ row }) => statusCell(row.original),
+    },
+    {
+      id: "in_round",
+      accessorFn: (d) => d.current_round_count ?? 0,
+      header: "In round",
+      meta: { label: "In round" },
+      enableSorting: false,
+      cell: ({ row }) => inRoundCell(row.original),
+    },
+    {
+      id: "next_round",
+      header: "Next round",
+      meta: { label: "Next round" },
+      enableSorting: false,
+      cell: ({ row }) => nextRoundCell(row.original),
     },
     {
       id: "announcement",
@@ -187,6 +234,28 @@ export default function PlacementDrivesPage() {
       accessorFn: (d) => roundLabel(d.my_current_round),
       header: ({ column }) => <DataTableColumnHeader column={column} title="Current round" />,
       meta: { label: "Current round" },
+    },
+    {
+      id: "status",
+      accessorFn: (d) => d.status,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Drive status" />,
+      meta: { label: "Drive status" },
+      cell: ({ row }) => statusCell(row.original),
+    },
+    {
+      id: "in_round",
+      accessorFn: (d) => d.current_round_count ?? 0,
+      header: "In round",
+      meta: { label: "In round" },
+      enableSorting: false,
+      cell: ({ row }) => inRoundCell(row.original),
+    },
+    {
+      id: "next_round",
+      header: "Next round",
+      meta: { label: "Next round" },
+      enableSorting: false,
+      cell: ({ row }) => nextRoundCell(row.original),
     },
     {
       id: "announcement",
@@ -381,7 +450,7 @@ function MyDriveResultsDialog({
                     setStage(null);
                   }}
                 >
-                  {rn === 0 ? "Round 0" : `Round ${rn}`}
+                  {rn === 0 ? "Company Screening" : `Round ${rn}`}
                 </Button>
               ))}
             </div>

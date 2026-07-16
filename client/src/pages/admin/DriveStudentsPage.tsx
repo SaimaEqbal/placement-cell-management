@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { ColumnDef } from "@tanstack/react-table";
 import {
   ArrowLeft,
   ArrowRight,
@@ -19,12 +18,14 @@ import { ListCard } from "@/components/dashboard/ListCard";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
 import { ShortlistReviewDialog } from "@/components/dashboard/ShortlistReviewDialog";
-import { DataTable, DataTableColumnHeader } from "@/components/dashboard/data-table";
+import { RoundHistory } from "@/components/dashboard/RoundHistory";
+import { Field } from "@/components/dashboard/Field";
 import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
@@ -46,7 +47,6 @@ import {
   useFinalizeAttendance,
   useFinalizePrefilter,
   useMarkAttendance,
-  useRoundHistory,
   useSetRoundDate,
   useStartRoundZero,
 } from "../../hooks/useDrives";
@@ -56,30 +56,25 @@ import {
   driveStateTone,
   driveStudentLabel,
   driveStudentTone,
-  historyResultLabel,
-  historyResultTone,
   historyStageLabel,
   roundLabel,
+  roundDisplayName,
 } from "../../lib/driveStatus";
 import { exportAttendanceSheet } from "../../lib/attendanceExport";
 import { paths } from "../../routes/paths";
 import type {
   DriveRecord,
   DriveStudent,
-  HistoryStage,
   RoundDecision,
-  RoundHistoryRow,
 } from "../../services/driveService";
-
-/** Phases within a round, in the order they happen. */
-const STAGE_ORDER: HistoryStage[] = ["SHORTLIST", "PREFILTER", "ATTENDANCE", "RESULT"];
 
 /**
  * Purpose: /Admin/drives/:driveId - operate a drive's round-based workflow. During
- * SHORTLISTING it shows the confirmed shortlist and a "Start Round 0" action; once
- * in progress it drives each round through its stages (Round 0 screening; rounds
- * 1..N: pre-filter -> attendance -> results) and lets the admin switch to any past
- * round to view its permanent history. Student-facing views are unaffected.
+ * SHORTLISTING it shows the confirmed shortlist and a "Confirm for company
+ * screening" action; once in progress the page separates the Round History card
+ * (concluded rounds, shared read-only viewer) from the current active round's
+ * summary + operational workflow (pre-filter -> attendance -> results).
+ * Student-facing views are unaffected.
  */
 export default function DriveStudentsPage() {
   const { driveId } = useParams<{ driveId: string }>();
@@ -88,8 +83,6 @@ export default function DriveStudentsPage() {
   const drive = useDrive(driveId);
   const { data: companies } = useCompanies();
   const students = useDriveStudents(driveId);
-
-  const [viewRound, setViewRound] = useState<number | null>(null);
 
   const companyName = drive.data
     ? companies?.find((c) => c.company_id === drive.data!.company_id)?.company_name
@@ -139,8 +132,6 @@ export default function DriveStudentsPage() {
                 driveId={id}
                 drive={drive.data}
                 students={students.data ?? []}
-                viewRound={viewRound}
-                onViewRound={setViewRound}
               />
             )}
           </>
@@ -208,45 +199,45 @@ function DriveDetailsCard({
   );
 }
 
-/** Purpose: choose between the shortlisting screen, the live round panel, and the history view. */
+/**
+ * Purpose: choose between the shortlisting screen and the round view. Once
+ * rounds run, the layout separates HISTORY (the Round History card of concluded
+ * rounds, opening the shared read-only viewer) from the CURRENT ACTIVE ROUND
+ * (its summary, its date, and the operational workflow) - historical rounds
+ * never mix with the live controls.
+ */
 function WorkflowSection({
   driveId,
   drive,
   students,
-  viewRound,
-  onViewRound,
 }: {
   driveId: string;
   drive: DriveRecord;
   students: DriveStudent[];
-  viewRound: number | null;
-  onViewRound: (round: number | null) => void;
 }) {
   if (drive.drive_state === "SHORTLISTING") {
     return <ShortlistingPanel driveId={driveId} drive={drive} students={students} />;
   }
 
-  // In progress or completed: rounds 0..current_round are viewable.
-  const selectedRound = viewRound ?? drive.current_round;
-  const isLiveRound =
-    drive.drive_state === "ROUND_IN_PROGRESS" && selectedRound === drive.current_round;
+  const isLive = drive.drive_state === "ROUND_IN_PROGRESS";
 
   return (
     <div className="flex flex-col gap-4">
-      <RoundsSummaryBar driveId={driveId} drive={drive} students={students} />
-
-      <RoundTabs
-        current={drive.current_round}
-        selected={selectedRound}
-        onSelect={onViewRound}
+      {/* Historical (concluded) rounds - reusable, read-only. */}
+      <RoundHistory
+        driveId={driveId}
+        currentRound={drive.current_round}
+        driveCompleted={drive.drive_state === "COMPLETED"}
       />
 
-      <RoundDateBar driveId={driveId} roundNo={selectedRound} />
+      {/* Current active round: information + operational workflow. */}
+      <RoundsSummaryBar driveId={driveId} drive={drive} students={students} />
 
-      {isLiveRound ? (
-        <LiveRoundPanel driveId={driveId} drive={drive} students={students} />
-      ) : (
-        <RoundHistoryTable driveId={driveId} round={selectedRound} />
+      {isLive && (
+        <>
+          <RoundDateBar driveId={driveId} roundNo={drive.current_round} />
+          <LiveRoundPanel driveId={driveId} drive={drive} students={students} />
+        </>
       )}
     </div>
   );
@@ -269,8 +260,8 @@ function RoundsSummaryBar({
   const rounds = useDriveRounds(driveId);
   const completed = drive.drive_state === "COMPLETED";
   const inRound = students.filter((s) => s.status === "ACTIVE").length;
-  const currentDate =
-    rounds.data?.find((r) => r.round_no === drive.current_round)?.round_date ?? null;
+  const currentRound = rounds.data?.find((r) => r.round_no === drive.current_round);
+  const currentDate = currentRound?.round_date ?? null;
 
   return (
     <Card>
@@ -278,7 +269,12 @@ function RoundsSummaryBar({
         <InfoGrid
           className="sm:grid-cols-3"
           items={[
-            ["Current round", completed ? "Completed" : roundLabel(drive.current_round)],
+            [
+              "Current round",
+              completed
+                ? "Completed"
+                : roundDisplayName(drive.current_round, currentRound?.round_name),
+            ],
             ["Students in round", completed ? "—" : String(inRound)],
             ["Next round date", currentDate ? formatDate(currentDate) : "TBD"],
           ]}
@@ -293,36 +289,55 @@ function RoundDateBar({ driveId, roundNo }: { driveId: string; roundNo: number }
   const rounds = useDriveRounds(driveId);
   const setDate = useSetRoundDate(driveId);
 
-  const current = rounds.data?.find((r) => r.round_no === roundNo)?.round_date ?? null;
+  const round = rounds.data?.find((r) => r.round_no === roundNo);
+  const current = round?.round_date ?? null;
+  const currentName = round?.round_name ?? null;
 
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
+  const [name, setName] = useState("");
 
-  // Reset the editor whenever the selected round or its stored date changes.
+  // Reset the editor whenever the selected round or its stored date/name changes.
   useEffect(() => {
     setValue(current ? current.slice(0, 10) : "");
+    setName(currentName ?? "");
     setEditing(false);
-  }, [current, roundNo]);
+  }, [current, currentName, roundNo]);
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-2 text-sm">
-        <CalendarClock className="size-4 text-muted-foreground" />
-        <span className="font-medium">Round {roundNo} date:</span>
-        <span className="text-muted-foreground">
-          {current ? formatDate(current) : "TBD"}
-        </span>
+      <div className="flex min-w-0 flex-col gap-1">
+        <div className="flex items-center gap-2 text-sm">
+          <CalendarClock className="size-4 text-muted-foreground" />
+          <span className="font-medium">{roundDisplayName(roundNo, currentName)}:</span>
+          <span className="text-muted-foreground">
+            {current ? formatDate(current) : "TBD"}
+          </span>
+        </div>
+        {(round?.started_at || round?.concluded_at) && (
+          <div className="pl-6 text-xs text-muted-foreground">
+            {round?.started_at ? `Started ${formatDate(round.started_at)}` : ""}
+            {round?.started_at && round?.concluded_at ? " · " : ""}
+            {round?.concluded_at ? `Concluded ${formatDate(round.concluded_at)}` : "" }
+          </div>
+        )}
       </div>
 
       {editing ? (
         <div className="flex flex-wrap items-center gap-2">
+          <Input
+            className="h-9 w-44"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={`Name (opt.) · Round ${roundNo}`}
+          />
           <DatePicker id={`round-${roundNo}-date`} value={value} onChange={setValue} allowTbd />
           <Button
             size="sm"
             disabled={setDate.isPending}
             onClick={() =>
               setDate.mutate(
-                { roundNo, round_date: value || "TBD" },
+                { roundNo, round_date: value || "TBD", round_name: name },
                 { onSuccess: () => setEditing(false) },
               )
             }
@@ -335,7 +350,7 @@ function RoundDateBar({ driveId, roundNo }: { driveId: string; roundNo: number }
         </div>
       ) : (
         <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
-          <Pencil /> {current ? "Change date" : "Set date"}
+          <Pencil /> {current ? "Edit round" : "Set date"}
         </Button>
       )}
     </div>
@@ -364,6 +379,7 @@ function RoundDatePrompt({ driveId, drive }: { driveId: string; drive: DriveReco
 
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
+  const [name, setName] = useState("");
 
   // Open automatically whenever a date becomes needed (i.e. each time the drive
   // is opened while the current round still lacks a date).
@@ -377,13 +393,26 @@ function RoundDatePrompt({ driveId, drive }: { driveId: string; drive: DriveReco
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Set the Round {drive.current_round} date</DialogTitle>
+          <DialogTitle>Schedule Round {drive.current_round}</DialogTitle>
           <DialogDescription>
             This round needs a scheduled date before you can finalise attendance.
-            Students still in the round are notified when you set it.
+            You can also give it a name (optional). Students still in the round are
+            notified when you set the date.
           </DialogDescription>
         </DialogHeader>
-        <DatePicker id="round-date-prompt" value={value} onChange={setValue} />
+        <div className="flex flex-col gap-4">
+          <Field label="Round name (optional)" htmlFor="round-prompt-name">
+            <Input
+              id="round-prompt-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={`e.g. Technical Interview (defaults to "Round ${drive.current_round}")`}
+            />
+          </Field>
+          <Field label="Round date" htmlFor="round-date-prompt">
+            <DatePicker id="round-date-prompt" value={value} onChange={setValue} />
+          </Field>
+        </div>
         <DialogFooter className="gap-2 sm:gap-2">
           <Button variant="outline" onClick={() => setOpen(false)}>
             Later
@@ -392,7 +421,7 @@ function RoundDatePrompt({ driveId, drive }: { driveId: string; drive: DriveReco
             disabled={!value || setDate.isPending}
             onClick={() =>
               setDate.mutate(
-                { roundNo: drive.current_round, round_date: value },
+                { roundNo: drive.current_round, round_date: value, round_name: name },
                 { onSuccess: () => setOpen(false) },
               )
             }
@@ -402,34 +431,6 @@ function RoundDatePrompt({ driveId, drive }: { driveId: string; drive: DriveReco
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/** Purpose: a button-group of round tabs (Round 0 .. current). */
-function RoundTabs({
-  current,
-  selected,
-  onSelect,
-}: {
-  current: number;
-  selected: number;
-  onSelect: (round: number) => void;
-}) {
-  const rounds = Array.from({ length: current + 1 }, (_, i) => i);
-  return (
-    <div className="flex flex-wrap gap-2">
-      {rounds.map((r) => (
-        <Button
-          key={r}
-          type="button"
-          size="sm"
-          variant={r === selected ? "default" : "outline"}
-          onClick={() => onSelect(r)}
-        >
-          {r === 0 ? "Round 0 · Screening" : `Round ${r}`}
-        </Button>
-      ))}
-    </div>
   );
 }
 
@@ -487,12 +488,12 @@ function ShortlistingPanel({
     <ListCard
       eyebrow="Shortlist"
       title="Confirmed students"
-      description={`${students.length} student(s) shortlisted. Starting Round 0 sends this list to the company and locks the drive.`}
+      description={`${students.length} student(s) shortlisted. This sends this list to the company and locks the drive.`}
     >
       {start.isError && (
         <Alert variant="destructive" className="mb-3">
           <AlertDescription>
-            {start.error?.message ?? "Could not start Round 0."}
+            {start.error?.message ?? "Could not confirm for company screening."}
           </AlertDescription>
         </Alert>
       )}
@@ -501,12 +502,12 @@ function ShortlistingPanel({
         <ConfirmDialog
           trigger={
             <Button disabled={start.isPending}>
-              <Flag /> {start.isPending ? "Starting..." : "Start Round 0"}
+              <Flag /> {start.isPending ? "Starting..." : "Confirm for company screening"}
             </Button>
           }
-          title="Start Round 0?"
+          title="Confirm for company screening?"
           description="This finalises the shortlist, sends it to the company for resume screening, and locks the drive. Eligibility criteria can no longer be changed."
-          confirmLabel="Start Round 0"
+          confirmLabel="Confirm"
           onConfirm={() => start.mutate()}
         />
       </div>
@@ -599,7 +600,7 @@ function LiveRoundPanel({
 
   const heading =
     round === 0
-      ? "Round 0 · Resume screening"
+      ? "Company Screening"
       : `${roundLabel(round)} · ${rowMode === "prefilter" ? "Pre-filter" : rowMode === "attendance" ? "Attendance" : "Results"}`;
 
   const description =
@@ -834,7 +835,8 @@ function ReasonDialog({
             {verb} {name ?? "student"}
           </DialogTitle>
           <DialogDescription>
-            A reason is required and is kept in this drive's permanent history.
+            A reason of at least 10 characters is required and is kept in this
+            drive's permanent history.
           </DialogDescription>
         </DialogHeader>
         <Textarea
@@ -849,7 +851,7 @@ function ReasonDialog({
           </Button>
           <Button
             variant="destructive"
-            disabled={!reason.trim() || pending}
+            disabled={reason.trim().length < 10 || pending}
             onClick={() => onConfirm(reason.trim())}
           >
             {pending ? "Saving..." : verb}
@@ -857,135 +859,5 @@ function ReasonDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/**
- * Purpose: read-only history for one round, split into its phases (Shortlist /
- * Pre-filter / Attendance / Results). Each phase is a separate table, so a student
- * appears at most once in the phase being viewed instead of stacked across phases.
- */
-function RoundHistoryTable({ driveId, round }: { driveId: string; round: number }) {
-  const history = useRoundHistory(driveId, round);
-  const [stage, setStage] = useState<HistoryStage | null>(null);
-
-  const rows = history.data ?? [];
-  const stages = STAGE_ORDER.filter((s) => rows.some((r) => r.stage === s));
-  const activeStage = stage && stages.includes(stage) ? stage : stages[0] ?? null;
-  const phaseRows = rows.filter((r) => r.stage === activeStage);
-
-  // Summary derived from the round's history: how many were present, and how many
-  // cleared. Round 0 has no attendance, so "present" is the number screened.
-  const presentCount =
-    round === 0
-      ? new Set(rows.filter((r) => r.stage === "SHORTLIST").map((r) => r.student_id)).size
-      : new Set(
-          rows
-            .filter((r) => r.stage === "ATTENDANCE" && r.result === "PRESENT")
-            .map((r) => r.student_id),
-        ).size;
-  const clearedCount = new Set(
-    rows
-      .filter((r) => r.stage === "RESULT" && (r.result === "SELECTED" || r.result === "PLACED"))
-      .map((r) => r.student_id),
-  ).size;
-
-  const columns: ColumnDef<RoundHistoryRow>[] = [
-    {
-      id: "student",
-      accessorFn: (r) => r.name,
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Student" />,
-      meta: { label: "Student" },
-      cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="truncate font-medium">{row.original.name}</div>
-          <div className="text-xs text-muted-foreground">
-            {row.original.roll_no} · {row.original.branch ?? "—"}
-          </div>
-        </div>
-      ),
-    },
-    {
-      id: "result",
-      accessorFn: (r) => historyResultLabel(r.result),
-      header: "Result",
-      meta: { label: "Result" },
-      enableSorting: false,
-      cell: ({ row }) => (
-        <StatusBadge tone={historyResultTone(row.original.result)}>
-          {historyResultLabel(row.original.result)}
-        </StatusBadge>
-      ),
-    },
-    {
-      id: "reason",
-      accessorFn: (r) => r.reason ?? "—",
-      header: "Reason",
-      meta: { label: "Reason" },
-      enableSorting: false,
-    },
-    {
-      id: "date",
-      accessorFn: (r) => formatDate(r.recorded_at),
-      header: "Date",
-      meta: { label: "Date" },
-    },
-  ];
-
-  if (history.isLoading) return <LoadingState label="Loading round history..." />;
-  if (history.isError)
-    return (
-      <ErrorState
-        message={history.error?.message ?? "Could not load round history."}
-        onRetry={history.refetch}
-      />
-    );
-
-  return (
-    <ListCard
-      eyebrow="History"
-      title={roundLabel(round)}
-      description="Review each phase of this round separately."
-    >
-      {stages.length === 0 ? (
-        <EmptyState
-          icon={<Users />}
-          title="No history for this round"
-          description="Nothing has been recorded for this round yet."
-        />
-      ) : (
-        <div className="flex flex-col gap-4">
-          <InfoGrid
-            className="sm:grid-cols-2"
-            items={[
-              ["Present", String(presentCount)],
-              ["Cleared", String(clearedCount)],
-            ]}
-          />
-
-          <div className="flex flex-wrap gap-2">
-            {stages.map((s) => (
-              <Button
-                key={s}
-                size="sm"
-                variant={s === activeStage ? "secondary" : "ghost"}
-                onClick={() => setStage(s)}
-              >
-                {historyStageLabel(s)}
-              </Button>
-            ))}
-          </div>
-
-          <DataTable
-            columns={columns}
-            data={phaseRows}
-            searchPlaceholder="Search student..."
-            emptyMessage="No students in this phase."
-            enableExport
-            exportFileName={`drive-${driveId}-round-${round}-${activeStage ?? "history"}`}
-          />
-        </div>
-      )}
-    </ListCard>
   );
 }

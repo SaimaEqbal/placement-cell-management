@@ -15,7 +15,7 @@ export const getAllSpcs = async (req, res) => {
     const result = await pool.query(
       `SELECT s.spc_id, s.name, s.email, s.phone, s.department, s.branch,
               s.created_at,
-              st.roll_no, st.semester, st.graduation_year
+              st.roll_no, st.semester, st.batch
        FROM spc s
        LEFT JOIN students st ON st.user_id = s.user_id
        ORDER BY s.department, s.branch, s.spc_id`

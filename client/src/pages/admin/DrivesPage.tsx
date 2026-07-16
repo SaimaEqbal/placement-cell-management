@@ -1,10 +1,12 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Megaphone, MoreHorizontal, Plus } from "lucide-react";
+import { Award, Briefcase, Megaphone, MoreHorizontal, Plus } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { Field } from "@/components/dashboard/Field";
 import { ShortlistReviewDialog } from "@/components/dashboard/ShortlistReviewDialog";
 import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
@@ -47,7 +49,11 @@ import {
   useDrives,
   useUpdateDrive,
 } from "../../hooks/useDrives";
-import { DEPARTMENT_BRANCHES } from "../../lib/validation";
+import { useStudents } from "../../hooks/useStudents";
+import { computeStudentStats } from "../../lib/studentStats";
+import { roundDisplayName } from "../../lib/driveStatus";
+import { formatDate } from "../../lib/format";
+import { BATCH_OPTIONS, DEPARTMENT_BRANCHES } from "../../lib/validation";
 import { paths } from "../../routes/paths";
 import type {
   CreateDrivePayload,
@@ -58,28 +64,29 @@ import type { PostAttachmentInput } from "../../services/companyPostService";
 
 const EMPLOYMENT_TYPES: EmploymentType[] = ["FTE", "Internship", "Internship + PPO"];
 
-/** The only batch choices allowed by the form (enforced on the frontend). */
-type BatchChoice = "2027" | "2028" | "both";
-const BATCH_OPTIONS: { value: BatchChoice; label: string }[] = [
-  { value: "2027", label: "2027" },
-  { value: "2028", label: "2028" },
-  { value: "both", label: "Both (2027 & 2028)" },
+/**
+ * Batch choices for the drive form, derived from the single source of truth
+ * (BATCH_OPTIONS in validation.ts): one batch per option, plus "both" for all.
+ * A choice is the graduation year as a string, or the "both" sentinel.
+ */
+type BatchChoice = string;
+const DRIVE_BATCH_OPTIONS: { value: string; label: string }[] = [
+  ...BATCH_OPTIONS.map((b) => ({ value: String(b.year), label: b.label })),
+  { value: "both", label: "Both batches" },
 ];
 
 /** Map a batch choice to the allowed_batches array the API expects. */
 function batchToYears(batch: BatchChoice): number[] {
-  if (batch === "2027") return [2027];
-  if (batch === "2028") return [2028];
-  return [2027, 2028];
+  if (batch === "both") return BATCH_OPTIONS.map((b) => b.year);
+  return [Number(batch)];
 }
 
 /** Map a drive's stored allowed_batches back to a batch choice (defaults to Both). */
 function yearsToBatch(years: number[] | null | undefined): BatchChoice {
-  const has27 = years?.includes(2027);
-  const has28 = years?.includes(2028);
-  if (has27 && !has28) return "2027";
-  if (has28 && !has27) return "2028";
-  return "both";
+  const set = new Set(years ?? []);
+  if (BATCH_OPTIONS.every((b) => set.has(b.year))) return "both";
+  const single = BATCH_OPTIONS.find((b) => set.has(b.year));
+  return single ? String(single.year) : "both";
 }
 
 /** Local form state - all inputs are strings/arrays and get coerced to the API's number/array shape on submit. */
@@ -210,6 +217,8 @@ function toCreatePayload(form: DriveFormState): CreateDrivePayload {
 export default function DrivesPage() {
   const { data: drives, isLoading, isError, error, refetch } = useDrives();
   const { data: companies } = useCompanies();
+  const studentsQuery = useStudents();
+  const studentStats = computeStudentStats(studentsQuery.data);
   const createMutation = useCreateDrive();
   const updateMutation = useUpdateDrive();
   const deleteMutation = useDeleteDrive();
@@ -379,6 +388,49 @@ export default function DrivesPage() {
       meta: { label: "Type" },
     },
     {
+      id: "status",
+      accessorFn: (d) => d.status,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+      meta: { label: "Status" },
+      cell: ({ row }) => {
+        const s = row.original.status;
+        const tone =
+          s === "completed" ? "green" : s === "ongoing" ? "blue" : s === "cancelled" ? "red" : "gray";
+        return <StatusBadge tone={tone}>{s}</StatusBadge>;
+      },
+    },
+    {
+      id: "in_round",
+      accessorFn: (d) => d.current_round_count ?? 0,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="In round" />,
+      meta: { label: "In round" },
+      cell: ({ row }) =>
+        row.original.drive_state === "SHORTLISTING"
+          ? <span className="text-muted-foreground">—</span>
+          : String(row.original.current_round_count ?? 0),
+    },
+    {
+      id: "next_round",
+      header: "Next round",
+      enableSorting: false,
+      meta: { label: "Next round" },
+      cell: ({ row }) => {
+        const d = row.original;
+        if (d.drive_state !== "ROUND_IN_PROGRESS")
+          return <span className="text-muted-foreground">—</span>;
+        return (
+          <div className="min-w-0">
+            <div className="truncate">
+              {roundDisplayName(d.current_round, d.current_round_name)}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {d.current_round_date ? formatDate(d.current_round_date) : "TBD"}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
       id: "actions",
       header: () => <div className="text-right">Action</div>,
       enableSorting: false,
@@ -441,6 +493,27 @@ export default function DrivesPage() {
         subtitle="Create, manage drives"
       />
       <PageContainer>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard
+            label="Drives announced"
+            value={String(drives?.length ?? 0)}
+            note="Total drives created"
+            icon={<Megaphone />}
+          />
+          <StatCard
+            label="Students placed"
+            value={String(studentStats.placed)}
+            note="Placed via placement drives"
+            icon={<Award />}
+          />
+          <StatCard
+            label="Students in internships"
+            value={String(studentStats.interns)}
+            note="Selected for internships"
+            icon={<Briefcase />}
+          />
+        </div>
+
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold tracking-tight">Drives</h2>
           <Button type="button" onClick={openCreate}>
@@ -599,7 +672,7 @@ export default function DrivesPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {BATCH_OPTIONS.map((o) => (
+                  {DRIVE_BATCH_OPTIONS.map((o) => (
                     <SelectItem key={o.value} value={o.value}>
                       {o.label}
                     </SelectItem>

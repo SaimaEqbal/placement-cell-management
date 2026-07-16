@@ -1,15 +1,27 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import {
+  ArrowRight,
+  Award,
+  BadgeCheck,
+  Briefcase,
+  ClipboardCheck,
+  ClipboardList,
+  FileWarning,
+  Repeat2,
+  Users,
+} from "lucide-react";
 
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
 import { ListCard } from "@/components/dashboard/ListCard";
+import { StatCard } from "@/components/dashboard/StatCard";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { ErrorState, LoadingState } from "@/components/dashboard/states";
-import { DataTable } from "@/components/dashboard/data-table";
+import { DataTable, DataTableColumnHeader } from "@/components/dashboard/data-table";
 import { makeStudentColumns } from "@/components/dashboard/studentColumns";
 import { YearFilter } from "@/components/dashboard/YearFilter";
+import { computeStudentStats } from "../../lib/studentStats";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -21,7 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useStudents } from "../../hooks/useStudents";
-import { DEPARTMENTS } from "../../lib/validation";
+import { DEPARTMENT_BRANCHES, DEPARTMENTS } from "../../lib/validation";
 import { paths } from "../../routes/paths";
 import type { StudentRecord } from "../../services/studentService";
 
@@ -68,10 +80,16 @@ export default function AdminStudentsPage() {
   const { data: students, isLoading, isError, error, refetch } = useStudents();
 
   const [department, setDepartment] = useState("");
+  const [branch, setBranch] = useState("");
   const [minCgpa, setMinCgpa] = useState("");
   const [year, setYear] = useState("");
   const [noBacklogsOnly, setNoBacklogsOnly] = useState(false);
   const [view, setView] = useState<StudentView>("all");
+
+  /** Branch options scoped to the selected department ("" = all branches of it). */
+  const branchOptions = department ? DEPARTMENT_BRANCHES[department] ?? [] : [];
+
+  const stats = useMemo(() => computeStudentStats(students), [students]);
 
   const filtered = useMemo(() => {
     if (!students) return [];
@@ -80,18 +98,49 @@ export default function AdminStudentsPage() {
     return students.filter((s) => {
       if (!STUDENT_VIEWS.find((v) => v.value === view)!.match(s)) return false;
       if (department && s.department !== department) return false;
+      if (branch && s.branch !== branch) return false;
       if (minCgpaNum && Number(s.cgpa ?? 0) < minCgpaNum) return false;
-      if (yearTrimmed && String(s.graduation_year ?? "") !== yearTrimmed) return false;
+      if (yearTrimmed && String(s.batch ?? "") !== yearTrimmed) return false;
       if (noBacklogsOnly && s.active_backlogs > 0) return false;
       return true;
     });
-  }, [students, view, department, minCgpa, year, noBacklogsOnly]);
+  }, [students, view, department, branch, minCgpa, year, noBacklogsOnly]);
 
   const ids = filtered.map((s) => s.id);
 
   const columns = useMemo(
     () =>
       makeStudentColumns({
+        extraColumns: [
+          {
+            accessorKey: "semester",
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title="Semester" />
+            ),
+            meta: { label: "Semester" },
+            cell: ({ row }) => (
+              <span className="text-muted-foreground">
+                {row.original.semester ?? "—"}
+              </span>
+            ),
+          },
+          {
+            id: "backlogs",
+            accessorFn: (s) => s.active_backlogs,
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title="Backlogs" />
+            ),
+            meta: {
+              label: "Backlogs (active / passive)",
+              exportValue: (s) => `${s.active_backlogs}/${s.passive_backlogs}`,
+            },
+            cell: ({ row }) => (
+              <span className="tabular-nums text-muted-foreground">
+                {row.original.active_backlogs} / {row.original.passive_backlogs}
+              </span>
+            ),
+          },
+        ],
         status: (s) => (
           <StatusBadge
             tone={
@@ -127,6 +176,19 @@ export default function AdminStudentsPage() {
         )}
 
         {!isLoading && !isError && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Registered" value={String(stats.registered)} note="In the portal" icon={<Users />} />
+            <StatCard label="Placed" value={String(stats.placed)} note="Via placement drives" icon={<Award />} />
+            <StatCard label="Second chances" value={String(stats.secondChances)} note="Placed via a 2x offer" icon={<Repeat2 />} />
+            <StatCard label="Internship selections" value={String(stats.interns)} note="Selected for internships" icon={<Briefcase />} />
+            <StatCard label="Fully verified" value={String(stats.verified)} note="Cleared SPC + TPC" icon={<BadgeCheck />} />
+            <StatCard label="Awaiting TPC review" value={String(stats.awaitingTpc)} note="SPC-approved" icon={<ClipboardCheck />} />
+            <StatCard label="Awaiting SPC review" value={String(stats.awaitingSpc)} note="Pending SPC" icon={<ClipboardList />} />
+            <StatCard label="Incomplete profiles" value={String(stats.incomplete)} note="Registered, not completed" icon={<FileWarning />} />
+          </div>
+        )}
+
+        {!isLoading && !isError && (
           <ListCard
             eyebrow="Student roster"
             title={STUDENT_VIEWS.find((v) => v.value === view)!.label}
@@ -155,7 +217,11 @@ export default function AdminStudentsPage() {
                 <>
                   <Select
                     value={department || "all"}
-                    onValueChange={(v) => setDepartment(v === "all" ? "" : v)}
+                    onValueChange={(v) => {
+                      setDepartment(v === "all" ? "" : v);
+                      // Branches belong to a department; changing it resets the branch.
+                      setBranch("");
+                    }}
                   >
                     <SelectTrigger className="h-9 w-full sm:w-52">
                       <SelectValue />
@@ -165,6 +231,25 @@ export default function AdminStudentsPage() {
                       {DEPARTMENTS.map((dept) => (
                         <SelectItem key={dept} value={dept}>
                           {dept}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={branch || "all"}
+                    onValueChange={(v) => setBranch(v === "all" ? "" : v)}
+                    disabled={!department}
+                  >
+                    <SelectTrigger className="h-9 w-full sm:w-52">
+                      <SelectValue placeholder="All branches" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        {department ? "All branches of the dept" : "All branches"}
+                      </SelectItem>
+                      {branchOptions.map((b) => (
+                        <SelectItem key={b} value={b}>
+                          {b}
                         </SelectItem>
                       ))}
                     </SelectContent>

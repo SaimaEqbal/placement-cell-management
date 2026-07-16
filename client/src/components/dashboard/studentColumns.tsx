@@ -12,6 +12,8 @@ export interface StudentColumnsOptions {
   action: (student: StudentRecord) => ReactNode;
   /** Optional sub-line under the name (e.g. an SPC rejection reason). */
   meta?: (student: StudentRecord) => ReactNode;
+  /** Optional extra data columns, inserted between CGPA and Status. */
+  extraColumns?: ColumnDef<StudentRecord>[];
 }
 
 /**
@@ -24,6 +26,7 @@ export function makeStudentColumns({
   status,
   action,
   meta,
+  extraColumns = [],
 }: StudentColumnsOptions): ColumnDef<StudentRecord>[] {
   return [
     {
@@ -66,6 +69,7 @@ export function makeStudentColumns({
         <span className="font-medium tabular-nums">{formatCgpa(row.original.cgpa)}</span>
       ),
     },
+    ...extraColumns,
     {
       id: "status",
       header: "Status",

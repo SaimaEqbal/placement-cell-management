@@ -22,7 +22,7 @@ export interface AdminSpcRow {
   created_at: string;
   roll_no: string | null;
   semester: number | null;
-  graduation_year: number | null;
+  batch: number | null;
 }
 
 /** Purpose: GET /spc - every SPC across all departments (Admin only). */

@@ -77,8 +77,22 @@ export function driveStateTone(state: DriveState): StatusTone {
 /** Purpose: human label for a round number (-1 shortlisting, 0 screening, 1..N). */
 export function roundLabel(roundNo: number): string {
   if (roundNo < 0) return "Shortlisting";
-  if (roundNo === 0) return "Round 0 · Screening";
+  if (roundNo === 0) return "Company Screening";
   return `Round ${roundNo}`;
+}
+
+/**
+ * A round's display name: the admin-provided name if present, otherwise the
+ * "Round N" fallback ("Company Screening" for round 0). Used wherever a round's
+ * name is shown (drives tables, round summary, prompt).
+ */
+export function roundDisplayName(
+  roundNo: number,
+  roundName?: string | null,
+): string {
+  if (roundName && roundName.trim()) return roundName.trim();
+  if (roundNo < 0) return "Shortlisting";
+  return roundNo === 0 ? "Company Screening" : `Round ${roundNo}`;
 }
 
 /** Purpose: human label for a history stage. */

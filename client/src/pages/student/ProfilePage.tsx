@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import { useProfile } from "../../hooks/useProfile";
 import { capitalize, formatCgpa, formatDate, initialsFromName } from "../../lib/format";
+import { batchLabelForYear } from "../../lib/validation";
 import { paths } from "../../routes/paths";
 
 /**
@@ -112,7 +113,7 @@ export default function ProfilePage() {
                 ["Phone", profile.phone ?? "—"],
                 ["Department", profile.department ?? "—"],
                 ["Branch", profile.branch ?? "—"],
-                ["Graduation year", profile.graduation_year ? String(profile.graduation_year) : "—"],
+                ["Batch of", batchLabelForYear(profile.batch)],
                 ["Current semester", profile.semester ? String(profile.semester) : "—"],
                 ["CGPA", formatCgpa(profile.cgpa)],
                 ["10th percentage", profile.tenth_percentage ?? "—"],

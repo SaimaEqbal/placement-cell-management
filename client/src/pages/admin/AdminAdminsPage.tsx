@@ -4,6 +4,7 @@ import { ShieldCheck } from "lucide-react";
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
 import { ListCard } from "@/components/dashboard/ListCard";
+import { StatCard } from "@/components/dashboard/StatCard";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { DataTable, DataTableColumnHeader } from "@/components/dashboard/data-table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
@@ -57,6 +58,15 @@ export default function AdminAdminsPage() {
     <>
       <Topbar title="Admins" subtitle="Every placement-cell admin account." />
       <PageContainer>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard
+            label="Admins"
+            value={String(admins?.length ?? 0)}
+            note="Placement-cell admin accounts"
+            icon={<ShieldCheck />}
+          />
+        </div>
+
         {isLoading && <LoadingState label="Loading admins..." />}
         {isError && (
           <ErrorState message={error?.message ?? "Could not load admins."} onRetry={refetch} />

@@ -52,6 +52,10 @@ export interface DriveRecord {
   is_locked: boolean;
   /** Phase 2: the linked announcement's post_id, or null if the drive has none. */
   announcement_id?: number | null;
+  /** Phase 4: current round's schedule + roster (from the drives-list queries). */
+  current_round_count?: number;
+  current_round_date?: string | null;
+  current_round_name?: string | null;
 }
 
 /**
@@ -194,11 +198,17 @@ export interface DriveTransitionResult {
   drive: DriveRecord;
 }
 
-/** A round of a drive and its date (server/src/migrations/028_create_drive_rounds.sql). */
+/** A round of a drive with its date + optional name + lifecycle stamps (migrations 028, 039, 041). */
 export interface DriveRound {
   round_no: number;
   /** null = TBD. */
   round_date: string | null;
+  /** Optional round name; null falls back to "Round N" in the UI. */
+  round_name?: string | null;
+  /** When the round began (screening confirm / Run Round N). Null on legacy rounds. */
+  started_at?: string | null;
+  /** When the round concluded (next round run / drive completed). Null while live. */
+  concluded_at?: string | null;
 }
 
 /** Response body from POST /drive and PUT /drive/:driveId - the saved drive plus the freshly generated eligible list to review. */
@@ -390,15 +400,17 @@ export function getDriveRounds(driveId: number | string) {
     .then((res) => res.data);
 }
 
-/** Purpose: PATCH /drive/:driveId/rounds/:roundNo/date - set/clear a round's date (notifies its students). */
+/** Purpose: PATCH /drive/:driveId/rounds/:roundNo/date - set/clear a round's date + optional name (notifies its students). */
 export function setRoundDate(
   driveId: number | string,
   roundNo: number,
   round_date: string,
+  round_name?: string,
 ) {
   return axiosInstance
     .patch<{ message: string }>(`/drive/${driveId}/rounds/${roundNo}/date`, {
       round_date,
+      round_name,
     })
     .then((res) => res.data);
 }
