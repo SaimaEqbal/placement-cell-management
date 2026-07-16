@@ -5,6 +5,7 @@ import { Building2, MoreHorizontal, Plus } from "lucide-react";
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
 import { ListCard } from "@/components/dashboard/ListCard";
+import { StatCard } from "@/components/dashboard/StatCard";
 import { Field } from "@/components/dashboard/Field";
 import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
 import { DataTable, DataTableColumnHeader } from "@/components/dashboard/data-table";
@@ -182,6 +183,15 @@ export default function CompaniesPage() {
     <>
       <Topbar title="Companies" subtitle="Manage the companies engaging with the placement cell." />
       <PageContainer>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard
+            label="Companies"
+            value={String(companies?.length ?? 0)}
+            note="Engaged with the placement cell"
+            icon={<Building2 />}
+          />
+        </div>
+
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold tracking-tight">Companies</h2>
           <Button type="button" onClick={openCreateForm}>

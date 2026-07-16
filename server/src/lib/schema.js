@@ -42,7 +42,7 @@ export const createStudentSchema = z.object({
 
   branch: z.string().min(1),
   department: z.string().min(1),
-  graduation_year: z.number().int(),
+  batch: z.number().int(),
   // cgpa is NOT accepted from clients - it is derived server-side from the SPIs
   // (see lib/cgpa.js). Do not add a cgpa field here.
   semester: z.number().int().min(5).max(8),
@@ -95,7 +95,7 @@ const updateStudentShape = {
 
   branch: z.string().min(1).optional(),
   department: z.string().min(1).optional(),
-  graduation_year: z.number().int().optional(),
+  batch: z.number().int().optional(),
   // cgpa is derived server-side (lib/cgpa.js); never accepted from clients.
   semester: z.number().int().min(5).max(8).optional(),
 
@@ -406,9 +406,12 @@ export const attendanceSchema = z.object({
   present: z.boolean(),
 });
 
-// A round's date; "" or "TBD" clears it (stored NULL), otherwise a YYYY-MM-DD string.
+// A round's date + optional name. round_date: "" or "TBD" clears it (stored
+// NULL), otherwise a YYYY-MM-DD string. round_name is optional (blank => NULL,
+// UI falls back to "Round N").
 export const roundDateSchema = z.object({
   round_date: z.string(),
+  round_name: z.string().optional(),
 });
 
 // Batch stage-finalize bodies. The checkbox workflow keeps decisions local until
@@ -416,8 +419,13 @@ export const roundDateSchema = z.object({
 // list the driveStudentIds being taken out, each with a mandatory reason. An empty
 // list means everyone still active passes/clears the stage.
 const roundDecisionSchema = z.object({
-  driveStudentId: z.number().int().positive(),
-  reason: z.string().min(1, "A reason is required"),
+  // drive_students.drive_student_id is BIGSERIAL, which node-pg serialises as a
+  // string, so the client sends it as a string - coerce it back to a number.
+  driveStudentId: z.coerce.number().int().positive(),
+  reason: z
+    .string()
+    .trim()
+    .min(10, "A rejection/removal reason of at least 10 characters is required"),
 });
 
 export const prefilterFinalizeSchema = z.object({

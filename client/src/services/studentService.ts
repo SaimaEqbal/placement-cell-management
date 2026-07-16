@@ -23,7 +23,7 @@ export interface StudentRecord {
   phone: string | null;
   branch: string | null;
   department: string | null;
-  graduation_year: number | null;
+  batch: number | null;
   /** Postgres NUMERIC columns come back from `pg` as strings, not numbers - use Number(student.cgpa) before formatting/math. */
   cgpa: string | null;
   /**
@@ -92,7 +92,7 @@ export interface CreateStudentPayload {
   phone: string;
   branch: string;
   department: string;
-  graduation_year: number;
+  batch: number;
   cgpa: number;
   semester: number;
   gender: string;

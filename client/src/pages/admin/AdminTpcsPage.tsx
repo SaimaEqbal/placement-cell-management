@@ -1,12 +1,15 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Users } from "lucide-react";
+import { ClipboardCheck, Landmark, Users } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
 import { ListCard } from "@/components/dashboard/ListCard";
+import { StatCard } from "@/components/dashboard/StatCard";
 import { DataTable, DataTableColumnHeader } from "@/components/dashboard/data-table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
+import { useStudents } from "../../hooks/useStudents";
 import { useAllTpcs } from "../../hooks/useVerification";
+import { computeStudentStats } from "../../lib/studentStats";
 import { formatDate, initialsFromName } from "../../lib/format";
 import type { TpcRecord } from "../../services/tpcService";
 
@@ -63,11 +66,28 @@ const columns: ColumnDef<TpcRecord>[] = [
  */
 export default function AdminTpcsPage() {
   const { data: tpcs, isLoading, isError, error, refetch } = useAllTpcs();
+  const students = useStudents();
+  const stats = computeStudentStats(students.data);
 
   return (
     <>
       <Topbar title="TPCs" subtitle="Every TPC account across all departments." />
       <PageContainer>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard
+            label="TPCs"
+            value={String(tpcs?.length ?? 0)}
+            note="Across all departments"
+            icon={<Landmark />}
+          />
+          <StatCard
+            label="Awaiting TPC review"
+            value={String(stats.awaitingTpc)}
+            note="SPC-approved, pending TPC"
+            icon={<ClipboardCheck />}
+          />
+        </div>
+
         {isLoading && <LoadingState label="Loading TPCs..." />}
         {isError && (
           <ErrorState message={error?.message ?? "Could not load TPCs."} onRetry={refetch} />

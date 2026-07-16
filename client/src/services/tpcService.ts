@@ -31,7 +31,7 @@ export interface TpcSpcRow {
   branch: string | null;
   roll_no: string | null;
   semester: number | null;
-  graduation_year: number | null;
+  batch: number | null;
 }
 
 /** Body accepted by POST /tpc (createTPCSchema). */

@@ -35,6 +35,7 @@ import { useProfile, useUpsertMyProfile } from "../../hooks/useProfile";
 import { capitalize, toLowerTrim, toTitleCase, toUpperTrim } from "../../lib/format";
 import { computeCgpa } from "../../lib/cgpa";
 import {
+  BATCH_OPTIONS,
   DEPARTMENT_BRANCHES,
   DEPARTMENT_OPTIONS,
   SEMESTERS,
@@ -42,7 +43,7 @@ import {
   validateDateOfBirth,
   validateDepartment,
   validateFullName,
-  validateGraduationYear,
+  validateBatch,
   validatePercentage,
   validatePhone,
   validateRequired,
@@ -128,7 +129,7 @@ export default function CompleteProfilePage() {
       setReligion(profile.religion ?? "");
       setDepartment(profile.department ?? "");
       setBranch(profile.branch ?? "");
-      setGraduationYear(profile.graduation_year ? String(profile.graduation_year) : "");
+      setGraduationYear(profile.batch ? String(profile.batch) : "");
       setSemester(profile.semester ? String(profile.semester) : "");
       setTenthPercentage(profile.tenth_percentage ?? "");
       setTwelfthPercentage(profile.twelfth_percentage ?? "");
@@ -166,7 +167,7 @@ export default function CompleteProfilePage() {
       validateDepartment(department),
       validateBranch(branch),
       validateSemester(semester),
-      validateGraduationYear(graduationYear),
+      validateBatch(graduationYear),
     ].find(Boolean);
   }
   function validateAcademic(): string | undefined {
@@ -202,7 +203,7 @@ export default function CompleteProfilePage() {
       return {
         department,
         branch,
-        graduation_year: Number(graduationYear),
+        batch: Number(graduationYear),
         semester: Number(semester),
       };
     }
@@ -386,8 +387,15 @@ export default function CompleteProfilePage() {
                     </Select>
                   </Field>
                 )}
-                <Field label="Graduation year" htmlFor="gradYear">
-                  <Input id="gradYear" type="number" value={graduationYear} onChange={(e) => setGraduationYear(e.target.value)} />
+                <Field label="Batch of" htmlFor="gradYear">
+                  <Select value={graduationYear} onValueChange={setGraduationYear}>
+                    <SelectTrigger id="gradYear"><SelectValue placeholder="Select batch" /></SelectTrigger>
+                    <SelectContent>
+                      {BATCH_OPTIONS.map((b) => (
+                        <SelectItem key={b.year} value={String(b.year)}>{b.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
                 <Field label="Current semester" htmlFor="semester">
                   <Select value={semester} onValueChange={setSemester}>

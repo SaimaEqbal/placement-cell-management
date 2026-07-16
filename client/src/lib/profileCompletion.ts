@@ -4,7 +4,7 @@ import type { StudentRecord } from "../services/studentService";
 const TRACKED_FIELDS: Array<keyof StudentRecord> = [
   "phone",
   "branch",
-  "graduation_year",
+  "batch",
   "cgpa",
   "gender",
   "region",

@@ -37,6 +37,7 @@ import {
   useTpcVerify,
 } from "../../hooks/useVerification";
 import { formatCgpa, formatDate, initialsFromName } from "../../lib/format";
+import { batchLabelForYear } from "../../lib/validation";
 import { reviewStatusLabel, reviewStatusTone } from "../../lib/reviewStatus";
 
 /**
@@ -280,7 +281,7 @@ export default function StudentVerificationDetailPage({
                   ["Department", student.department ?? "—"],
                   ["Branch", student.branch ?? "—"],
                   ["Semester", student.semester ? String(student.semester) : "—"],
-                  ["Graduation year", student.graduation_year ? String(student.graduation_year) : "—"],
+                  ["Batch of", batchLabelForYear(student.batch)],
                   ["CGPA", formatCgpa(student.cgpa)],
                   ["Contact", student.phone ?? "—"],
                   ["Date of birth", formatDate(student.date_of_birth)],

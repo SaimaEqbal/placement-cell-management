@@ -27,6 +27,7 @@ import { YearFilter } from "@/components/dashboard/YearFilter";
 import { useAssignSpc, useTpcBranches, useTpcSpcs } from "../../hooks/useVerification";
 import type { TpcSpcRow } from "../../services/tpcService";
 import { initialsFromName } from "../../lib/format";
+import { batchLabelForYear } from "../../lib/validation";
 
 /**
  * Purpose: /TPC/coordinators - pick a branch, see its SPCs in a table (ordered
@@ -89,11 +90,13 @@ export default function TpcSpcPage() {
       ),
     },
     {
-      accessorKey: "graduation_year",
+      accessorKey: "batch",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Batch" />,
       meta: { label: "Batch" },
       cell: ({ row }) => (
-        <span className="text-muted-foreground">{row.original.graduation_year ?? "—"}</span>
+        <span className="text-muted-foreground">
+          {batchLabelForYear(row.original.batch)}
+        </span>
       ),
     },
     {
@@ -155,7 +158,7 @@ export default function TpcSpcPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <YearFilter value={year} onChange={setYear} placeholder="Batch year (e.g. 2027)" />
+              <YearFilter value={year} onChange={setYear} />
             </div>
 
             {assign.isError && (

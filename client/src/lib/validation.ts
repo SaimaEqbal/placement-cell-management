@@ -86,15 +86,34 @@ export function validateBranch(value: string): string | undefined {
   return value ? undefined : "Select a branch.";
 }
 
-/** Purpose: Graduation year rule - required 4-digit year within a sane range. */
-export function validateGraduationYear(value: string): string | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) return "Graduation year is required.";
-  const num = Number(trimmed);
-  if (!Number.isInteger(num) || num < 2000 || num > 2100) {
-    return "Enter a valid graduation year.";
-  }
-  return undefined;
+/**
+ * Student batches ("Batch of …") - the SINGLE SOURCE OF TRUTH for the
+ * graduation-year concept across every form and filter. `label` is what users
+ * pick ("2023-27"); `year` is the underlying students.batch value stored in the
+ * DB (the passing-out year). Add or change a batch here and every dropdown
+ * updates automatically.
+ */
+export const BATCH_OPTIONS = [
+  { label: "2023-27", year: 2027 },
+  { label: "2024-28", year: 2028 },
+] as const;
+
+/** The graduation years, e.g. for filter option lists. */
+export const BATCH_YEARS = BATCH_OPTIONS.map((b) => b.year);
+
+/** The "Batch of" label for a stored graduation year (falls back to the raw year). */
+export function batchLabelForYear(year: number | string | null | undefined): string {
+  if (year == null || year === "") return "—";
+  const y = Number(year);
+  return BATCH_OPTIONS.find((b) => b.year === y)?.label ?? String(year);
+}
+
+/** Purpose: Batch rule - required dropdown selection from BATCH_OPTIONS (value is the graduation year). */
+export function validateBatch(value: string): string | undefined {
+  if (!value) return "Select a batch.";
+  return BATCH_OPTIONS.some((b) => String(b.year) === value)
+    ? undefined
+    : "Select a valid batch.";
 }
 
 /** Purpose: 10th/12th percentage rule - required number between 0 and 100. */
