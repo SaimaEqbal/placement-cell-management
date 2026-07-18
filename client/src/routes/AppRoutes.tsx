@@ -139,6 +139,8 @@ export default function AppRoutes() {
 
           {/* SPC management + assignment. */}
           <Route path={paths.tpcSpc} element={<TpcSpcPage />} />
+
+          <Route path={paths.tpcNotifications} element={<NotificationsPage />} />
         </Route>
       </Route>
 
@@ -162,6 +164,7 @@ export default function AppRoutes() {
           <Route path={paths.adminSpcs} element={<AdminSpcsPage />} />
           <Route path={paths.adminTpcs} element={<AdminTpcsPage />} />
           <Route path={paths.adminAdmins} element={<AdminAdminsPage />} />
+          <Route path={paths.adminNotifications} element={<NotificationsPage />} />
         </Route>
       </Route>
 

@@ -196,6 +196,7 @@ export default function StudentVerificationDetailPage({
     { label: "10th marksheet", url: student.tenth_marksheet_url },
     { label: "12th marksheet", url: student.twelfth_marksheet_url },
     { label: "Latest semester marksheet", url: student.last_sem_marksheet_url },
+    { label: "Payment receipt", url: student.payment_receipt_url },
   ];
   const active = documents[activeDoc] ?? documents[0];
 
@@ -284,6 +285,7 @@ export default function StudentVerificationDetailPage({
                   ["CGPA", formatCgpa(student.cgpa)],
                   ["Contact", student.phone ?? "—"],
                   ["Date of birth", formatDate(student.date_of_birth)],
+                  ["Payment ID", student.payment_id ?? "—"],
                 ]}
               />
             </CardContent>

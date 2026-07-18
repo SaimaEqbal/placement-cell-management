@@ -111,6 +111,8 @@ export default function CompleteProfilePage() {
   const [tenthUrl, setTenthUrl] = useState("");
   const [twelfthUrl, setTwelfthUrl] = useState("");
   const [lastSemUrl, setLastSemUrl] = useState("");
+  const [paymentReceiptUrl, setPaymentReceiptUrl] = useState("");
+  const [paymentId, setPaymentId] = useState("");
 
   /** Email is the only identity field the backend already knows post-login. */
   const emailLocked = Boolean(profile?.email || user?.email);
@@ -140,6 +142,8 @@ export default function CompleteProfilePage() {
       setTenthUrl(profile.tenth_marksheet_url ?? "");
       setTwelfthUrl(profile.twelfth_marksheet_url ?? "");
       setLastSemUrl(profile.last_sem_marksheet_url ?? "");
+      setPaymentReceiptUrl(profile.payment_receipt_url ?? "");
+      setPaymentId(profile.payment_id ?? "");
     } else if (user?.email) {
       setEmail(user.email);
     }
@@ -225,6 +229,8 @@ export default function CompleteProfilePage() {
     if (tenthUrl.trim()) p.tenth_marksheet_url = tenthUrl.trim();
     if (twelfthUrl.trim()) p.twelfth_marksheet_url = twelfthUrl.trim();
     if (lastSemUrl.trim()) p.last_sem_marksheet_url = lastSemUrl.trim();
+    if (paymentReceiptUrl.trim()) p.payment_receipt_url = paymentReceiptUrl.trim();
+    if (paymentId.trim()) p.payment_id = paymentId.trim();
     return p;
   }
 
@@ -261,8 +267,9 @@ export default function CompleteProfilePage() {
       { label: "10th marksheet", url: tenthUrl },
       { label: "12th marksheet", url: twelfthUrl },
       { label: "Latest semester marksheet", url: lastSemUrl },
+      { label: "Payment receipt", url: paymentReceiptUrl },
     ],
-    [resumeUrl, tenthUrl, twelfthUrl, lastSemUrl],
+    [resumeUrl, tenthUrl, twelfthUrl, lastSemUrl, paymentReceiptUrl],
   );
 
   if (isLoading) {
@@ -480,6 +487,12 @@ export default function CompleteProfilePage() {
                   </Field>
                   <Field label="Latest semester marksheet URL" htmlFor="lastSemUrl">
                     <Input id="lastSemUrl" value={lastSemUrl} onChange={(e) => setLastSemUrl(e.target.value)} autoComplete="off" />
+                  </Field>
+                  <Field label="Payment receipt URL" htmlFor="paymentReceiptUrl" hint="Paste a hosted link (e.g. Google Drive) to your placement-fee payment receipt.">
+                    <Input id="paymentReceiptUrl" value={paymentReceiptUrl} onChange={(e) => setPaymentReceiptUrl(e.target.value)} autoComplete="off" />
+                  </Field>
+                  <Field label="Payment ID" htmlFor="paymentId" hint="The transaction/reference ID from your payment confirmation.">
+                    <Input id="paymentId" value={paymentId} onChange={(e) => setPaymentId(e.target.value)} autoComplete="off" />
                   </Field>
                 </div>
                 <div className="flex flex-col gap-3">
