@@ -452,6 +452,7 @@ const MY_PROFILE_COLUMNS = [
   "sem1_spi", "sem2_spi", "sem3_spi", "sem4_spi",
   "sem5_spi", "sem6_spi", "sem7_spi", "sem8_spi",
   "resume_url", "tenth_marksheet_url", "twelfth_marksheet_url", "last_sem_marksheet_url",
+  "payment_receipt_url", "payment_id",
   "placement_status",
 ];
 

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  clearAllNotifications,
   getNotifications,
   markAllNotificationsRead,
   markNotificationRead,
@@ -64,6 +65,33 @@ export function useMarkAllNotificationsRead() {
         queryKeys.notifications,
         (old) => old?.map((n) => ({ ...n, read: true })) ?? old,
       );
+
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.notifications, context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+    },
+  });
+}
+
+/** Purpose: delete every notification belonging to the signed-in user, optimistically emptying the cached list. */
+export function useClearAllNotifications() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => clearAllNotifications(),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.notifications });
+      const previous = queryClient.getQueryData<NotificationRecord[]>(
+        queryKeys.notifications,
+      );
+
+      queryClient.setQueryData<NotificationRecord[]>(queryKeys.notifications, []);
 
       return { previous };
     },

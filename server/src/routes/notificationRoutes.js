@@ -6,6 +6,7 @@ import {
   getMyNotifications,
   markNotificationRead,
   markAllNotificationsRead,
+  clearAllNotifications,
   deleteNotification,
 } from "../controllers/notificationController.js";
 
@@ -31,6 +32,14 @@ router.patch(
   "/:notificationId/read",
   auth,
   markNotificationRead
+);
+
+// Must be registered before "/:notificationId" below, otherwise Express
+// would match "clear-all" as a notificationId param and never reach here.
+router.delete(
+  "/clear-all",
+  auth,
+  clearAllNotifications
 );
 
 router.delete(

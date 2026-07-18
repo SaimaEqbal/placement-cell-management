@@ -84,6 +84,7 @@ export default function ProfilePage() {
     { label: "10th marksheet", url: profile.tenth_marksheet_url },
     { label: "12th marksheet", url: profile.twelfth_marksheet_url },
     { label: "Latest semester marksheet", url: profile.last_sem_marksheet_url },
+    { label: "Payment receipt", url: profile.payment_receipt_url },
   ];
 
   return (
@@ -126,6 +127,7 @@ export default function ProfilePage() {
                 ["Passive backlogs", String(profile.passive_backlogs)],
                 ["Placement status", capitalize(profile.placement_status)],
                 ["Verification status", capitalize(profile.review_status ?? "pending")],
+                ["Payment ID", profile.payment_id ?? "—"],
               ]}
             />
           </CardContent>

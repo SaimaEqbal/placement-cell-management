@@ -2,6 +2,7 @@ import pool from "../config/db.js";
 import { pgErrorResponse } from "../lib/dbError.js";
 import { insertAnnouncement, replaceAttachments } from "../lib/announcements.js";
 import { isPlacementDrive, SECOND_CHANCE_MULTIPLIER } from "../lib/placementRules.js";
+import { createNotificationForRole } from "./notificationController.js";
 
 // ---------------------------------------------------------------------------
 // Eligibility engine. A student is eligible for a drive when they are verified,
@@ -355,6 +356,30 @@ export const createDrive = async (req, res) => {
     await client.query("COMMIT");
 
     const eligibleStudents = await getEligibleStudentsForDrive(drive);
+
+    // Notify every currently-eligible student that a new opportunity was posted.
+    // Uses the pool (not `client`) since the transaction has already committed.
+    if (eligibleStudents.length > 0) {
+      const label = await getDriveLabel(pool, drive);
+      await notifyStudentsByIds(
+        pool,
+        eligibleStudents.map((s) => s.id),
+        "New drive posted",
+        `A new opportunity - ${label} - has been posted and you're eligible. Check it out!`,
+        "blue"
+      );
+    }
+
+    // A drive-linked announcement is a separate, broader update - broadcast it
+    // to every student, not just those eligible for this specific drive.
+    if (createdAnnouncement) {
+      await createNotificationForRole(
+        "student",
+        "New announcement",
+        createdAnnouncement.title,
+        "blue"
+      );
+    }
 
     return res.status(201).json({
       drive,

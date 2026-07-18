@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/sheet";
 import { useAuth } from "../context/AuthContext";
 import { useNotifications } from "../hooks/useNotifications";
-import { paths } from "../routes/paths";
+import { notificationsPathForRole } from "../routes/paths";
 import SidebarNav from "./dashboard/SidebarNav";
 
 /**
@@ -33,18 +33,19 @@ export default function Topbar({
   const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const displayInitials = initials ?? (role ? role.slice(0, 2).toUpperCase() : "??");
-  // Only students have a notifications page today (see routes/paths.ts).
-  // useNotifications shares its react-query cache/key with NotificationsPage,
-  // so this doesn't add an extra network request when both are mounted -
-  // it's disabled entirely for roles without a notifications route yet.
-  // An SPC is also a student, so both roles have a notifications page + bell.
-  const canSeeNotifications = role === "student" || role === "spc";
+  // Every role now has its own notifications page (see routes/paths.ts /
+  // routes/AppRoutes.tsx) - student/spc share one route, tpc and admin each
+  // have their own. useNotifications shares its react-query cache/key with
+  // NotificationsPage, so this doesn't add an extra network request when
+  // both are mounted.
+  const notificationsPath = notificationsPathForRole(role);
+  const canSeeNotifications = notificationsPath !== null;
   const { data: notifications } = useNotifications({ enabled: canSeeNotifications });
   const hasUnread = (notifications?.some((n) => !n.read)) ?? false;
 
   const handleBellClick = () => {
-    if (canSeeNotifications) {
-      navigate(paths.studentNotifications);
+    if (notificationsPath) {
+      navigate(notificationsPath);
     }
   };
 
