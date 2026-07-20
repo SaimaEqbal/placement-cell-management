@@ -14,6 +14,7 @@
   "type": "module",
   "dependencies": {
     "@getbrevo/brevo": "^5.0.4",
+    "@supabase/server": "^1.4.0",
     "@supabase/supabase-js": "^2.107.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",

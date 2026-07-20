@@ -29,9 +29,6 @@ async function getEligibleStudentsForDrive(drive) {
         AND active_backlogs <= $2
         AND passive_backlogs <= $3
         AND branch = ANY($4)
-        -- Batch filter: restrict to the drive's target graduation years. A NULL
-        -- allowed_batches (legacy drives created before this column) means no
-        -- batch restriction.
         AND ($5::int[] IS NULL OR batch = ANY($5))
         -- "Minimum CGPA throughout": when set, every RECORDED (non-null) semester
         -- SPI must be >= the value. NULL = no throughout constraint.
@@ -672,6 +669,7 @@ export const getDriveStudents = async (req, res) => {
         ORDER BY s.cgpa DESC`,
       [driveId]
     );
+    return res.status(200).json(result.rows);
 
   } catch (error) {
 
