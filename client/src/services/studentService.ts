@@ -46,6 +46,10 @@ export interface StudentRecord {
   tenth_marksheet_url: string | null;
   twelfth_marksheet_url: string | null;
   last_sem_marksheet_url: string | null;
+  /** Drive link to the placement-fee payment receipt (migration 039). */
+  payment_receipt_url: string | null;
+  /** Transaction/payment id issued for that payment (migration 039). */
+  payment_id: string | null;
   /** Postgres NUMERIC columns - returned by `pg` as strings (use Number(...) for math). */
   tenth_percentage: string | null;
   twelfth_percentage: string | null;
@@ -106,6 +110,8 @@ export interface CreateStudentPayload {
   tenth_marksheet_url: string;
   twelfth_marksheet_url: string;
   last_sem_marksheet_url: string;
+  payment_receipt_url?: string;
+  payment_id?: string;
   tenth_percentage: number;
   twelfth_percentage: number;
   sem1_spi?: number;

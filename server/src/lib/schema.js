@@ -74,6 +74,9 @@ export const createStudentSchema = z.object({
   twelfth_marksheet_url: z.string(),
   last_sem_marksheet_url: z.string(),
 
+  payment_receipt_url: z.string().optional(),
+  payment_id: z.string().optional(),
+
   placement_status: z.enum([
     "unplaced",
     "shortlisted",
@@ -125,6 +128,9 @@ const updateStudentShape = {
   tenth_marksheet_url: z.string().optional(),
   twelfth_marksheet_url: z.string().optional(),
   last_sem_marksheet_url: z.string().optional(),
+
+  payment_receipt_url: z.string().optional(),
+  payment_id: z.string().optional(),
 
   placement_status: z.enum([
     "unplaced",

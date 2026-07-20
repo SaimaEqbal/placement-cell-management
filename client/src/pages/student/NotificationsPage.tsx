@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Bell, CheckCheck, CheckCircle2, Clock, FileText, XCircle } from "lucide-react";
+import { Bell, CheckCheck, CheckCircle2, Clock, FileText, Trash2, XCircle } from "lucide-react";
 
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  useClearAllNotifications,
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
   useNotifications,
@@ -47,7 +48,14 @@ export default function NotificationsPage() {
   const { data: notifications, isLoading } = useNotifications();
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
+  const clearAll = useClearAllNotifications();
   const unreadCount = notifications?.filter((n) => !n.read).length ?? 0;
+
+  const handleClearAll = () => {
+    if (window.confirm("Clear all notifications? This can't be undone.")) {
+      clearAll.mutate();
+    }
+  };
 
   return (
     <>
@@ -72,18 +80,30 @@ export default function NotificationsPage() {
                   <Badge variant="secondary">{unreadCount} unread</Badge>
                 )}
               </CardTitle>
-              {unreadCount > 0 && (
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    onClick={() => markAllRead.mutate()}
+                    disabled={markAllRead.isPending}
+                  >
+                    <CheckCheck />
+                    {markAllRead.isPending ? "Marking..." : "Mark all read"}
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
                   type="button"
-                  onClick={() => markAllRead.mutate()}
-                  disabled={markAllRead.isPending}
+                  onClick={handleClearAll}
+                  disabled={clearAll.isPending}
                 >
-                  <CheckCheck />
-                  {markAllRead.isPending ? "Marking..." : "Mark all read"}
+                  <Trash2 />
+                  {clearAll.isPending ? "Clearing..." : "Clear all"}
                 </Button>
-              )}
+              </div>
             </CardHeader>
             <CardContent className="flex flex-col gap-2 pt-6">
               {notifications.map((notification) => (

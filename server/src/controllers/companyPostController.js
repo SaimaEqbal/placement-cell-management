@@ -5,6 +5,7 @@ import {
   insertAnnouncement,
   replaceAttachments,
 } from "../lib/announcements.js";
+import { createNotificationForRole } from "./notificationController.js";
 
 // A drive can have at most one announcement (company_posts_drive_id_unique).
 // Surface that as a clear 409 rather than a generic duplicate-key error.
@@ -31,6 +32,15 @@ export const createPost = async (req, res) => {
     const savedAttachments = await replaceAttachments(client, post.post_id, attachments);
 
     await client.query("COMMIT");
+
+    // Broadcast to every student - announcements are a general update, not
+    // scoped to a particular drive's eligible students.
+    await createNotificationForRole(
+      "student",
+      "New announcement",
+      post.title,
+      "blue"
+    );
 
     return res.status(201).json({ ...post, attachments: savedAttachments });
   } catch (error) {

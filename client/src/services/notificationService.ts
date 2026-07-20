@@ -102,3 +102,10 @@ export function deleteNotification(id: string): Promise<{ message: string }> {
     .delete<{ message: string }>(`/notifications/${id}`)
     .then((res) => res.data);
 }
+
+/** Purpose: DELETE /notifications/clear-all - remove every notification for the signed-in user. */
+export function clearAllNotifications(): Promise<{ message: string }> {
+  return axiosInstance
+    .delete<{ message: string }>("/notifications/clear-all")
+    .then((res) => res.data);
+}

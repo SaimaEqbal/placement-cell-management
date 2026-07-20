@@ -117,6 +117,25 @@ export const markAllNotificationsRead = async (req, res) => {
   }
 };
 
+/** Purpose: DELETE /notifications/clear-all - remove every notification belonging to the signed-in user. */
+export const clearAllNotifications = async (req, res) => {
+  try {
+    await pool.query(
+      `DELETE FROM notifications
+       WHERE user_id = $1`,
+      [req.user.userId]
+    );
+
+    return res.status(200).json({
+      message: "All notifications cleared",
+    });
+  } catch {
+    return res.status(500).json({
+      message: "Failed to clear notifications",
+    });
+  }
+};
+
 /** Purpose: DELETE /notifications/:notificationId - remove one of the signed-in user's notifications. */
 export const deleteNotification = async (req, res) => {
   try {

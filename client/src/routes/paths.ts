@@ -33,6 +33,7 @@ export const paths = {
   tpcSpcVerified: "/TPC/spc-verified",
   tpcStudents: "/TPC/students",
   tpcSpc: "/TPC/coordinators",
+  tpcNotifications: "/TPC/notifications",
 
   admin: "/Admin",
   adminCompanies: "/Admin/companies",
@@ -43,7 +44,23 @@ export const paths = {
   adminSpcs: "/Admin/spcs",
   adminTpcs: "/Admin/tpcs",
   adminAdmins: "/Admin/admins",
+  adminNotifications: "/Admin/notifications",
 } as const;
+
+/** Purpose: where the topbar bell should navigate to, per role. All four roles now share the same NotificationsPage component - only the route prefix differs. */
+export function notificationsPathForRole(role: Role | null): string | null {
+  switch (role) {
+    case "student":
+    case "spc":
+      return paths.studentNotifications;
+    case "tpc":
+      return paths.tpcNotifications;
+    case "admin":
+      return paths.adminNotifications;
+    default:
+      return null;
+  }
+}
 
 /** Purpose: where to land a freshly-authenticated user (or anyone hitting a route their role can't see), based on their role. */
 export function homePathForRole(role: Role | null): string {
