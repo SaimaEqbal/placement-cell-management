@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, Menu } from "lucide-react";
+import { Bell, LogOut, Menu, UserRound } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -9,9 +9,18 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "../context/AuthContext";
 import { useNotifications } from "../hooks/useNotifications";
-import { notificationsPathForRole } from "../routes/paths";
+import { accountPathForRole, notificationsPathForRole } from "../routes/paths";
+import { ROLE_LABEL } from "../lib/roleLabels";
 import SidebarNav from "./dashboard/SidebarNav";
 
 /**
@@ -29,10 +38,12 @@ export default function Topbar({
   /** Optional override, e.g. initials derived from the loaded profile's name. Falls back to the signed-in role's initials. */
   initials?: string;
 }) {
-  const { role } = useAuth();
+  const { role, user, logout } = useAuth();
   const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const displayInitials = initials ?? (role ? role.slice(0, 2).toUpperCase() : "??");
+  const accountPath = accountPathForRole(role);
+  const roleLabel = role ? ROLE_LABEL[role] : "Account";
   // Every role now has its own notifications page (see routes/paths.ts /
   // routes/AppRoutes.tsx) - student/spc share one route, tpc and admin each
   // have their own. useNotifications shares its react-query cache/key with
@@ -84,7 +95,7 @@ export default function Topbar({
       <div className="flex items-center gap-2">
         <button
           type="button"
-          className="relative grid size-9 place-items-center rounded-md border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+          className="relative grid size-9 cursor-pointer place-items-center rounded-md border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
           aria-label="Notifications"
           onClick={handleBellClick}
           disabled={!canSeeNotifications}
@@ -94,9 +105,39 @@ export default function Topbar({
             <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive ring-2 ring-background" />
           )}
         </button>
-        <div className="grid size-9 place-items-center rounded-md bg-primary text-xs font-semibold text-primary-foreground">
-          {displayInitials}
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Account menu"
+              className="grid size-9 cursor-pointer place-items-center rounded-md bg-primary text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              {displayInitials}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="font-normal">
+              <div className="truncate text-sm font-medium">{roleLabel}</div>
+              <div className="truncate text-xs font-normal text-muted-foreground">
+                {user?.email ?? ""}
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {accountPath && (
+              <DropdownMenuItem onClick={() => navigate(accountPath)} className="cursor-pointer">
+                <UserRound />
+                View profile
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              onClick={() => logout()}
+              className="text-destructive focus:text-destructive cursor-pointer"
+            >
+              <LogOut />
+              Log out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

@@ -16,6 +16,7 @@ import {
 import { useProfile } from "../../hooks/useProfile";
 import { capitalize, formatCgpa, formatDate, initialsFromName } from "../../lib/format";
 import { batchLabelForYear } from "../../lib/validation";
+
 import { paths } from "../../routes/paths";
 
 /**
