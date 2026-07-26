@@ -37,6 +37,53 @@ const getSpcId = async (userId) => {
   return r.rows.length ? r.rows[0].spc_id : null;
 };
 
+// Fill one free verification slot for an SPC by assigning the oldest
+// unassigned pending student from the same branch.
+const fillVerificationSlot = async (client, spcId) => {
+  // Find the SPC's branch.
+  const spc = await client.query(
+    `SELECT branch
+     FROM spc
+     WHERE spc_id = $1`,
+    [spcId]
+  );
+
+  if (spc.rows.length === 0) return;
+
+  const branch = spc.rows[0].branch;
+
+  // Find the oldest waiting student.
+  const student = await client.query(
+    `SELECT id
+     FROM students
+     WHERE assigned_spc_id IS NULL
+       AND review_status = 'pending'
+       AND branch = $1
+     ORDER BY created_at ASC, id ASC
+     LIMIT 1`,
+    [branch]
+  );
+
+  if (student.rows.length === 0) return;
+
+  // Assign student.
+  await client.query(
+    `UPDATE students
+     SET assigned_spc_id = $1
+     WHERE id = $2`,
+    [spcId, student.rows[0].id]
+  );
+
+  // Increase active count.
+  await client.query(
+    `UPDATE spc
+     SET active_verification_count =
+         active_verification_count + 1
+     WHERE spc_id = $1`,
+    [spcId]
+  );
+};
+
 // GET /spc/verification-queue
 export const getSpcQueue = async (req, res) => {
   try {
@@ -64,23 +111,29 @@ export const getSpcQueue = async (req, res) => {
 // PUT /spc/verify/:studentId - guarded so an SPC can only act on students
 // actually assigned to them.
 export const spcVerifyStudent = async (req, res) => {
-  try {
+  const client = await pool.connect();
+
+try {
+  await client.query("BEGIN");
     const spcId = await getSpcId(req.user.userId);
-    if (!spcId) {
-      return res.status(404).json({ message: "SPC profile not found" });
-    }
+   if (!spcId) {
+    await client.query("ROLLBACK");
+    return res.status(404).json({
+        message: "SPC profile not found"
+    });
+}
 
     const { studentId } = req.params;
 
-    const result = await pool.query(
+    const result = await client.query(
       `UPDATE students
        SET review_status = 'spc_verified',
            reviewed_at = NOW(),
            rejection_reason = NULL
        WHERE id = $1
-         AND assigned_spc_id = $2
+         AND assigned_spc_id = NULL
        RETURNING *`,
-      [studentId, spcId]
+      [studentId]
     );
 
     if (result.rows.length === 0) {
@@ -89,21 +142,46 @@ export const spcVerifyStudent = async (req, res) => {
       });
     }
 
+    await client.query(
+  `UPDATE spc
+   SET active_verification_count =
+       active_verification_count - 1
+   WHERE spc_id = $1`,
+  [spcId]
+);
+
+await fillVerificationSlot(client, spcId);
+
+await client.query("COMMIT");
+
+
+    
+
     return res.status(200).json(result.rows[0]);
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error(error);
     return res.status(500).json({ message: "Failed to verify student" });
   }
+  finally {
+  client.release();
+}
 };
 
 // PUT /spc/reject/:studentId - records the reason and routes the student to the
 // TPC via review_status = 'spc_rejected'.
 export const spcRejectStudent = async (req, res) => {
-  try {
+  const client = await pool.connect();
+
+try {
+  await client.query("BEGIN");
     const spcId = await getSpcId(req.user.userId);
     if (!spcId) {
-      return res.status(404).json({ message: "SPC profile not found" });
-    }
+    await client.query("ROLLBACK");
+    return res.status(404).json({
+        message: "SPC profile not found"
+    });
+}
 
     const { studentId } = req.params;
     const { reason } = req.body;
@@ -112,15 +190,15 @@ export const spcRejectStudent = async (req, res) => {
       return res.status(400).json({ message: "A rejection reason is required" });
     }
 
-    const result = await pool.query(
+    const result = await client.query(
       `UPDATE students
        SET review_status = 'spc_rejected',
            rejection_reason = $1,
            reviewed_at = NOW()
        WHERE id = $2
-         AND assigned_spc_id = $3
+         AND assigned_spc_id = NULL
        RETURNING *`,
-      [reason.trim(), studentId, spcId]
+      [reason.trim(), studentId]
     );
 
     if (result.rows.length === 0) {
@@ -128,10 +206,27 @@ export const spcRejectStudent = async (req, res) => {
         message: "Student not found or not assigned to you",
       });
     }
+    await client.query(
+  `UPDATE spc
+   SET active_verification_count =
+       active_verification_count - 1
+   WHERE spc_id = $1`,
+  [spcId]
+);
+
+await fillVerificationSlot(client, spcId);
+
+await client.query("COMMIT");
+
+    
 
     return res.status(200).json(result.rows[0]);
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error(error);
     return res.status(500).json({ message: "Failed to reject student" });
   }
+  finally {
+  client.release();
+}
 };
