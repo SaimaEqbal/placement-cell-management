@@ -1,5 +1,5 @@
 import { type ElementType } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   Building2,
   CheckCircle2,
@@ -18,7 +18,8 @@ import {
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "../../context/AuthContext";
-import { paths } from "../../routes/paths";
+import { accountPathForRole, paths } from "../../routes/paths";
+import { ROLE_LABEL } from "../../lib/roleLabels";
 import type { Role } from "../../types";
 
 interface NavItem {
@@ -67,13 +68,6 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
 };
 
-const ROLE_LABEL: Record<Role, string> = {
-  student: "Student",
-  spc: "SPC Coordinator",
-  tpc: "TPC Administrator",
-  admin: "Placement Cell Admin",
-};
-
 /**
  * Role-aware navigation body: brand, the signed-in role summary, the nav links,
  * and sign-out. Rendered both in the fixed desktop rail (Sidebar) and inside the
@@ -85,8 +79,17 @@ export default function SidebarNav({
   onNavigate?: () => void;
 }) {
   const { role, user, logout } = useAuth();
+  const navigate = useNavigate();
   const nav = role ? NAV_BY_ROLE[role] : [];
   const initials = role ? role.slice(0, 2).toUpperCase() : "??";
+  const accountPath = accountPathForRole(role);
+
+  const goToAccount = () => {
+    if (accountPath) {
+      onNavigate?.();
+      navigate(accountPath);
+    }
+  };
 
   return (
     <div className="flex h-full flex-col gap-6 p-4">
@@ -104,7 +107,12 @@ export default function SidebarNav({
         </div>
       </div>
 
-      <div className="flex items-center gap-3 rounded-lg border p-3">
+      <button
+        type="button"
+        onClick={goToAccount}
+        disabled={!accountPath}
+        className="flex items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent"
+      >
         <div className="grid size-9 shrink-0 place-items-center rounded-md bg-muted text-xs font-semibold">
           {initials}
         </div>
@@ -113,11 +121,10 @@ export default function SidebarNav({
             {role ? ROLE_LABEL[role] : "Account"}
           </div>
           <div className="truncate text-xs text-muted-foreground">
-            {user ? `ID ${user.id.slice(0, 8)}` : ""}
+            {user?.email ?? ""}
           </div>
         </div>
-      </div>
-
+      </button>
       <nav className="flex flex-1 flex-col gap-1">
         {nav.map(({ label, to, icon: Icon }) => (
           <NavLink
@@ -146,9 +153,9 @@ export default function SidebarNav({
           onNavigate?.();
           logout();
         }}
-        className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className="flex items-center gap-3 rounded-md px-3 py-2 cursor-pointer text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
-        <LogOut className="size-4 shrink-0" /> Sign out
+        <LogOut className="size-4 shrink-0 " /> Sign out
       </button>
     </div>
   );

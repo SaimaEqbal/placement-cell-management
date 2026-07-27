@@ -29,6 +29,7 @@ export const paths = {
   tpcStudents: "/TPC/students",
   tpcSpc: "/TPC/coordinators",
   tpcNotifications: "/TPC/notifications",
+  tpcAccount: "/TPC/account",
 
   admin: "/Admin",
   adminCompanies: "/Admin/companies",
@@ -40,6 +41,7 @@ export const paths = {
   adminTpcs: "/Admin/tpcs",
   adminAdmins: "/Admin/admins",
   adminNotifications: "/Admin/notifications",
+  adminAccount: "/Admin/account",
 } as const;
 
 /** Purpose: where the topbar bell should navigate to, per role. All four roles now share the same NotificationsPage component - only the route prefix differs. */
@@ -52,6 +54,24 @@ export function notificationsPathForRole(role: Role | null): string | null {
       return paths.tpcNotifications;
     case "admin":
       return paths.adminNotifications;
+    default:
+      return null;
+  }
+}
+
+/** Purpose: where "View profile" in the topbar's account menu should go, per
+ * role. Student/SPC already have a real document-driven profile page;
+ * TPC/Admin get the lighter generic AccountPage since they have no student
+ * record to show. */
+export function accountPathForRole(role: Role | null): string | null {
+  switch (role) {
+    case "student":
+    case "spc":
+      return paths.studentProfile;
+    case "tpc":
+      return paths.tpcAccount;
+    case "admin":
+      return paths.adminAccount;
     default:
       return null;
   }

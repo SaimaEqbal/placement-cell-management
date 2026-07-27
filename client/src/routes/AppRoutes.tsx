@@ -15,6 +15,7 @@ import ProfilePage from "../pages/student/ProfilePage";
 import CompleteProfilePage from "../pages/student/CompleteProfilePage";
 import PlacementDrivesPage from "../pages/student/PlacementDrivesPage";
 import NotificationsPage from "../pages/student/NotificationsPage";
+import AccountPage from "../pages/account/AccountPage";
 import AnnouncementsPage from "../pages/student/AnnouncementsPage";
 
 import SpcVerificationQueuePage from "../pages/spc/SpcVerificationQueuePage";
@@ -141,6 +142,7 @@ export default function AppRoutes() {
           <Route path={paths.tpcSpc} element={<TpcSpcPage />} />
 
           <Route path={paths.tpcNotifications} element={<NotificationsPage />} />
+          <Route path={paths.tpcAccount} element={<AccountPage />} />
         </Route>
       </Route>
 
@@ -165,6 +167,7 @@ export default function AppRoutes() {
           <Route path={paths.adminTpcs} element={<AdminTpcsPage />} />
           <Route path={paths.adminAdmins} element={<AdminAdminsPage />} />
           <Route path={paths.adminNotifications} element={<NotificationsPage />} />
+          <Route path={paths.adminAccount} element={<AccountPage />} />
         </Route>
       </Route>
 

@@ -93,7 +93,7 @@ export default function NotificationsPage() {
                     {markAllRead.isPending ? "Marking..." : "Mark all read"}
                   </Button>
                 )}
-                <Button
+                <Button className="cursor-pointer"
                   variant="outline"
                   size="sm"
                   type="button"
