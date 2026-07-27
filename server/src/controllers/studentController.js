@@ -7,9 +7,30 @@ const spiArrayOf = (src) => [
   src.sem5_spi, src.sem6_spi, src.sem7_spi, src.sem8_spi,
 ];
 
-export const createStudent = async (req, res) => {
+const assignStudentToSpc = async (client, branch) => {
+  const spc = await client.query(
+    `SELECT spc_id
+     FROM spc
+     WHERE branch = $1
+       AND active_verification_count < max_active_assignments
+     ORDER BY active_verification_count ASC,
+              spc_id ASC
+     LIMIT 1`,
+    [branch]
+  );
 
-  try {
+  if (spc.rows.length === 0) {
+    return null;
+  }
+
+  return spc.rows[0].spc_id;
+};
+
+export const createStudent = async (req,res)=>{
+  const client = await pool.connect();
+
+try {
+    await client.query("BEGIN");
 
     const {
       roll_no,
@@ -53,8 +74,8 @@ export const createStudent = async (req, res) => {
 
     // CGPA is derived server-side from the SPIs, never taken from the client.
     const cgpa = computeCgpaRounded(spiArrayOf(req.body), semester);
-
-    const result = await pool.query(
+    const assignedSpcId = await assignStudentToSpc(client, branch);
+    const result = await client.query(
   `INSERT INTO students (
       roll_no,
       name,
@@ -86,14 +107,15 @@ export const createStudent = async (req, res) => {
       last_sem_marksheet_url,
       placement_status,
       semester,
-      user_id
+      user_id,
+      assigned_spc_id
   )
   VALUES (
       $1,$2,$3,$4,$5,$6,$7,$8,
       $9,$10,$11,$12,$13,$14,
       $15,$16,$17,$18,$19,$20,
       $21,$22,$23,$24,$25,$26,
-      $27,$28,$29,$30,$31
+      $27,$28,$29,$30,$31,$32
   )
   RETURNING *`,
   [
@@ -127,9 +149,21 @@ export const createStudent = async (req, res) => {
     last_sem_marksheet_url,
     placement_status,
     semester,
-    userId
+    userId,
+    assignedSpcId
   ]
 );
+if (assignedSpcId) {
+    await client.query(
+        `UPDATE spc
+         SET active_verification_count =
+             active_verification_count + 1
+         WHERE spc_id=$1`,
+        [assignedSpcId]
+    );
+}
+await client.query("COMMIT");
+
     return res.status(201).json(result.rows[0]);
   } catch (error) {
     console.log(error);
@@ -473,13 +507,15 @@ const REVIEW_IGNORED_FIELDS = [
 export const upsertMyProfile = async (req, res) => {
   try {
     const userId = req.user.userId;
+    const client = await pool.connect();
 
+    await client.query("BEGIN");
     // Only allowlisted columns present in the validated body are considered.
     const provided = MY_PROFILE_COLUMNS.filter((col) =>
       Object.prototype.hasOwnProperty.call(req.body, col)
     );
 
-    const existing = await pool.query(
+    const existing = await client.query(
       `SELECT * FROM students WHERE user_id = $1`,
       [userId]
     );
@@ -527,17 +563,33 @@ export const upsertMyProfile = async (req, res) => {
         cols.push("cgpa");
         values.push(derivedCgpa);
       }
+
+      
       cols.push("user_id");
       values.push(userId);
 
       const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
       const colList = cols.map((c) => `"${c}"`).join(", ");
-
-      const inserted = await pool.query(
+      const assignedSpcId =
+    merged.branch
+        ? await assignStudentToSpc(client, merged.branch)
+        : null;
+      const inserted = await client.query(
         `INSERT INTO students (${colList}) VALUES (${placeholders}) RETURNING *`,
         values
       );
-      return res.status(201).json(inserted.rows[0]);
+
+      if (assignedSpcId) {
+    await client.query(
+        `UPDATE spc
+         SET active_verification_count =
+             active_verification_count + 1
+         WHERE spc_id = $1`,
+        [assignedSpcId]
+    );
+}
+      await client.query("COMMIT");
+return res.status(201).json(inserted.rows[0]);
     }
 
     if (provided.length === 0 && !touchesCgpa) {
@@ -548,6 +600,16 @@ export const upsertMyProfile = async (req, res) => {
     const requiresReview = provided.some(
       (col) => !REVIEW_IGNORED_FIELDS.includes(col) && current[col] != req.body[col]
     );
+
+    let assignedSpcId = current.assigned_spc_id;
+
+    if (
+        requiresReview &&
+        !current.assigned_spc_id &&
+        merged.branch
+    ) {
+        assignedSpcId = await assignStudentToSpc(client, merged.branch);
+    }
 
     // Build the SET clause from the allowlist only.
     const setCols = [...provided];
@@ -563,18 +625,38 @@ export const upsertMyProfile = async (req, res) => {
       setValues.push(null);
     }
 
+
+    if (assignedSpcId !== current.assigned_spc_id) {
+    setCols.push("assigned_spc_id");
+    setValues.push(assignedSpcId);
+    }
+
     const setClause = setCols
       .map((col, i) => `"${col}" = $${i + 1}`)
       .join(", ");
     setValues.push(userId);
 
-    const updated = await pool.query(
+    const updated = await client.query(
       `UPDATE students SET ${setClause} WHERE user_id = $${setValues.length} RETURNING *`,
       setValues
     );
 
-    return res.status(200).json(updated.rows[0]);
+    if (
+    assignedSpcId &&
+    assignedSpcId !== current.assigned_spc_id
+) {
+    await client.query(
+        `UPDATE spc
+         SET active_verification_count =
+             active_verification_count + 1
+         WHERE spc_id = $1`,
+        [assignedSpcId]
+    );
+}
+    await client.query("COMMIT");
+return res.status(200).json(updated.rows[0]);
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error(error);
     if (error.code === "23505") {
       return res.status(409).json({ message: uniqueViolationMessage(error.constraint) });
@@ -582,4 +664,8 @@ export const upsertMyProfile = async (req, res) => {
     const { status, message } = pgErrorResponse(error, "Failed to save profile");
     return res.status(status).json({ message });
   }
+  finally {
+    client.release();
+}
 };
+

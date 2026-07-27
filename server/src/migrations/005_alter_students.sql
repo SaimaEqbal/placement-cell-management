@@ -31,3 +31,6 @@ ADD COLUMN sem5_spi NUMERIC(4,2),
 ADD COLUMN sem6_spi NUMERIC(4,2),
 ADD COLUMN sem7_spi NUMERIC(4,2),
 ADD COLUMN sem8_spi NUMERIC(4,2);
+
+ALTER TABLE students
+ADD graduation_year INT;
