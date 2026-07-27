@@ -9,11 +9,6 @@ import type { Role } from "../types";
 export const paths = {
   login: "/login",
   register: "/register",
-  /**
-   * Invite-acceptance link emailed by the backend (invitationController.js
-   * builds the /register/:token URL); ":token" is filled in at navigation
-   * time, so this constant is the route pattern.
-   */
   inviteRegister: "/register/:token",
   verifyEmail: "/verify-email",
   forgotPassword: "/forgot-password",
