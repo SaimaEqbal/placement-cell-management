@@ -1,13 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { UserCog, Users } from "lucide-react";
+import { ArrowRight, UserCog, Users } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
-import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { DataTable, DataTableColumnHeader } from "@/components/dashboard/data-table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,16 +23,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { YearFilter } from "@/components/dashboard/YearFilter";
-import { useAssignSpc, useTpcBranches, useTpcSpcs } from "../../hooks/useVerification";
+import { useTpcBranches, useTpcSpcs } from "../../hooks/useVerification";
 import type { TpcSpcRow } from "../../services/tpcService";
 import { initialsFromName } from "../../lib/format";
 import { batchLabelForYear } from "../../lib/validation";
+import { paths } from "../../routes/paths";
 
 /**
- * Purpose: /TPC/coordinators - pick a branch, see its SPCs in a table (ordered
- * by spc_id), and click "Assign students to SPC for verification" to divide that
- * branch's students evenly among its SPCs (per semester). Only assigned students
- * appear in an SPC's verification queue.
+ * Purpose: /TPC/coordinators - pick a branch and view its SPCs. Each row opens
+ * the existing management view, where an SPC can be demoted when necessary.
  */
 export default function TpcSpcPage() {
   const [branch, setBranch] = useState("");
@@ -43,12 +41,9 @@ export default function TpcSpcPage() {
     branch || undefined,
     year || undefined,
   );
-  const assign = useAssignSpc();
-  const result = assign.data;
+  const ids = (spcs ?? []).map((spc) => spc.id);
 
-  const canAssign = Boolean(branch) && (spcs?.length ?? 0) > 0 && !assign.isPending;
-
-  const columns: ColumnDef<TpcSpcRow>[] = [
+  const columns = useMemo<ColumnDef<TpcSpcRow>[]>(() => [
     {
       accessorKey: "name",
       header: ({ column }) => <DataTableColumnHeader column={column} title="SPC" />,
@@ -100,42 +95,48 @@ export default function TpcSpcPage() {
       ),
     },
     {
-      id: "assigned",
-      header: () => <div className="text-right">Assigned</div>,
-      enableSorting: false,
-      meta: { label: "Assigned", align: "right", exportValue: (s) => result?.perSpc?.[s.spc_id] ?? 0 },
-      cell: ({ row }) =>
-        result?.perSpc?.[row.original.spc_id] != null ? (
-          <StatusBadge tone="green">{String(result.perSpc[row.original.spc_id])}</StatusBadge>
-        ) : (
-          <span className="text-muted-foreground">#{row.original.spc_id}</span>
-        ),
+      accessorKey: "phone",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Phone" />,
+      meta: { label: "Phone" },
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{row.original.phone ?? "—"}</span>
+      ),
     },
-  ];
+    {
+      id: "actions",
+      header: () => <div className="text-right">Action</div>,
+      enableSorting: false,
+      enableHiding: false,
+      cell: ({ row }) => (
+        <div className="flex justify-end">
+          <Button asChild variant="outline" size="sm">
+            <Link
+              to={`${paths.tpcStudents}/${row.original.id}`}
+              state={{ ids, backPath: paths.tpcSpc }}
+            >
+              Manage <ArrowRight />
+            </Link>
+          </Button>
+        </div>
+      ),
+    },
+  ], [ids]);
 
   return (
     <>
-      <Topbar title="SPC coordinators" subtitle="Assign students to SPCs for verification, by branch." />
+      <Topbar title="SPC coordinators" subtitle="View SPC coordinators by branch." />
       <PageContainer>
         <Card>
-          <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <CardHeader>
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                SPC assignment
+                Department roster
               </span>
               <CardTitle className="text-lg">Coordinators by branch</CardTitle>
               <CardDescription>
-                Pick a branch, then split its students among its SPCs (evenly, per semester).
+                Pick a branch to view its SPC coordinators.
               </CardDescription>
             </div>
-            <Button
-              type="button"
-              className="w-full shrink-0 sm:w-auto"
-              onClick={() => assign.mutate(branch)}
-              disabled={!canAssign}
-            >
-              {assign.isPending ? "Assigning..." : "Assign students to SPC"}
-            </Button>
           </CardHeader>
 
           <CardContent className="flex flex-col gap-4">
@@ -144,7 +145,6 @@ export default function TpcSpcPage() {
                 value={branch}
                 onValueChange={(next) => {
                   setBranch(next);
-                  assign.reset();
                 }}
               >
                 <SelectTrigger className="w-full sm:w-64">
@@ -161,25 +161,11 @@ export default function TpcSpcPage() {
               <YearFilter value={year} onChange={setYear} />
             </div>
 
-            {assign.isError && (
-              <Alert variant="destructive">
-                <AlertDescription>{assign.error.message}</AlertDescription>
-              </Alert>
-            )}
-            {result && (
-              <Alert>
-                <AlertDescription>
-                  Assigned {result.totalAssigned} student(s) across{" "}
-                  {Object.keys(result.perSpc).length} SPC(s). Counts are shown per SPC below.
-                </AlertDescription>
-              </Alert>
-            )}
-
             {!branch ? (
               <EmptyState
                 icon={<UserCog />}
                 title="Select a branch"
-                description="Choose a branch to see its SPCs and assign students."
+                description="Choose a branch to see its SPCs."
               />
             ) : isLoading ? (
               <LoadingState label="Loading SPCs..." />

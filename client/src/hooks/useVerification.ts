@@ -16,7 +16,6 @@ import {
   type AdminSpcRow,
 } from "../services/spcService";
 import {
-  assignStudentsToSpc,
   demoteFromSpc,
   getAllTpcs,
   getTpcBranches,
@@ -34,8 +33,8 @@ import { queryKeys } from "./queryKeys";
 
 /**
  * Purpose: TanStack Query hooks for the SPC/TPC verification pipeline - the
- * queues, the branch/SPC lookups the TPC assignment screen needs, and the
- * verify/reject/assign/promote/demote mutations. Kept separate from
+ * queues, the branch/SPC roster lookups, and the verify/reject/promote/demote
+ * mutations. Kept separate from
  * useStudents.ts (plain student CRUD) since these map onto the /spc and /tpc
  * route namespaces.
  */
@@ -164,18 +163,6 @@ export function useTpcReject() {
   >({
     mutationFn: ({ id, reason }) => tpcRejectStudent(id, reason),
     onSuccess: (_data, { id }) => invalidateTpc(qc, id),
-  });
-}
-
-export function useAssignSpc() {
-  const qc = useQueryClient();
-  return useMutation<
-    { message: string; totalAssigned: number; perSpc: Record<string, number> },
-    ApiError,
-    string
-  >({
-    mutationFn: (branch) => assignStudentsToSpc(branch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tpc"] }),
   });
 }
 

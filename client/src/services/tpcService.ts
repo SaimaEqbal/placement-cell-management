@@ -5,7 +5,7 @@ import type { StudentRecord } from "./studentService";
  * Purpose: Axios calls under the backend's /tpc namespace
  * (server/src/routes/tpcRoutes.js) - managing TPC accounts, promoting/demoting
  * SPCs, and the whole TPC verification pipeline (queue, SPC-verified list,
- * department roster, SPC assignment, final verify/reject).
+ * department roster, and final verify/reject).
  */
 
 /** Shape of a row from the `tpc` table (server/src/migrations/008 + 016). */
@@ -32,6 +32,8 @@ export interface TpcSpcRow {
   roll_no: string | null;
   semester: number | null;
   batch: number | null;
+  phone: string | null;
+  id: number;
 }
 
 /** Body accepted by POST /tpc (createTPCSchema). */
@@ -130,16 +132,6 @@ export function getTpcBranches() {
 export function getTpcSpcs(branch: string, year?: string) {
   return axiosInstance
     .get<TpcSpcRow[]>("/tpc/spcs", { params: filterParams({ branch, year }) })
-    .then((res) => res.data);
-}
-
-/** Purpose: POST /tpc/assign-spc - divide the branch's students among its SPCs. */
-export function assignStudentsToSpc(branch: string) {
-  return axiosInstance
-    .post<{ message: string; totalAssigned: number; perSpc: Record<string, number> }>(
-      "/tpc/assign-spc",
-      { branch },
-    )
     .then((res) => res.data);
 }
 

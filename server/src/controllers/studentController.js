@@ -1,30 +1,12 @@
 import pool from "../config/db.js";
 import { pgErrorResponse } from "../lib/dbError.js";
 import { computeCgpaRounded } from "../lib/cgpa.js";
+import { assignStudentToSpc } from "../lib/verificationAssignment.js";
 
 const spiArrayOf = (src) => [
   src.sem1_spi, src.sem2_spi, src.sem3_spi, src.sem4_spi,
   src.sem5_spi, src.sem6_spi, src.sem7_spi, src.sem8_spi,
 ];
-
-const assignStudentToSpc = async (client, branch) => {
-  const spc = await client.query(
-    `SELECT spc_id
-     FROM spc
-     WHERE branch = $1
-       AND active_verification_count < max_active_assignments
-     ORDER BY active_verification_count ASC,
-              spc_id ASC
-     LIMIT 1`,
-    [branch]
-  );
-
-  if (spc.rows.length === 0) {
-    return null;
-  }
-
-  return spc.rows[0].spc_id;
-};
 
 export const createStudent = async (req,res)=>{
   const client = await pool.connect();
@@ -74,7 +56,7 @@ try {
 
     // CGPA is derived server-side from the SPIs, never taken from the client.
     const cgpa = computeCgpaRounded(spiArrayOf(req.body), semester);
-    const assignedSpcId = await assignStudentToSpc(client, branch);
+    const assignedSpcId = await assignStudentToSpc(client, branch, semester);
     const result = await client.query(
   `INSERT INTO students (
       roll_no,
@@ -153,19 +135,11 @@ try {
     assignedSpcId
   ]
 );
-if (assignedSpcId) {
-    await client.query(
-        `UPDATE spc
-         SET active_verification_count =
-             active_verification_count + 1
-         WHERE spc_id=$1`,
-        [assignedSpcId]
-    );
-}
 await client.query("COMMIT");
 
     return res.status(201).json(result.rows[0]);
   } catch (error) {
+    await client.query("ROLLBACK");
     console.log(error);
 
     if (error.code === "23505") {
@@ -176,6 +150,8 @@ await client.query("COMMIT");
 
     const { status, message } = pgErrorResponse(error, "Failed to create student");
     return res.status(status).json({ message });
+  } finally {
+    client.release();
   }
 };
 
@@ -568,26 +544,22 @@ export const upsertMyProfile = async (req, res) => {
       cols.push("user_id");
       values.push(userId);
 
+      const assignedSpcId = await assignStudentToSpc(
+        client,
+        merged.branch,
+        merged.semester
+      );
+      if (assignedSpcId) {
+        cols.push("assigned_spc_id");
+        values.push(assignedSpcId);
+      }
       const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
       const colList = cols.map((c) => `"${c}"`).join(", ");
-      const assignedSpcId =
-    merged.branch
-        ? await assignStudentToSpc(client, merged.branch)
-        : null;
       const inserted = await client.query(
         `INSERT INTO students (${colList}) VALUES (${placeholders}) RETURNING *`,
         values
       );
 
-      if (assignedSpcId) {
-    await client.query(
-        `UPDATE spc
-         SET active_verification_count =
-             active_verification_count + 1
-         WHERE spc_id = $1`,
-        [assignedSpcId]
-    );
-}
       await client.query("COMMIT");
 return res.status(201).json(inserted.rows[0]);
     }
@@ -606,9 +578,13 @@ return res.status(201).json(inserted.rows[0]);
     if (
         requiresReview &&
         !current.assigned_spc_id &&
-        merged.branch
+        merged.branch && merged.semester != null
     ) {
-        assignedSpcId = await assignStudentToSpc(client, merged.branch);
+        assignedSpcId = await assignStudentToSpc(
+          client,
+          merged.branch,
+          merged.semester
+        );
     }
 
     // Build the SET clause from the allowlist only.
@@ -641,18 +617,6 @@ return res.status(201).json(inserted.rows[0]);
       setValues
     );
 
-    if (
-    assignedSpcId &&
-    assignedSpcId !== current.assigned_spc_id
-) {
-    await client.query(
-        `UPDATE spc
-         SET active_verification_count =
-             active_verification_count + 1
-         WHERE spc_id = $1`,
-        [assignedSpcId]
-    );
-}
     await client.query("COMMIT");
 return res.status(200).json(updated.rows[0]);
   } catch (error) {
