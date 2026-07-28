@@ -1,4 +1,8 @@
 import pool from "../config/db.js";
+import {
+  assignStudentToSpc,
+  fillVerificationSlot,
+} from "../lib/verificationAssignment.js";
 
 // Parse an optional `year` query param (student graduation year) into a positive
 // integer, or null when absent/blank/invalid so the caller skips the filter.
@@ -212,10 +216,11 @@ export const promoteSPC = async (req, res) => {
       [student.user_id]
     );
 
-    await client.query(
+    const spcResult = await client.query(
       `INSERT INTO spc
        (user_id, name, email, phone, department, branch)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING spc_id`,
       [
         student.user_id,
         student.name,
@@ -225,6 +230,10 @@ export const promoteSPC = async (req, res) => {
         student.branch,
       ]
     );
+
+    while (await fillVerificationSlot(client, spcResult.rows[0].spc_id)) {
+      // Continue until this SPC reaches capacity or its cohort has no waiter.
+    }
 
     await client.query("COMMIT");
 
@@ -252,9 +261,14 @@ export const demoteSPC = async (req, res) => {
     await client.query("BEGIN");
 
     const studentResult = await client.query(
-      `SELECT user_id
-       FROM students
-       WHERE id = $1`,
+      `SELECT student.user_id,
+              spc.spc_id,
+              spc.branch,
+              student.semester
+       FROM students student
+       LEFT JOIN spc ON spc.user_id = student.user_id
+       WHERE student.id = $1
+       FOR UPDATE OF student`,
       [studentId]
     );
 
@@ -266,7 +280,29 @@ export const demoteSPC = async (req, res) => {
       });
     }
 
-    const userId = studentResult.rows[0].user_id;
+    const demotedSpc = studentResult.rows[0];
+    const userId = demotedSpc.user_id;
+
+    // Capture only this SPC's assigned students before deleting the SPC row.
+    // Their review fields intentionally remain untouched.
+    const assignedStudents = demotedSpc.spc_id
+      ? await client.query(
+          `SELECT id
+           FROM students
+           WHERE assigned_spc_id = $1
+           ORDER BY created_at ASC, id ASC`,
+          [demotedSpc.spc_id]
+        )
+      : { rows: [] };
+
+    if (demotedSpc.spc_id) {
+      await client.query(
+        `UPDATE students
+         SET assigned_spc_id = NULL
+         WHERE assigned_spc_id = $1`,
+        [demotedSpc.spc_id]
+      );
+    }
 
     await client.query(
       `UPDATE users
@@ -277,9 +313,30 @@ export const demoteSPC = async (req, res) => {
 
     await client.query(
       `DELETE FROM spc
-       WHERE user_id = $1`,
-      [userId]
+       WHERE spc_id = $1`,
+      [demotedSpc.spc_id]
     );
+
+    // Refill only the slots vacated by this SPC, preserving FIFO order among
+    // those students. The shared helper enforces branch/semester matching and
+    // reserves capacity before each assignment.
+    for (const assignedStudent of assignedStudents.rows) {
+      const replacementSpcId = await assignStudentToSpc(
+        client,
+        demotedSpc.branch,
+        demotedSpc.semester
+      );
+
+      if (replacementSpcId) {
+        await client.query(
+          `UPDATE students
+           SET assigned_spc_id = $1
+           WHERE id = $2
+             AND assigned_spc_id IS NULL`,
+          [replacementSpcId, assignedStudent.id]
+        );
+      }
+    }
 
     await client.query("COMMIT");
 
@@ -455,8 +512,8 @@ export const getTpcSpcs = async (req, res) => {
     }
 
     const params = [dept, branch];
-    let sql = `SELECT s.spc_id, s.name, s.email, s.department, s.branch,
-                      st.roll_no, st.semester, st.batch
+    let sql = `SELECT s.spc_id, s.name, s.email, s.phone, s.department, s.branch,
+                      st.id, st.roll_no, st.semester, st.batch
                FROM spc s
                LEFT JOIN students st ON st.user_id = s.user_id
                WHERE s.department = $1 AND s.branch = $2`;
@@ -472,89 +529,6 @@ export const getTpcSpcs = async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Failed to fetch SPCs" });
-  }
-};
-
-// POST /tpc/assign-spc  body { branch }
-// Divide the students of each (branch, semester) cohort evenly among the SPCs of
-// that same cohort - round-robin, ordered by spc_id - and record it on
-// students.assigned_spc_id. SPC coordinators are NEVER assigned (they are
-// verified directly by the TPC), so they are excluded from the candidate pool.
-export const assignStudentsToSpc = async (req, res) => {
-  const dept = await getTpcDepartment(req.user.userId);
-  if (!dept) {
-    return res.status(404).json({ message: "TPC profile not found" });
-  }
-
-  const { branch } = req.body;
-  if (!branch) {
-    return res.status(400).json({ message: "branch is required" });
-  }
-
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-
-    // SPCs in this dept+branch, with the semester from their own student row.
-    const spcResult = await client.query(
-      `SELECT s.spc_id, st.semester
-       FROM spc s
-       JOIN students st ON st.user_id = s.user_id
-       WHERE s.department = $1 AND s.branch = $2
-       ORDER BY s.spc_id`,
-      [dept, branch]
-    );
-
-    // Group SPC ids by semester; SPCs with no semester set can't cohort.
-    const spcsBySem = new Map();
-    for (const row of spcResult.rows) {
-      if (row.semester == null) continue;
-      if (!spcsBySem.has(row.semester)) spcsBySem.set(row.semester, []);
-      spcsBySem.get(row.semester).push(row.spc_id);
-    }
-
-    const perSpc = {};
-    for (const row of spcResult.rows) perSpc[row.spc_id] = 0;
-
-    for (const [semester, spcIds] of spcsBySem) {
-      // Candidate students: same dept/branch/semester, complete profile, and not
-      // themselves an SPC coordinator.
-      const students = await client.query(
-        `SELECT id
-         FROM students
-         WHERE department = $1
-           AND branch = $2
-           AND semester = $3
-           AND is_profile_complete = TRUE
-           AND user_id NOT IN (SELECT user_id FROM spc)
-         ORDER BY id`,
-        [dept, branch, semester]
-      );
-
-      for (let i = 0; i < students.rows.length; i++) {
-        const spcId = spcIds[i % spcIds.length];
-        await client.query(
-          `UPDATE students SET assigned_spc_id = $1 WHERE id = $2`,
-          [spcId, students.rows[i].id]
-        );
-        perSpc[spcId] = (perSpc[spcId] || 0) + 1;
-      }
-    }
-
-    await client.query("COMMIT");
-
-    const totalAssigned = Object.values(perSpc).reduce((a, b) => a + b, 0);
-    return res.status(200).json({
-      message: "Students assigned to SPCs for verification",
-      totalAssigned,
-      perSpc,
-    });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    console.error(error);
-    return res.status(500).json({ message: "Failed to assign students" });
-  } finally {
-    client.release();
   }
 };
 

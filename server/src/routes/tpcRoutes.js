@@ -14,7 +14,6 @@ import {
   getTpcSpcVerified,
   getTpcBranches,
   getTpcSpcs,
-  assignStudentsToSpc,
   tpcVerifyStudent,
   tpcRejectStudent,
 } from "../controllers/tpcController.js";
@@ -32,7 +31,6 @@ router.get("/verification-queue", auth, requireAdminTPC, getTpcQueue);
 router.get("/spc-verified", auth, requireAdminTPC, getTpcSpcVerified);
 router.get("/branches", auth, requireAdminTPC, getTpcBranches);
 router.get("/spcs", auth, requireAdminTPC, getTpcSpcs);
-router.post("/assign-spc", auth, requireAdminTPC, assignStudentsToSpc);
 router.put("/verify/:studentId", auth, requireAdminTPC, tpcVerifyStudent);
 router.put("/reject/:studentId", auth, requireAdminTPC, tpcRejectStudent);
 

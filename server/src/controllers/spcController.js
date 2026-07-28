@@ -1,4 +1,5 @@
 import pool from "../config/db.js";
+import { fillVerificationSlot } from "../lib/verificationAssignment.js";
 
 /**
  * Purpose: the SPC-side verification endpoints. An SPC verifies the students the
@@ -35,53 +36,6 @@ const getSpcId = async (userId) => {
     [userId]
   );
   return r.rows.length ? r.rows[0].spc_id : null;
-};
-
-// Fill one free verification slot for an SPC by assigning the oldest
-// unassigned pending student from the same branch.
-const fillVerificationSlot = async (client, spcId) => {
-  // Find the SPC's branch.
-  const spc = await client.query(
-    `SELECT branch
-     FROM spc
-     WHERE spc_id = $1`,
-    [spcId]
-  );
-
-  if (spc.rows.length === 0) return;
-
-  const branch = spc.rows[0].branch;
-
-  // Find the oldest waiting student.
-  const student = await client.query(
-    `SELECT id
-     FROM students
-     WHERE assigned_spc_id IS NULL
-       AND review_status = 'pending'
-       AND branch = $1
-     ORDER BY created_at ASC, id ASC
-     LIMIT 1`,
-    [branch]
-  );
-
-  if (student.rows.length === 0) return;
-
-  // Assign student.
-  await client.query(
-    `UPDATE students
-     SET assigned_spc_id = $1
-     WHERE id = $2`,
-    [spcId, student.rows[0].id]
-  );
-
-  // Increase active count.
-  await client.query(
-    `UPDATE spc
-     SET active_verification_count =
-         active_verification_count + 1
-     WHERE spc_id = $1`,
-    [spcId]
-  );
 };
 
 // GET /spc/verification-queue
@@ -131,12 +85,13 @@ try {
            reviewed_at = NOW(),
            rejection_reason = NULL
        WHERE id = $1
-         AND assigned_spc_id = NULL
+         AND assigned_spc_id = $2
        RETURNING *`,
-      [studentId]
+      [studentId, spcId]
     );
 
     if (result.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({
         message: "Student not found or not assigned to you",
       });
@@ -187,6 +142,7 @@ try {
     const { reason } = req.body;
 
     if (!reason || !reason.trim()) {
+      await client.query("ROLLBACK");
       return res.status(400).json({ message: "A rejection reason is required" });
     }
 
@@ -196,12 +152,13 @@ try {
            rejection_reason = $1,
            reviewed_at = NOW()
        WHERE id = $2
-         AND assigned_spc_id = NULL
+         AND assigned_spc_id = $3
        RETURNING *`,
-      [reason.trim(), studentId]
+      [reason.trim(), studentId, spcId]
     );
 
     if (result.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({
         message: "Student not found or not assigned to you",
       });

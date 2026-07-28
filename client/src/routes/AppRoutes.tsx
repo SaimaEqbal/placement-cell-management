@@ -138,7 +138,7 @@ export default function AppRoutes() {
             element={<StudentVerificationDetailPage role="TPC" mode="manage" />}
           />
 
-          {/* SPC management + assignment. */}
+          {/* SPC management roster. */}
           <Route path={paths.tpcSpc} element={<TpcSpcPage />} />
 
           <Route path={paths.tpcNotifications} element={<NotificationsPage />} />

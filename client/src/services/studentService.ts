@@ -73,7 +73,7 @@ export interface StudentRecord {
   rejection_reason: string | null;
   /** Current semester (5-8); drives which SPIs are required (migration 018). */
   semester: number | null;
-  /** Which SPC is assigned to verify this student (migration 018); set by the TPC's assign action. */
+  /** Which SPC is assigned to verify this student (migration 018); set automatically by the verification queue. */
   assigned_spc_id: number | null;
   /** Only present on GET /tpc/spc-verified rows: true when this student is themselves an SPC coordinator (they skip SPC review). */
   is_spc?: boolean;
