@@ -47,6 +47,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   spc: [
     ...studentNav,
     { label: "Verification queue", to: paths.spcVerification, icon: ClipboardCheck },
+    { label: "Drives", to: paths.spcDrives, icon: Megaphone },
   ],
   tpc: [
     { label: "Dashboard", to: paths.tpc, icon: LayoutDashboard },
@@ -54,6 +55,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { label: "Awaiting TPC review", to: paths.tpcSpcVerified, icon: CheckCircle2 },
     { label: "Students", to: paths.tpcStudents, icon: Users },
     { label: "SPCs", to: paths.tpcSpc, icon: UserCog },
+    { label: "Drives", to: paths.tpcDrives, icon: Megaphone },
   ],
   admin: [
     { label: "Dashboard", to: paths.admin, icon: LayoutDashboard },

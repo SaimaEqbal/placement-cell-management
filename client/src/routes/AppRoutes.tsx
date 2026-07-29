@@ -20,12 +20,16 @@ import AnnouncementsPage from "../pages/student/AnnouncementsPage";
 
 import SpcVerificationQueuePage from "../pages/spc/SpcVerificationQueuePage";
 import StudentVerificationDetailPage from "../pages/spc/StudentVerificationDetailPage";
+import SpcDrivesPage from "../pages/spc/SpcDrivesPage";
+import SpcDriveStatusPage from "../pages/spc/SpcDriveStatusPage";
 
 import TpcDashboard from "../pages/tpc/TpcDashboard";
 import TpcVerificationQueuePage from "../pages/tpc/TpcVerificationQueuePage";
 import TpcSpcVerifiedPage from "../pages/tpc/TpcSpcVerifiedPage";
 import TpcStudentsPage from "../pages/tpc/TpcStudentsPage";
 import TpcSpcPage from "../pages/tpc/TpcSpcPage";
+import TpcDrivesPage from "../pages/tpc/TpcDrivesPage";
+import TpcDriveStatusPage from "../pages/tpc/TpcDriveStatusPage";
 
 import AdminDashboard from "../pages/admin/AdminDashboard";
 import CompaniesPage from "../pages/admin/CompaniesPage";
@@ -110,6 +114,13 @@ export default function AppRoutes() {
             path={`${paths.spcVerification}/:studentId`}
             element={<StudentVerificationDetailPage role="SPC" />}
           />
+
+          {/* Read-only drives: SPCs observe drive progress but cannot manage. */}
+          <Route path={paths.spcDrives} element={<SpcDrivesPage />} />
+          <Route
+            path={`${paths.spcDrives}/:driveId`}
+            element={<SpcDriveStatusPage />}
+          />
         </Route>
       </Route>
 
@@ -140,6 +151,13 @@ export default function AppRoutes() {
 
           {/* SPC management roster. */}
           <Route path={paths.tpcSpc} element={<TpcSpcPage />} />
+
+          {/* Read-only drives: TPCs observe drive progress but cannot manage. */}
+          <Route path={paths.tpcDrives} element={<TpcDrivesPage />} />
+          <Route
+            path={`${paths.tpcDrives}/:driveId`}
+            element={<TpcDriveStatusPage />}
+          />
 
           <Route path={paths.tpcNotifications} element={<NotificationsPage />} />
           <Route path={paths.tpcAccount} element={<AccountPage />} />

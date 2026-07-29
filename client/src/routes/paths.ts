@@ -22,9 +22,11 @@ export const paths = {
   studentAnnouncements: "/Student/announcements",
 
   spcVerification: "/SPC/verification",
+  spcDrives: "/SPC/drives",
 
   tpc: "/TPC",
   tpcVerification: "/TPC/verification",
+  tpcDrives: "/TPC/drives",
   tpcSpcVerified: "/TPC/spc-verified",
   tpcStudents: "/TPC/students",
   tpcSpc: "/TPC/coordinators",

@@ -13,17 +13,19 @@ import {
 
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
-import { InfoGrid } from "@/components/dashboard/InfoGrid";
 import { ListCard } from "@/components/dashboard/ListCard";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
 import { ShortlistReviewDialog } from "@/components/dashboard/ShortlistReviewDialog";
 import { RoundHistory } from "@/components/dashboard/RoundHistory";
+import {
+  DriveDetailsCard,
+  RoundsSummaryBar,
+} from "@/components/dashboard/DriveStatusView";
 import { Field } from "@/components/dashboard/Field";
 import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -52,11 +54,8 @@ import {
 } from "../../hooks/useDrives";
 import { formatCgpa, formatDate, initialsFromName } from "../../lib/format";
 import {
-  driveStateLabel,
-  driveStateTone,
   driveStudentLabel,
   driveStudentTone,
-  historyStageLabel,
   roundLabel,
   roundDisplayName,
 } from "../../lib/driveStatus";
@@ -141,64 +140,6 @@ export default function DriveStudentsPage() {
   );
 }
 
-/** Purpose: the drive summary card with its workflow-state and round/stage badges. */
-function DriveDetailsCard({
-  drive,
-  companyName,
-}: {
-  drive: DriveRecord;
-  companyName?: string;
-}) {
-  const stageBadge =
-    drive.drive_state === "ROUND_IN_PROGRESS"
-      ? `${roundLabel(drive.current_round)}${drive.round_stage ? ` · ${historyStageLabel(drive.round_stage)}` : ""}`
-      : null;
-
-  return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0 border-b">
-        <CardTitle className="text-lg">Drive details</CardTitle>
-        <div className="flex items-center gap-2">
-          {stageBadge && <StatusBadge tone="gray">{stageBadge}</StatusBadge>}
-          <StatusBadge tone={driveStateTone(drive.drive_state)}>
-            {driveStateLabel(drive.drive_state)}
-          </StatusBadge>
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4 pt-6">
-        {drive.job_description && (
-          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-            {drive.job_description}
-          </p>
-        )}
-        <InfoGrid
-          className="lg:grid-cols-3"
-          items={[
-            ["Company", companyName ?? `#${drive.company_id}`],
-            ["Role", drive.job_role ?? "—"],
-            ["Type", drive.employment_type],
-            ["Package (LPA)", drive.package_ctc ?? "—"],
-            ["Min CGPA", String(drive.minimum_cgpa)],
-            [
-              "Min CGPA (throughout)",
-              drive.minimum_cgpa_throughout != null ? String(drive.minimum_cgpa_throughout) : "—",
-            ],
-            [
-              "Batches",
-              drive.allowed_batches?.length ? drive.allowed_batches.join(", ") : "—",
-            ],
-            [
-              "Rounds held",
-              drive.drive_state === "COMPLETED" ? String(drive.number_of_rounds ?? 0) : "—",
-            ],
-            ["Branches", drive.allowed_branches?.join(", ") || "—"],
-          ]}
-        />
-      </CardContent>
-    </Card>
-  );
-}
-
 /**
  * Purpose: choose between the shortlisting screen and the round view. Once
  * rounds run, the layout separates HISTORY (the Round History card of concluded
@@ -240,47 +181,6 @@ function WorkflowSection({
         </>
       )}
     </div>
-  );
-}
-
-/**
- * Purpose: an at-a-glance rounds summary derived from existing round + candidate
- * data: the current round, how many candidates are still in it, and that round's
- * scheduled (next) date.
- */
-function RoundsSummaryBar({
-  driveId,
-  drive,
-  students,
-}: {
-  driveId: string;
-  drive: DriveRecord;
-  students: DriveStudent[];
-}) {
-  const rounds = useDriveRounds(driveId);
-  const completed = drive.drive_state === "COMPLETED";
-  const inRound = students.filter((s) => s.status === "ACTIVE").length;
-  const currentRound = rounds.data?.find((r) => r.round_no === drive.current_round);
-  const currentDate = currentRound?.round_date ?? null;
-
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <InfoGrid
-          className="sm:grid-cols-3"
-          items={[
-            [
-              "Current round",
-              completed
-                ? "Completed"
-                : roundDisplayName(drive.current_round, currentRound?.round_name),
-            ],
-            ["Students in round", completed ? "—" : String(inRound)],
-            ["Next round date", currentDate ? formatDate(currentDate) : "TBD"],
-          ]}
-        />
-      </CardContent>
-    </Card>
   );
 }
 
