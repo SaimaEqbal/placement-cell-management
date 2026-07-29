@@ -7,6 +7,20 @@ import { axiosInstance } from "../api/axiosInstance";
  * never axios directly.
  */
 
+/**
+ * The student's most-recent PLACED placement record, joined onto the student reads
+ * (getStudents / getStudentById). Null when the student has no placement. The
+ * final offer now lives on drive_students (migration 043), not on the student row.
+ */
+export interface StudentPlacement {
+  drive_student_id: number;
+  drive_id: number;
+  final_role: string | null;
+  /** NUMERIC -> string from pg. */
+  final_package: string | null;
+  offer_taken: boolean;
+}
+
 /** Full shape of a row from the `students` table (server/src/migrations/001_create_students.sql + 005_alter_students.sql), as returned by `SELECT *`. */
 export interface StudentRecord {
   id: number;
@@ -27,14 +41,17 @@ export interface StudentRecord {
   /** Postgres NUMERIC columns come back from `pg` as strings, not numbers - use Number(student.cgpa) before formatting/math. */
   cgpa: string | null;
   /**
-   * 'placed' = won a placement drive (placed_package records the CTC).
-   * 'second_chance' = won a >=2x drive while already placed - terminal state.
+   * 'placed' = won a placement drive. 'second_chance' = won a >=2x drive while
+   * already placed - terminal state. The CTC they were placed at now lives on the
+   * placement record (see `placement` / drive_students.final_package), not here.
    */
   placement_status: "unplaced" | "shortlisted" | "placed" | "second_chance" | "rejected";
-  /** CTC (LPA) they were placed at; basis of the 2x second-chance rule. NUMERIC -> string. */
-  placed_package?: string | null;
   /** Independent flag - selected in an internship drive; never affects placement state. */
   selected_for_internship?: boolean;
+  /** Absentee debar: eligible drives the student must still sit out (0 = eligible). */
+  debar_remaining_drives?: number;
+  /** Most-recent placement record (final role/package + accepted flag); null if never placed. */
+  placement?: StudentPlacement | null;
   gender: string | null;
   region: string | null;
   religion: string | null;
@@ -133,8 +150,10 @@ export interface CreateStudentPayload {
  * semantically correct payload; the backend currently strips this field
  * silently rather than rejecting the request.
  */
-export type UpdateStudentPayload = Partial<CreateStudentPayload> & {
+export type UpdateStudentPayload = Partial<Omit<CreateStudentPayload, "placement_status">> & {
   review_status?: string;
+  /** Broader than the create union so an admin edit can pass through 'second_chance'. */
+  placement_status?: StudentRecord["placement_status"];
 };
 
 /**
@@ -193,5 +212,14 @@ export function upsertMyProfile(payload: UpdateStudentPayload) {
 export function deleteStudent(id: number | string) {
   return axiosInstance
     .delete<{ message: string }>(`/students/${id}`)
+    .then((res) => res.data);
+}
+
+/** Purpose: PATCH /students/:id/debar - clear a student's absentee debar (staff override). */
+export function clearDebar(id: number | string) {
+  return axiosInstance
+    .patch<{ message: string; student: { id: number; debar_remaining_drives: number } }>(
+      `/students/${id}/debar`,
+    )
     .then((res) => res.data);
 }

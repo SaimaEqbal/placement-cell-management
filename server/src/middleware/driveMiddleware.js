@@ -5,6 +5,9 @@ import {
   roundDateSchema,
   prefilterFinalizeSchema,
   roundResolveSchema,
+  completeDriveSchema,
+  offerTakenSchema,
+  withdrawalSchema,
 } from "../lib/schema.js";
 
 export const validateCreateDrive = (
@@ -96,9 +99,45 @@ export const validatePrefilterFinalize = (req, res, next) => {
   next();
 };
 
-/** Purpose: validate a round-resolve body ({ rejected: [{ driveStudentId, reason }] }) for advance/complete. */
+/** Purpose: validate a round-resolve body ({ rejected: [{ driveStudentId, reason }] }) for advance-round. */
 export const validateRoundResolve = (req, res, next) => {
   const result = roundResolveSchema.safeParse(req.body ?? {});
+
+  if (!result.success) {
+    return res.status(400).json({ errors: result.error.flatten().fieldErrors });
+  }
+
+  req.body = result.data;
+  next();
+};
+
+/** Purpose: validate a complete-drive body ({ rejected: [...], placed: [{ driveStudentId, final_role?, final_package? }] }). */
+export const validateCompleteDrive = (req, res, next) => {
+  const result = completeDriveSchema.safeParse(req.body ?? {});
+
+  if (!result.success) {
+    return res.status(400).json({ errors: result.error.flatten().fieldErrors });
+  }
+
+  req.body = result.data;
+  next();
+};
+
+/** Purpose: validate an offer-taken toggle body ({ taken: boolean }). */
+export const validateOfferTaken = (req, res, next) => {
+  const result = offerTakenSchema.safeParse(req.body ?? {});
+
+  if (!result.success) {
+    return res.status(400).json({ errors: result.error.flatten().fieldErrors });
+  }
+
+  req.body = result.data;
+  next();
+};
+
+/** Purpose: validate a withdrawal toggle body ({ withdraw: boolean }). */
+export const validateWithdrawal = (req, res, next) => {
+  const result = withdrawalSchema.safeParse(req.body ?? {});
 
   if (!result.success) {
     return res.status(400).json({ errors: result.error.flatten().fieldErrors });

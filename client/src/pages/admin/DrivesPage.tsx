@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/select";
 import { useCompanies } from "../../hooks/useCompanies";
 import {
+  useClearShortlist,
   useCreateDrive,
   useDeleteDrive,
   useDriveEligible,
@@ -222,6 +223,7 @@ export default function DrivesPage() {
   const createMutation = useCreateDrive();
   const updateMutation = useUpdateDrive();
   const deleteMutation = useDeleteDrive();
+  const clearMutation = useClearShortlist();
 
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -230,6 +232,9 @@ export default function DrivesPage() {
 
   /** The drive pending deletion (opens the irreversible-delete confirm dialog). */
   const [deleteTarget, setDeleteTarget] = useState<DriveRecord | null>(null);
+
+  /** The drive whose shortlist is pending an explicit clear (confirm dialog). */
+  const [clearTarget, setClearTarget] = useState<DriveRecord | null>(null);
 
   // Per-drive announcement actions: view an existing one, edit an existing one,
   // or create one for a drive that has none. All reuse the shared dialogs.
@@ -343,9 +348,8 @@ export default function DrivesPage() {
        * updateDrive overwrites every column, including status. The form never
        * edits status, so carry the drive's current status through - otherwise
        * the omitted field is written as NULL, wiping the drive's lifecycle state.
-       * Shortlist review is now decoupled: editing just saves and closes. The
-       * backend still clears the old shortlist, and the admin reviews on demand
-       * via "Review shortlist".
+       * Editing no longer touches the shortlist (it persists); the admin reviews
+       * on demand via "Review shortlist" and wipes it via "Clear shortlist".
        */
       const editingDrive = drives?.find((d) => d.drive_id === editingId);
       updateMutation.mutate(
@@ -450,6 +454,11 @@ export default function DrivesPage() {
               <DropdownMenuItem onClick={() => setReviewDriveId(row.original.drive_id)}>
                 Review shortlist
               </DropdownMenuItem>
+              {row.original.drive_state === "SHORTLISTING" && (
+                <DropdownMenuItem onClick={() => setClearTarget(row.original)}>
+                  Clear shortlist
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem asChild>
                 <Link to={`${driveBasePath}/${row.original.drive_id}`}>Manage drive</Link>
               </DropdownMenuItem>
@@ -793,6 +802,7 @@ export default function DrivesPage() {
         driveId={reviewDriveId ?? undefined}
         driveLabel={reviewDrive ? driveLabel(reviewDrive) : undefined}
         eligibleStudents={eligibleQuery.data?.eligibleStudents ?? []}
+        shortlist={eligibleQuery.data?.shortlist}
         loading={eligibleQuery.isLoading}
         onBack={() => {
           const d = reviewDrive;
@@ -800,6 +810,27 @@ export default function DrivesPage() {
           if (d) openEdit(d);
         }}
         onConfirmed={() => setReviewDriveId(null)}
+      />
+
+      <ConfirmDialog
+        open={clearTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setClearTarget(null);
+        }}
+        title={`Clear shortlist for ${clearTarget ? driveLabel(clearTarget) : "drive"}?`}
+        description="This deletes every shortlist entry (including withdrawn students) and recomputes eligibility from scratch. Manual selections will be lost. You'll then review a fresh eligible list."
+        confirmLabel="Clear shortlist"
+        destructive
+        onConfirm={() => {
+          if (!clearTarget) return;
+          const driveId = clearTarget.drive_id;
+          clearMutation.mutate(driveId, {
+            onSuccess: () => {
+              setClearTarget(null);
+              setReviewDriveId(driveId);
+            },
+          });
+        }}
       />
 
       <ConfirmDialog

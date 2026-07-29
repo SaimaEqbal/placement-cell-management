@@ -10,6 +10,9 @@ import {
   validateRoundDate,
   validatePrefilterFinalize,
   validateRoundResolve,
+  validateCompleteDrive,
+  validateOfferTaken,
+  validateWithdrawal,
 } from "../middleware/driveMiddleware.js";
 
 import {
@@ -21,12 +24,15 @@ import {
   deleteDrive,
   getDriveStudents,
   confirmStudents,
+  clearShortlist,
+  setWithdrawal,
   startRoundZero,
   finalizePrefilter,
   finalizeAttendance,
   advanceRound,
   completeDrive,
   markAttendance,
+  setOfferTaken,
   getRoundHistory,
   getDriveRounds,
   setRoundDate,
@@ -49,13 +55,16 @@ router.delete("/:driveId", auth, requireAdmin, deleteDrive);
 // --- Shortlist -------------------------------------------------------------
 router.get("/:driveId/students", auth, getDriveStudents);
 router.post("/:driveId/confirm-students", auth, requireAdmin, confirmStudents);
+router.post("/:driveId/clear-shortlist", auth, requireAdmin, clearShortlist);
+// Student self-service withdrawal (any authenticated student; controller scopes it).
+router.patch("/:driveId/withdraw", auth, validateWithdrawal, setWithdrawal);
 
 // --- Round-workflow transitions -------------------------------------------
 router.post("/:driveId/start-round-0", auth, requireAdmin, startRoundZero);
 router.post("/:driveId/finalize-prefilter", auth, requireAdmin, validatePrefilterFinalize, finalizePrefilter);
 router.post("/:driveId/finalize-attendance", auth, requireAdmin, finalizeAttendance);
 router.post("/:driveId/advance-round", auth, requireAdmin, validateRoundResolve, advanceRound);
-router.post("/:driveId/complete", auth, requireAdmin, validateRoundResolve, completeDrive);
+router.post("/:driveId/complete", auth, requireAdmin, validateCompleteDrive, completeDrive);
 
 // --- Per-student round actions (nested so the parent drive state is checked) --
 // Prefilter removals and round results are committed in batch at the stage
@@ -67,6 +76,15 @@ router.patch(
   requireAdmin,
   validateAttendance,
   markAttendance
+);
+
+// Toggle a placed student's accepted-offer flag (after the drive completes).
+router.patch(
+  "/:driveId/students/:driveStudentId/offer",
+  auth,
+  requireAdmin,
+  validateOfferTaken,
+  setOfferTaken
 );
 
 // --- Per-round dates -------------------------------------------------------

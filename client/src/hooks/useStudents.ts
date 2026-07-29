@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { ApiError } from "../api/apiError";
 import {
+  clearDebar,
   deleteStudent,
   getStudentById,
   getStudents,
@@ -53,6 +54,23 @@ export function useDeleteStudent() {
     mutationFn: deleteStudent,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.students() });
+    },
+  });
+}
+
+/** Purpose: PATCH /students/:id/debar - clear an absentee debar; refreshes the roster. */
+export function useClearDebar() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    { message: string; student: { id: number; debar_remaining_drives: number } },
+    ApiError,
+    number | string
+  >({
+    mutationFn: clearDebar,
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.students() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.student(id) });
     },
   });
 }

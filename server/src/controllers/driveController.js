@@ -9,22 +9,13 @@ import { createNotificationForRole } from "./notificationController.js";
 // still unplaced, meet the CGPA floor, are within both backlog caps, and belong
 // to an allowed branch. The result is computed on the fly (never persisted) and
 // returned by create/update so the admin can review and confirm a subset.
+//
+// The core predicate is shared (ELIGIBILITY_WHERE + eligibilityParams) between the
+// eligible SELECT and the absentee-debar decrement UPDATE, so the two can never
+// diverge. It references `students.id` in the second-chance subquery, which
+// resolves to the target row in both SELECT and UPDATE contexts.
 // ---------------------------------------------------------------------------
-async function getEligibleStudentsForDrive(drive) {
-  const result = await pool.query(
-    `SELECT
-        id,
-        roll_no,
-        name,
-        email,
-        phone,
-        branch,
-        department,
-        cgpa,
-        active_backlogs,
-        passive_backlogs
-     FROM students
-     WHERE
+const ELIGIBILITY_WHERE = `
         review_status = 'verified'
         AND cgpa >= $1
         AND active_backlogs <= $2
@@ -49,32 +40,86 @@ async function getEligibleStudentsForDrive(drive) {
         -- which are open regardless of placement state):
         --   * second_chance students are done - never eligible again.
         --   * placed students are eligible only when this drive's package is
-        --     >= MULTIPLIER x the package they were placed at.
+        --     >= MULTIPLIER x the package they were placed at. That prior package
+        --     is now derived from their most-recent PLACED placement record
+        --     (drive_students.final_package on an FTE drive), since the old
+        --     denormalised students.placed_package column has been removed. The
+        --     'Infinity' fallback keeps a placed student with no known package
+        --     ineligible, matching the previous placed_package IS NOT NULL guard.
         AND (
           $7::boolean = FALSE
           OR placement_status IS NULL
           OR placement_status NOT IN ('placed', 'second_chance')
           OR (
             placement_status = 'placed'
-            AND placed_package IS NOT NULL
             AND $8::numeric IS NOT NULL
-            AND $8::numeric >= placed_package * ${SECOND_CHANCE_MULTIPLIER}
+            AND $8::numeric >= COALESCE((
+                  SELECT ds.final_package
+                    FROM drive_students ds
+                    JOIN drives d ON d.drive_id = ds.drive_id
+                   WHERE ds.student_id = students.id
+                     AND ds.status = 'PLACED'
+                     AND ds.final_package IS NOT NULL
+                     AND d.employment_type = 'FTE'
+                   ORDER BY ds.drive_student_id DESC
+                   LIMIT 1
+                ), 'Infinity'::numeric) * ${SECOND_CHANCE_MULTIPLIER}
           )
-        )
+        )`;
+
+/** The $1..$8 params ELIGIBILITY_WHERE expects, in order, for a given drive. */
+function eligibilityParams(drive) {
+  return [
+    drive.minimum_cgpa,
+    drive.max_active_backlogs,
+    drive.max_passive_backlogs,
+    drive.allowed_branches,
+    drive.allowed_batches ?? null,
+    drive.minimum_cgpa_throughout ?? null,
+    isPlacementDrive(drive.employment_type),
+    drive.package_ctc ?? null,
+  ];
+}
+
+async function getEligibleStudentsForDrive(drive) {
+  const result = await pool.query(
+    `SELECT
+        id,
+        roll_no,
+        name,
+        email,
+        phone,
+        branch,
+        department,
+        cgpa,
+        active_backlogs,
+        passive_backlogs
+     FROM students
+     WHERE ${ELIGIBILITY_WHERE}
+        -- Absentee debarment: students serving a debar are skipped entirely.
+        AND debar_remaining_drives = 0
      ORDER BY cgpa DESC`,
-    [
-      drive.minimum_cgpa,
-      drive.max_active_backlogs,
-      drive.max_passive_backlogs,
-      drive.allowed_branches,
-      drive.allowed_batches ?? null,
-      drive.minimum_cgpa_throughout ?? null,
-      isPlacementDrive(drive.employment_type),
-      drive.package_ctc ?? null,
-    ]
+    eligibilityParams(drive)
   );
 
   return result.rows;
+}
+
+/**
+ * Absentee debarment: when a drive's shortlist is finalised, decrement the debar
+ * counter (floored at 0) for every debarred student who WOULD have been eligible
+ * for this drive but for the debar. Reuses the exact eligibility predicate so the
+ * "skip" and "decrement" sets can never diverge - a student only burns a debar on a
+ * drive they were genuinely eligible for. Runs on the caller's transaction.
+ */
+async function decrementDebarredForDrive(client, drive) {
+  await client.query(
+    `UPDATE students
+        SET debar_remaining_drives = GREATEST(debar_remaining_drives - 1, 0)
+      WHERE ${ELIGIBILITY_WHERE}
+        AND debar_remaining_drives > 0`,
+    eligibilityParams(drive)
+  );
 }
 
 // A drive's date/deadline can be "TBD" (or blank) when not yet finalised; store
@@ -464,7 +509,19 @@ export const getDriveEligible = async (req, res) => {
     const drive = result.rows[0];
     const eligibleStudents = await getEligibleStudentsForDrive(drive);
 
-    return res.status(200).json({ drive, eligibleStudents });
+    // Also return the saved shortlist so the review dialog can seed its checkboxes
+    // (selected stay checked, withdrawn shown locked) instead of defaulting to all.
+    // An empty array signals a first build (dialog defaults to all-selected).
+    const shortlist = await pool.query(
+      `SELECT s.id, s.roll_no, s.name, s.email, s.phone, s.branch, s.department,
+              s.cgpa, s.active_backlogs, s.passive_backlogs, ds.is_active
+         FROM drive_students ds
+         JOIN students s ON s.id = ds.student_id
+        WHERE ds.drive_id = $1`,
+      [driveId]
+    );
+
+    return res.status(200).json({ drive, eligibleStudents, shortlist: shortlist.rows });
   } catch (error) {
     console.error(error);
     const { status, message } = pgErrorResponse(
@@ -552,19 +609,13 @@ export const updateDrive = async (req, res) => {
 
     const drive = result.rows[0];
 
-    // Editing eligibility invalidates the tentative shortlist; clear it so the
-    // admin reviews and confirms a fresh eligible list.
-    await pool.query(
-      `DELETE FROM drive_students WHERE drive_id = $1`,
-      [drive.drive_id]
-    );
-
-    const eligibleStudents = await getEligibleStudentsForDrive(drive);
-
+    // Editing drive details no longer regenerates the shortlist: the saved
+    // shortlist persists so manual selections and withdrawals are never lost. The
+    // admin must explicitly Clear Shortlist (POST /:driveId/clear-shortlist) to wipe
+    // it and recompute eligibility.
     return res.status(200).json({
-      message: "Drive updated. Previous shortlist removed.",
+      message: "Drive updated.",
       drive,
-      eligibleStudents,
     });
   } catch (error) {
     console.error(error);
@@ -631,27 +682,48 @@ export const confirmStudents = async (req, res) => {
       });
     }
 
-    // Replace the whole shortlist so the confirm step is idempotent.
-    await client.query(`DELETE FROM drive_students WHERE drive_id = $1`, [driveId]);
+    // Persist the shortlist as an UPSERT rather than a wipe-and-replace, so manual
+    // selections and withdrawal state survive re-confirming and drive edits:
+    //   * de-selected ACTIVE rows are removed;
+    //   * withdrawn rows (is_active = FALSE) are always kept (audit/history);
+    //   * existing rows keep their created_at (the 2-day withdrawal clock).
+    const existing = await client.query(
+      `SELECT student_id FROM drive_students WHERE drive_id = $1`,
+      [driveId]
+    );
+    const existingIds = new Set(existing.rows.map((r) => String(r.student_id)));
 
+    // Remove students the admin de-selected, but never the withdrawn ones.
+    await client.query(
+      `DELETE FROM drive_students
+        WHERE drive_id = $1 AND is_active = TRUE AND NOT (student_id = ANY($2))`,
+      [driveId, studentIds]
+    );
+
+    // Insert newly-selected students; existing rows are left untouched.
     for (const studentId of studentIds) {
       await client.query(
         `INSERT INTO drive_students
            (drive_id, student_id, status, current_round, added_by)
-         VALUES ($1, $2, 'SHORTLISTED', -1, $3)`,
+         VALUES ($1, $2, 'SHORTLISTED', -1, $3)
+         ON CONFLICT (drive_id, student_id) DO NOTHING`,
         [driveId, studentId, req.user.userId]
       );
     }
 
-    // Notify every confirmed student that they've been shortlisted for the drive.
-    const label = await getDriveLabel(client, drive);
-    await notifyStudentsByIds(
-      client,
-      studentIds,
-      "You've been shortlisted",
-      `You have been shortlisted for ${label}. Watch for round schedules and updates.`,
-      "green"
-    );
+    // Notify only the newly-added students (not everyone) so re-confirming an
+    // existing shortlist doesn't re-spam students who were already shortlisted.
+    const newlyAdded = studentIds.filter((id) => !existingIds.has(String(id)));
+    if (newlyAdded.length > 0) {
+      const label = await getDriveLabel(client, drive);
+      await notifyStudentsByIds(
+        client,
+        newlyAdded,
+        "You've been shortlisted",
+        `You have been shortlisted for ${label}. Watch for round schedules and updates.`,
+        "green"
+      );
+    }
 
     await client.query("COMMIT");
 
@@ -662,6 +734,54 @@ export const confirmStudents = async (req, res) => {
     await client.query("ROLLBACK");
     console.error(error);
     const { status, message } = pgErrorResponse(error, "Failed to confirm students");
+    return res.status(status).json({ message });
+  } finally {
+    client.release();
+  }
+};
+
+// Explicitly wipe a drive's shortlist and recompute eligibility from scratch. This
+// is the ONLY path that clears the shortlist (editing drive details no longer does),
+// so manual selections/withdrawals are never lost by accident. Returns a fresh
+// eligible list + empty shortlist so the review dialog rebuilds.
+export const clearShortlist = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { driveId } = req.params;
+
+    await client.query("BEGIN");
+
+    const drive = await loadDriveForUpdate(client, driveId);
+
+    if (!drive) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Drive not found" });
+    }
+
+    if (drive.drive_state !== "SHORTLISTING") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        message: "Shortlist is locked. Company screening has already started.",
+      });
+    }
+
+    await client.query(`DELETE FROM drive_students WHERE drive_id = $1`, [driveId]);
+
+    await client.query("COMMIT");
+
+    const eligibleStudents = await getEligibleStudentsForDrive(drive);
+
+    return res.status(200).json({
+      message: "Shortlist cleared.",
+      drive,
+      eligibleStudents,
+      shortlist: [],
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to clear shortlist");
     return res.status(status).json({ message });
   } finally {
     client.release();
@@ -680,6 +800,10 @@ export const getDriveStudents = async (req, res) => {
           ds.status,
           ds.attendance_mark,
           ds.remarks,
+          ds.final_role,
+          ds.final_package,
+          ds.offer_taken,
+          ds.is_active,
 
           s.id,
           s.roll_no,
@@ -736,8 +860,11 @@ export const startRoundZero = async (req, res) => {
       return res.status(409).json({ message: "Company screening has already started." });
     }
 
+    // Only active (non-withdrawn) students are forwarded to the company. Withdrawn
+    // rows (is_active = FALSE) stay SHORTLISTED and never enter the round workflow
+    // or the company screening list.
     const students = await client.query(
-      `SELECT student_id FROM drive_students WHERE drive_id = $1`,
+      `SELECT student_id FROM drive_students WHERE drive_id = $1 AND is_active = TRUE`,
       [driveId]
     );
 
@@ -751,7 +878,7 @@ export const startRoundZero = async (req, res) => {
     await client.query(
       `UPDATE drive_students
          SET status = 'ACTIVE', current_round = 0
-       WHERE drive_id = $1`,
+       WHERE drive_id = $1 AND is_active = TRUE`,
       [driveId]
     );
 
@@ -765,6 +892,12 @@ export const startRoundZero = async (req, res) => {
         recordedBy: req.user.userId,
       });
     }
+
+    // Absentee debarment: finalising this drive's shortlist counts as one "eligible
+    // drive" for every debarred student who matched this drive's criteria, so burn
+    // one debar from each of them. Done here (not at confirm) since screening starts
+    // exactly once per drive, avoiding double-counting.
+    await decrementDebarredForDrive(client, drive);
 
     // Round 0 (the company screening) owns a date row too (TBD until scheduled).
     // Confirming the screening is what STARTS it, so stamp started_at now.
@@ -971,6 +1104,14 @@ export const finalizeAttendance = async (req, res) => {
     }
 
     if (absentIds.length > 0) {
+      // Absentee debarment: being absent in an interview round temporarily debars
+      // the student from their next two ELIGIBLE drives (re-armed to 2 even if they
+      // were already serving a debar).
+      await client.query(
+        `UPDATE students SET debar_remaining_drives = 2 WHERE id = ANY($1)`,
+        [absentIds]
+      );
+
       const label = await getDriveLabel(client, drive);
       await notifyStudentsByIds(
         client,
@@ -1154,10 +1295,27 @@ export const completeDrive = async (req, res) => {
 
     const placement = isPlacementDrive(drive.employment_type);
 
+    // The admin's per-student final offers, keyed by drive_student_id. The id is a
+    // bigint (string from node-pg) but the schema coerces the payload ids to
+    // numbers, so normalise the row id to Number for the lookup (see
+    // resolveRoundResults for the same pattern).
+    const offerById = new Map(
+      (req.body.placed ?? []).map((p) => [p.driveStudentId, p])
+    );
+
     for (const row of selected.rows) {
+      const offer = offerById.get(Number(row.drive_student_id));
+      // Final offer defaults to the drive's advertised role/package; the admin may
+      // have overridden either. A fresh placement keeps offer_taken at its column
+      // default (TRUE).
+      const finalRole = offer?.final_role ?? drive.job_role ?? null;
+      const finalPackage = offer?.final_package ?? drive.package_ctc ?? null;
+
       await client.query(
-        `UPDATE drive_students SET status = 'PLACED' WHERE drive_student_id = $1`,
-        [row.drive_student_id]
+        `UPDATE drive_students
+            SET status = 'PLACED', final_role = $2, final_package = $3
+          WHERE drive_student_id = $1`,
+        [row.drive_student_id, finalRole, finalPackage]
       );
 
       if (!placement) {
@@ -1169,19 +1327,22 @@ export const completeDrive = async (req, res) => {
         );
       } else if (row.placement_status === "placed") {
         // An already-placed student winning a >=2x drive uses their one second
-        // chance: terminal state, package updated to the new offer.
+        // chance: terminal state. Their EARLIER placement(s) are auto-flipped to
+        // "not taken" - they moved to this better offer.
         await client.query(
-          `UPDATE students
-              SET placement_status = 'second_chance', placed_package = $2
-            WHERE id = $1`,
-          [row.student_id, drive.package_ctc ?? null]
+          `UPDATE students SET placement_status = 'second_chance' WHERE id = $1`,
+          [row.student_id]
+        );
+        await client.query(
+          `UPDATE drive_students
+              SET offer_taken = FALSE
+            WHERE student_id = $1 AND status = 'PLACED' AND drive_student_id <> $2`,
+          [row.student_id, row.drive_student_id]
         );
       } else {
         await client.query(
-          `UPDATE students
-              SET placement_status = 'placed', placed_package = $2
-            WHERE id = $1`,
-          [row.student_id, drive.package_ctc ?? null]
+          `UPDATE students SET placement_status = 'placed' WHERE id = $1`,
+          [row.student_id]
         );
       }
 
@@ -1226,6 +1387,56 @@ export const completeDrive = async (req, res) => {
     await client.query("ROLLBACK");
     console.error(error);
     const { status, message } = pgErrorResponse(error, "Failed to complete drive");
+    return res.status(status).json({ message });
+  } finally {
+    client.release();
+  }
+};
+
+// Toggle whether a placed student actually accepted their offer. Informational
+// only: it never touches placement_status, placed counts, or second-chance
+// eligibility. Defined here (a completed-drive action) rather than under the
+// round-workflow, since it applies after a drive concludes.
+export const setOfferTaken = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { driveId, driveStudentId } = req.params;
+    const { taken } = req.body;
+
+    await client.query("BEGIN");
+
+    const driveStudent = await loadDriveStudent(client, driveStudentId, driveId);
+
+    if (!driveStudent) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Placement record not found" });
+    }
+
+    if (driveStudent.status !== "PLACED") {
+      await client.query("ROLLBACK");
+      return res
+        .status(409)
+        .json({ message: "Only a placed student's offer can be toggled." });
+    }
+
+    const updated = await client.query(
+      `UPDATE drive_students SET offer_taken = $2
+        WHERE drive_student_id = $1
+        RETURNING drive_student_id, status, final_role, final_package, offer_taken`,
+      [driveStudentId, taken]
+    );
+
+    await client.query("COMMIT");
+
+    return res.status(200).json({
+      message: taken ? "Offer marked as taken." : "Offer marked as not taken.",
+      driveStudent: updated.rows[0],
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to update offer status");
     return res.status(status).json({ message });
   } finally {
     client.release();
@@ -1300,8 +1511,90 @@ export const markAttendance = async (req, res) => {
 
 
 // ---------------------------------------------------------------------------
-// Student-facing (self-scoped) reads
+// Student-facing (self-scoped) reads & actions
 // ---------------------------------------------------------------------------
+
+// Withdraw from (or re-join) a drive's shortlist. Self-service and immediate:
+//   * allowed only while the drive is SHORTLISTING (once company screening starts,
+//     withdrawals are permanently disabled);
+//   * allowed only within 2 days of being shortlisted (drive_students.created_at);
+//   * reversible in that window (withdraw: false re-joins).
+// The row is never deleted - only is_active flips - so withdrawal history survives.
+export const setWithdrawal = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { driveId } = req.params;
+    const { withdraw } = req.body;
+
+    await client.query("BEGIN");
+
+    // Resolve the caller's student id (same mapping getMyDrives uses).
+    const student = await client.query(
+      `SELECT id FROM students WHERE user_id = $1`,
+      [req.user.userId]
+    );
+    if (student.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Student profile not found" });
+    }
+    const studentId = student.rows[0].id;
+
+    const drive = await loadDriveForUpdate(client, driveId);
+    if (!drive) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Drive not found" });
+    }
+
+    if (drive.drive_state !== "SHORTLISTING") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        message: "Withdrawal is closed - company screening has already started.",
+      });
+    }
+
+    // Load the student's own shortlist row and check the 2-day window in one go.
+    const row = await client.query(
+      `SELECT drive_student_id, is_active,
+              (NOW() <= created_at + INTERVAL '2 days') AS within_window
+         FROM drive_students
+        WHERE drive_id = $1 AND student_id = $2
+        FOR UPDATE`,
+      [driveId, studentId]
+    );
+    if (row.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "You are not shortlisted for this drive." });
+    }
+    if (!row.rows[0].within_window) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({
+        message: "The withdrawal window (2 days from shortlisting) has expired.",
+      });
+    }
+
+    await client.query(
+      `UPDATE drive_students SET is_active = $2 WHERE drive_student_id = $1`,
+      [row.rows[0].drive_student_id, !withdraw]
+    );
+
+    await client.query("COMMIT");
+
+    return res.status(200).json({
+      message: withdraw
+        ? "You have withdrawn from this drive."
+        : "You have re-joined this drive.",
+      is_active: !withdraw,
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error(error);
+    const { status, message } = pgErrorResponse(error, "Failed to update withdrawal");
+    return res.status(status).json({ message });
+  } finally {
+    client.release();
+  }
+};
 
 // The drives the current student has been shortlisted into, with the student's
 // OWN status and round. Resolved from users.id -> students.user_id, so a student
@@ -1313,6 +1606,10 @@ export const getMyDrives = async (req, res) => {
           d.*,
           ds.status        AS my_status,
           ds.current_round AS my_current_round,
+          ds.final_role    AS my_final_role,
+          ds.final_package AS my_final_package,
+          ds.is_active     AS my_is_active,
+          ds.created_at    AS my_shortlisted_at,
           cp.post_id       AS announcement_id,
           cr.round_date    AS current_round_date,
           cr.round_name    AS current_round_name,

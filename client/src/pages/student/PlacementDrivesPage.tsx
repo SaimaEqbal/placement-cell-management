@@ -5,6 +5,7 @@ import { CalendarClock, ListChecks, Megaphone } from "lucide-react";
 import Topbar from "../../components/Topbar";
 import { PageContainer } from "@/components/dashboard/PageContainer";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
 import { AnnouncementViewerDialog } from "@/components/dashboard/AnnouncementViewerDialog";
 import { DataTable, DataTableColumnHeader } from "@/components/dashboard/data-table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/dashboard/states";
@@ -29,6 +30,7 @@ import {
   useDrives,
   useMyDrives,
   useMyDriveResults,
+  useWithdrawDrive,
 } from "../../hooks/useDrives";
 import { formatDate } from "../../lib/format";
 import {
@@ -48,6 +50,14 @@ import type {
 
 /** Phases within a round, in the order they happen. */
 const STAGE_ORDER: HistoryStage[] = ["SHORTLIST", "PREFILTER", "ATTENDANCE", "RESULT"];
+
+/** Students may withdraw only within 2 days of being shortlisted. */
+const WITHDRAWAL_WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
+function withinWithdrawalWindow(shortlistedAt?: string): boolean {
+  if (!shortlistedAt) return false;
+  const at = new Date(shortlistedAt).getTime();
+  return Number.isFinite(at) && Date.now() <= at + WITHDRAWAL_WINDOW_MS;
+}
 
 type DriveView = "all" | "mine";
 
@@ -194,6 +204,7 @@ export default function PlacementDrivesPage() {
 
   // ---- My drives ----------------------------------------------------------
   const myDrives = useMyDrives();
+  const withdraw = useWithdrawDrive();
 
   const driveLabel = (d: MyDrive) =>
     d.job_role || companyOf(d.company_id) || `Drive #${d.drive_id}`;
@@ -236,6 +247,28 @@ export default function PlacementDrivesPage() {
       meta: { label: "Current round" },
     },
     {
+      id: "my_offer",
+      // Once placed, the student's OWN final offer (role + package) - the actual
+      // offer, which may differ from the drive's advertised package.
+      accessorFn: (d) => (d.my_status === "PLACED" ? d.my_final_package ?? "—" : "—"),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Final offer" />,
+      meta: { label: "Final offer (LPA)" },
+      cell: ({ row }) => {
+        const d = row.original;
+        if (d.my_status !== "PLACED") return <span className="text-muted-foreground">—</span>;
+        return (
+          <div className="min-w-0">
+            <div className="truncate font-medium">
+              {d.my_final_package != null ? `${d.my_final_package} LPA` : "—"}
+            </div>
+            {d.my_final_role && (
+              <div className="truncate text-xs text-muted-foreground">{d.my_final_role}</div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       id: "status",
       accessorFn: (d) => d.status,
       header: ({ column }) => <DataTableColumnHeader column={column} title="Drive status" />,
@@ -270,19 +303,50 @@ export default function PlacementDrivesPage() {
       enableSorting: false,
       enableHiding: false,
       meta: { align: "right" },
-      cell: ({ row }) => (
-        <div className="flex justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              setResults({ driveId: row.original.drive_id, label: driveLabel(row.original) })
-            }
-          >
-            <ListChecks /> View rounds
-          </Button>
-        </div>
-      ),
+      cell: ({ row }) => {
+        const d = row.original;
+        // Withdrawal is a self-service action available only while the drive is
+        // shortlisting (before company screening) and within 2 days of being
+        // shortlisted; it's reversible in that window.
+        const canWithdrawToggle =
+          d.drive_state === "SHORTLISTING" &&
+          d.my_status === "SHORTLISTED" &&
+          withinWithdrawalWindow(d.my_shortlisted_at);
+        const withdrawn = d.my_is_active === false;
+        return (
+          <div className="flex justify-end gap-2">
+            {canWithdrawToggle ? (
+              <ConfirmDialog
+                trigger={
+                  <Button variant="outline" size="sm" disabled={withdraw.isPending}>
+                    {withdrawn ? "Re-join" : "Withdraw"}
+                  </Button>
+                }
+                title={withdrawn ? "Re-join this drive?" : "Withdraw from this drive?"}
+                description={
+                  withdrawn
+                    ? "You'll be added back to the shortlist for this drive."
+                    : "You'll be removed from this drive's shortlist and won't be forwarded to the company. You can re-join until the 2-day window closes or screening starts."
+                }
+                confirmLabel={withdrawn ? "Re-join" : "Withdraw"}
+                destructive={!withdrawn}
+                onConfirm={() =>
+                  withdraw.mutate({ driveId: d.drive_id, withdraw: !withdrawn })
+                }
+              />
+            ) : (
+              withdrawn && <StatusBadge tone="red">Withdrawn</StatusBadge>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setResults({ driveId: d.drive_id, label: driveLabel(d) })}
+            >
+              <ListChecks /> View rounds
+            </Button>
+          </div>
+        );
+      },
     },
   ];
 

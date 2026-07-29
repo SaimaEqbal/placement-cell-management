@@ -118,6 +118,15 @@ export interface EligibleStudent {
 }
 
 /**
+ * A student already saved in a drive's shortlist (GET /drive/:id/eligible also
+ * returns this). Same fields as an eligible student, plus whether they're still
+ * active (false = withdrawn). Used to seed the review dialog's checkboxes.
+ */
+export interface ShortlistEntry extends EligibleStudent {
+  is_active: boolean;
+}
+
+/**
  * Current state of a confirmed student inside a drive (`drive_students.status`,
  * server/src/migrations/025_drive_students_status.sql - uppercase vocabulary).
  */
@@ -140,6 +149,13 @@ export interface DriveStudent {
   status: DriveStudentStatus;
   attendance_mark: AttendanceMark;
   remarks: string | null;
+  /** Final offer captured at placement (migration 043); null until PLACED. */
+  final_role?: string | null;
+  final_package?: string | number | null;
+  /** Whether the student accepted this offer; only meaningful once PLACED. */
+  offer_taken?: boolean;
+  /** Whether the student is still in the shortlist (migration 044); false = withdrawn. */
+  is_active?: boolean;
   id: string | number;
   roll_no: string;
   name: string;
@@ -155,6 +171,13 @@ export interface DriveStudent {
 export interface MyDrive extends DriveRecord {
   my_status: DriveStudentStatus;
   my_current_round: number;
+  /** The student's own final offer once placed (migration 043); null otherwise. */
+  my_final_role?: string | null;
+  my_final_package?: string | number | null;
+  /** Whether the student is still in the shortlist (migration 044); false = withdrawn. */
+  my_is_active?: boolean;
+  /** When the student was shortlisted (drive_students.created_at); basis of the 2-day withdrawal window. */
+  my_shortlisted_at?: string;
 }
 
 /** History stage/result of one of the student's own round events. */
@@ -216,6 +239,13 @@ export interface DriveWithEligible {
   message?: string;
   drive: DriveRecord;
   eligibleStudents: EligibleStudent[];
+  /**
+   * The drive's saved shortlist, so the review dialog can seed its checkboxes.
+   * Empty/absent = first build (default all-selected); non-empty = edit (seed from
+   * saved: selected stay checked, withdrawn shown locked). Present on
+   * GET /drive/:id/eligible and POST /drive/:id/clear-shortlist.
+   */
+  shortlist?: ShortlistEntry[];
   /** Present (Phase 2) when the drive was created with an announcement. */
   announcement?: CompanyPostRecord | null;
 }
@@ -253,13 +283,23 @@ export function createDrive(payload: CreateDrivePayload) {
 }
 
 /**
- * Purpose: PUT /drive/:driveId - edit a drive (Admin only). The backend clears
- * the existing shortlist and returns a fresh eligible list, so the admin must
- * review and confirm again after any change to the eligibility criteria.
+ * Purpose: PUT /drive/:driveId - edit a drive (Admin only). Editing drive details
+ * no longer touches the saved shortlist; use clearShortlist to wipe + recompute.
  */
 export function updateDrive(id: number | string, payload: UpdateDrivePayload) {
   return axiosInstance
-    .put<DriveWithEligible>(`/drive/${id}`, payload)
+    .put<{ message: string; drive: DriveRecord }>(`/drive/${id}`, payload)
+    .then((res) => res.data);
+}
+
+/**
+ * Purpose: POST /drive/:driveId/clear-shortlist - explicitly wipe a drive's
+ * shortlist and recompute eligibility (Admin only). Returns a fresh eligible list
+ * (and an empty shortlist) to rebuild the review dialog.
+ */
+export function clearShortlist(id: number | string) {
+  return axiosInstance
+    .post<DriveWithEligible>(`/drive/${id}/clear-shortlist`)
     .then((res) => res.data);
 }
 
@@ -305,6 +345,19 @@ export function getMyDriveResults(driveId: number | string) {
     .then((res) => res.data);
 }
 
+/**
+ * Purpose: PATCH /drive/:driveId/withdraw - withdraw from (withdraw: true) or
+ * re-join (withdraw: false) a drive's shortlist. Self-service; the backend enforces
+ * the SHORTLISTING state and the 2-day window.
+ */
+export function setWithdrawal(driveId: number | string, withdraw: boolean) {
+  return axiosInstance
+    .patch<{ message: string; is_active: boolean }>(`/drive/${driveId}/withdraw`, {
+      withdraw,
+    })
+    .then((res) => res.data);
+}
+
 // --- Admin round-workflow transitions & actions ---------------------------
 
 /** Purpose: POST /drive/:driveId/start-round-0 - lock the drive and send the shortlist to the company. */
@@ -322,6 +375,17 @@ export function startRoundZero(driveId: number | string) {
 export interface RoundDecision {
   driveStudentId: number;
   reason: string;
+}
+
+/**
+ * One placed student's final offer, sent at drive completion. `final_role` /
+ * `final_package` override the drive's advertised role/package; omit either to
+ * let the backend fall back to the drive value.
+ */
+export interface PlacementDecision {
+  driveStudentId: number;
+  final_role?: string;
+  final_package?: number;
 }
 
 /**
@@ -359,14 +423,34 @@ export function advanceRound(
 
 /**
  * Purpose: POST /drive/:driveId/complete - resolve the round then place all
- * cleared students and finish the drive. `rejected` are the unchecked candidates.
+ * cleared students and finish the drive. `rejected` are the unchecked candidates;
+ * `placed` carries each cleared student's final role/package (defaulting to the
+ * drive's advertised values server-side when omitted).
  */
 export function completeDrive(
   driveId: number | string,
   rejected: RoundDecision[] = [],
+  placed: PlacementDecision[] = [],
 ) {
   return axiosInstance
-    .post<DriveTransitionResult>(`/drive/${driveId}/complete`, { rejected })
+    .post<DriveTransitionResult>(`/drive/${driveId}/complete`, { rejected, placed })
+    .then((res) => res.data);
+}
+
+/**
+ * Purpose: PATCH /drive/:driveId/students/:driveStudentId/offer - toggle whether a
+ * placed student accepted their offer (admin only, informational).
+ */
+export function setOfferTaken(
+  driveId: number | string,
+  driveStudentId: number | string,
+  taken: boolean,
+) {
+  return axiosInstance
+    .patch<{ message: string; driveStudent: DriveStudent }>(
+      `/drive/${driveId}/students/${driveStudentId}/offer`,
+      { taken },
+    )
     .then((res) => res.data);
 }
 

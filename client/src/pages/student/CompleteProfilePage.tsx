@@ -23,6 +23,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -72,12 +80,26 @@ const SPI_KEYS = [
   "sem5_spi", "sem6_spi", "sem7_spi", "sem8_spi",
 ] as const;
 
+/** All wizard field values, snapshotted for the localStorage draft. */
+interface DraftState {
+  name: string; rollNo: string; email: string; phone: string; dateOfBirth: string;
+  gender: string; region: string; religion: string;
+  department: string; branch: string; graduationYear: string; semester: string;
+  tenthPercentage: string; twelfthPercentage: string; spi: string[]; backlogs: BacklogRow[];
+  resumeUrl: string; tenthUrl: string; twelfthUrl: string; lastSemUrl: string;
+  paymentReceiptUrl: string; paymentId: string;
+}
+
 /**
  * Purpose: /Student/complete-profile - a 4-part wizard (Personal → Course →
- * Academic → Documents). Each step is committed to the DB on "Continue" via the
- * self-scoped partial upsert (PUT /students/me), so a student can leave and come
- * back without re-entering completed parts. CGPA is derived server-side; the
- * student never types it. The row is created on the first save.
+ * Academic → Documents). Profile creation is ATOMIC: nothing is written to the DB
+ * until the final submit, which sends the whole profile in one request (the
+ * backend inserts it in a single transaction), so abandoning the wizard leaves no
+ * partial record. In-progress input is kept in localStorage (create mode) so a
+ * refresh doesn't lose work. When editing an existing profile, historical academic
+ * data (entered SPIs, backlogs, 10th/12th %) is locked - only a newly-earned
+ * semester's SPI stays editable; admins correct locked data via the admin edit
+ * page. CGPA is derived server-side.
  */
 export default function CompleteProfilePage() {
   const navigate = useNavigate();
@@ -153,6 +175,86 @@ export default function CompleteProfilePage() {
 
   const sem = Number(semester);
   const computedCgpa = computeCgpa(spi, sem);
+
+  // Editing an existing profile locks historical academic data (server-enforced in
+  // upsertMyProfile; this just mirrors it in the UI). Percentages + backlogs lock
+  // once the row exists; an SPI locks once it has a stored value. A still-null SPI
+  // slot for a completed semester stays editable (the new-semester update).
+  const isEditing = Boolean(profile);
+  const academicLocked = isEditing;
+  const spiLocked = (index: number): boolean =>
+    isEditing && profile?.[SPI_KEYS[index]] != null;
+
+  // --- localStorage draft (create mode only) -------------------------------
+  // Keep in-progress input in the browser so a refresh/return re-fills the form,
+  // WITHOUT ever writing a partial record to the DB. Cleared on successful submit.
+  const draftKey = `profile-draft:${user?.id ?? "anon"}`;
+  const [hydrated, setHydrated] = useState(false);
+
+  // Whether to show the "have your documents ready" dialog (create mode only).
+  const [readyOpen, setReadyOpen] = useState(false);
+
+  useEffect(() => {
+    if (isLoading || hydrated) return;
+    if (!profile) {
+      // Create mode: restore any saved draft, then prompt readiness.
+      try {
+        const raw = localStorage.getItem(draftKey);
+        if (raw) {
+          const d = JSON.parse(raw) as Partial<DraftState>;
+          if (d.name != null) setName(d.name);
+          if (d.rollNo != null) setRollNo(d.rollNo);
+          if (d.email) setEmail(d.email);
+          if (d.phone != null) setPhone(d.phone);
+          if (d.dateOfBirth != null) setDateOfBirth(d.dateOfBirth);
+          if (d.gender != null) setGender(d.gender);
+          if (d.region != null) setRegion(d.region);
+          if (d.religion != null) setReligion(d.religion);
+          if (d.department != null) setDepartment(d.department);
+          if (d.branch != null) setBranch(d.branch);
+          if (d.graduationYear != null) setGraduationYear(d.graduationYear);
+          if (d.semester != null) setSemester(d.semester);
+          if (d.tenthPercentage != null) setTenthPercentage(d.tenthPercentage);
+          if (d.twelfthPercentage != null) setTwelfthPercentage(d.twelfthPercentage);
+          if (Array.isArray(d.spi)) setSpi(d.spi);
+          if (Array.isArray(d.backlogs)) setBacklogs(d.backlogs);
+          if (d.resumeUrl != null) setResumeUrl(d.resumeUrl);
+          if (d.tenthUrl != null) setTenthUrl(d.tenthUrl);
+          if (d.twelfthUrl != null) setTwelfthUrl(d.twelfthUrl);
+          if (d.lastSemUrl != null) setLastSemUrl(d.lastSemUrl);
+          if (d.paymentReceiptUrl != null) setPaymentReceiptUrl(d.paymentReceiptUrl);
+          if (d.paymentId != null) setPaymentId(d.paymentId);
+        }
+      } catch {
+        /* ignore a corrupt draft */
+      }
+      setReadyOpen(true);
+    }
+    setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, profile]);
+
+  // Persist the draft on every change (create mode only, after hydration).
+  useEffect(() => {
+    if (!hydrated || isEditing) return;
+    const draft: DraftState = {
+      name, rollNo, email, phone, dateOfBirth, gender, region, religion,
+      department, branch, graduationYear, semester,
+      tenthPercentage, twelfthPercentage, spi, backlogs,
+      resumeUrl, tenthUrl, twelfthUrl, lastSemUrl, paymentReceiptUrl, paymentId,
+    };
+    try {
+      localStorage.setItem(draftKey, JSON.stringify(draft));
+    } catch {
+      /* storage full / unavailable - ignore */
+    }
+  }, [
+    hydrated, isEditing, draftKey,
+    name, rollNo, email, phone, dateOfBirth, gender, region, religion,
+    department, branch, graduationYear, semester,
+    tenthPercentage, twelfthPercentage, spi, backlogs,
+    resumeUrl, tenthUrl, twelfthUrl, lastSemUrl, paymentReceiptUrl, paymentId,
+  ]);
 
   // --- Per-step validation (returns the first error, or undefined) -----------
   function validatePersonal(): string | undefined {
@@ -236,16 +338,47 @@ export default function CompleteProfilePage() {
   }
 
   function handleContinue() {
+    // Steps 0..N-2: validate the current step and advance. NOTHING is persisted
+    // until the final submit, so an abandoned wizard leaves no partial record.
     const err = validators[step]();
     if (err) {
       setFormError(err);
       return;
     }
     setFormError(undefined);
-    save.mutate(payloadFor(step), {
+    if (step < STEPS.length - 1) {
+      setStep(step + 1);
+      return;
+    }
+    handleSubmit();
+  }
+
+  function handleSubmit() {
+    // Re-validate every step, then send the whole profile in ONE request; the
+    // backend writes it in a single transaction (all-or-nothing).
+    for (let i = 0; i < validators.length; i++) {
+      const err = validators[i]();
+      if (err) {
+        setStep(i);
+        setFormError(err);
+        return;
+      }
+    }
+    setFormError(undefined);
+    const combined: UpdateStudentPayload = {
+      ...payloadFor(0),
+      ...payloadFor(1),
+      ...payloadFor(2),
+      ...payloadFor(3),
+    };
+    save.mutate(combined, {
       onSuccess: () => {
-        if (step < STEPS.length - 1) setStep(step + 1);
-        else navigate(paths.studentProfile);
+        try {
+          localStorage.removeItem(draftKey);
+        } catch {
+          /* ignore */
+        }
+        navigate(paths.studentProfile);
       },
     });
   }
@@ -288,9 +421,39 @@ export default function CompleteProfilePage() {
 
   return (
     <>
+      {/* Create-mode readiness prompt: profile creation is one atomic submit, so the
+          student should have every document/detail ready before starting. */}
+      <Dialog open={readyOpen} onOpenChange={setReadyOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Have everything ready before you start</DialogTitle>
+            <DialogDescription>
+              Your profile is saved in one go at the end — nothing is stored until you
+              submit. Keep these ready so you can finish in one sitting:
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+            <li>Resume (hosted URL, e.g. Google Drive)</li>
+            <li>10th & 12th marksheets (URLs) and your 10th/12th percentages</li>
+            <li>Latest semester marksheet (URL)</li>
+            <li>SPI for every completed semester</li>
+            <li>Placement-fee payment receipt (URL) and payment ID</li>
+          </ul>
+          <DialogFooter>
+            <Button type="button" onClick={() => setReadyOpen(false)}>
+              I'm ready
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Topbar
         title={profile ? "Edit your profile" : "Complete your profile"}
-        subtitle="Fill in each part — every step is saved as you continue."
+        subtitle={
+          profile
+            ? "Update your details and submit to save."
+            : "Fill in every part and submit at the end — nothing is saved until you finish."
+        }
       />
       <PageContainer>
         {/* Stepper */}
@@ -421,11 +584,11 @@ export default function CompleteProfilePage() {
           {step === 2 && (
             <FormSection icon={<ClipboardList />} title="Academic information" subtitle="SPIs, percentages, and backlogs. CGPA is calculated for you.">
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="10th percentage" htmlFor="tenth">
-                  <Input id="tenth" type="number" step="0.01" min="0" max="100" value={tenthPercentage} onChange={(e) => setTenthPercentage(e.target.value)} />
+                <Field label="10th percentage" htmlFor="tenth" hint={academicLocked ? "Locked — contact the placement cell to correct." : undefined}>
+                  <Input id="tenth" type="number" step="0.01" min="0" max="100" value={tenthPercentage} readOnly={academicLocked} className={academicLocked ? "bg-muted text-muted-foreground" : undefined} onChange={(e) => setTenthPercentage(e.target.value)} />
                 </Field>
-                <Field label="12th percentage" htmlFor="twelfth">
-                  <Input id="twelfth" type="number" step="0.01" min="0" max="100" value={twelfthPercentage} onChange={(e) => setTwelfthPercentage(e.target.value)} />
+                <Field label="12th percentage" htmlFor="twelfth" hint={academicLocked ? "Locked — contact the placement cell to correct." : undefined}>
+                  <Input id="twelfth" type="number" step="0.01" min="0" max="100" value={twelfthPercentage} readOnly={academicLocked} className={academicLocked ? "bg-muted text-muted-foreground" : undefined} onChange={(e) => setTwelfthPercentage(e.target.value)} />
                 </Field>
                 <Field label="CGPA (auto-calculated)" htmlFor="cgpa" hint="Weighted average of your semester SPIs — not editable.">
                   <Input id="cgpa" readOnly value={computedCgpa !== null ? computedCgpa.toFixed(2) : "—"} className="bg-muted text-muted-foreground" />
@@ -440,9 +603,25 @@ export default function CompleteProfilePage() {
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {spi.map((value, index) => {
                       if (!sem || index + 1 >= sem) return null;
+                      const locked = spiLocked(index);
                       return (
-                        <Field key={index} label={`Semester ${index + 1} SPI`} htmlFor={`spi-${index}`}>
-                          <Input id={`spi-${index}`} type="number" step="0.01" min="0" max="10" value={value} onChange={(e) => setSpi((prev) => prev.map((v, i) => (i === index ? e.target.value : v)))} />
+                        <Field
+                          key={index}
+                          label={`Semester ${index + 1} SPI`}
+                          htmlFor={`spi-${index}`}
+                          hint={locked ? "Locked — contact the placement cell to correct." : undefined}
+                        >
+                          <Input
+                            id={`spi-${index}`}
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="10"
+                            value={value}
+                            readOnly={locked}
+                            className={locked ? "bg-muted text-muted-foreground" : undefined}
+                            onChange={(e) => setSpi((prev) => prev.map((v, i) => (i === index ? e.target.value : v)))}
+                          />
                         </Field>
                       );
                     })}
@@ -452,6 +631,13 @@ export default function CompleteProfilePage() {
 
               <div className="mt-6 flex flex-col gap-3">
                 <div className="text-sm font-medium">Backlogs</div>
+                {academicLocked ? (
+                  <div className="rounded-lg border bg-muted p-3 text-sm text-muted-foreground">
+                    Active: {profile?.active_backlogs ?? 0} · Cleared: {profile?.passive_backlogs ?? 0}.
+                    Backlog counts are locked — contact the placement cell to correct them.
+                  </div>
+                ) : (
+                <>
                 {backlogs.length === 0 && (
                   <p className="text-sm text-muted-foreground">No backlogs added. Add a row for each active or cleared backlog.</p>
                 )}
@@ -476,6 +662,8 @@ export default function CompleteProfilePage() {
                     <Plus /> Add backlog row
                   </Button>
                 </div>
+                </>
+                )}
               </div>
             </FormSection>
           )}
@@ -524,7 +712,7 @@ export default function CompleteProfilePage() {
             </Button>
             <Button type="submit" size="lg" disabled={save.isPending}>
               {isLast ? <CheckCircle2 /> : <ArrowRight />}
-              {save.isPending ? "Saving..." : isLast ? "Save & finish" : "Save & continue"}
+              {save.isPending ? "Submitting..." : isLast ? "Submit profile" : "Continue"}
             </Button>
           </div>
         </form>
