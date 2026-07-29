@@ -154,6 +154,9 @@ export default function SidebarNav({
         onClick={() => {
           onNavigate?.();
           logout();
+          // ProtectedRoute is currently stubbed for local previewing, so clearing
+          // the session alone won't redirect. Send the user to /login explicitly.
+          navigate(paths.login, { replace: true });
         }}
         className="flex items-center gap-3 rounded-md px-3 py-2 cursor-pointer text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
