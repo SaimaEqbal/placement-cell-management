@@ -81,3 +81,10 @@ export function getAllAdmins() {
     .get<AdminAccountRow[]>("/auth/admins")
     .then((res) => res.data);
 }
+
+/** Purpose: DELETE /auth/me - the signed-in admin/TPC deletes their own account. */
+export function deleteMyAccount() {
+  return axiosInstance
+    .delete<MessageResponse>("/auth/me")
+    .then((res) => res.data);
+}

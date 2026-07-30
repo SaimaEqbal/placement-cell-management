@@ -52,6 +52,7 @@ import {
   validateDepartment,
   validateFullName,
   validateBatch,
+  validateOptionalUrl,
   validatePercentage,
   validatePhone,
   validateRequired,
@@ -288,8 +289,17 @@ export default function CompleteProfilePage() {
     }
     return checks.find(Boolean);
   }
+  function validateDocuments(): string | undefined {
+    return [
+      validateOptionalUrl(resumeUrl, "Resume URL"),
+      validateOptionalUrl(tenthUrl, "10th marksheet URL"),
+      validateOptionalUrl(twelfthUrl, "12th marksheet URL"),
+      validateOptionalUrl(lastSemUrl, "Latest semester marksheet URL"),
+      validateOptionalUrl(paymentReceiptUrl, "Payment receipt URL"),
+    ].find(Boolean);
+  }
 
-  const validators = [validatePersonal, validateCourse, validateAcademic, () => undefined];
+  const validators = [validatePersonal, validateCourse, validateAcademic, validateDocuments];
 
   // --- Per-step payloads (only that step's fields) ---------------------------
   function payloadFor(index: number): UpdateStudentPayload {

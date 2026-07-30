@@ -645,3 +645,29 @@ export const getAllAdmins = async (req, res) => {
     return res.status(500).json({ message: "Failed to fetch admins" });
   }
 };
+
+// Self-service account deletion for staff (admin & tpc only). Deletes the caller's
+// own users row; any linked tpc profile row is removed automatically via the
+// tpc.user_id -> users(id) ON DELETE CASCADE foreign key. Scoped by role so a
+// student/spc can never delete their account through this route.
+export const deleteMyAccount = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `DELETE FROM users
+        WHERE id = $1 AND role IN ('admin', 'tpc')
+        RETURNING id`,
+      [req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(403).json({
+        message: "Only admin and TPC accounts can be deleted here.",
+      });
+    }
+
+    return res.status(200).json({ message: "Your account has been deleted." });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to delete account" });
+  }
+};

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Bell, LogOut, Menu, UserRound } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { Bell, LogOut, Menu, Trash2, UserRound } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -17,9 +18,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import type { ApiError } from "../api/apiError";
 import { useAuth } from "../context/AuthContext";
 import { useNotifications } from "../hooks/useNotifications";
-import { accountPathForRole, notificationsPathForRole } from "../routes/paths";
+import { deleteMyAccount } from "../services/authService";
+import { accountPathForRole, notificationsPathForRole, paths } from "../routes/paths";
 import { ROLE_LABEL } from "../lib/roleLabels";
 import SidebarNav from "./dashboard/SidebarNav";
 
@@ -41,6 +54,19 @@ export default function Topbar({
   const { role, user, logout } = useAuth();
   const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Self-service account deletion (admin & TPC only). Gated by a type-DELETE-to-
+  // confirm dialog; on success the session is cleared and we return to /login.
+  const canDeleteAccount = role === "admin" || role === "tpc";
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const deleteAccount = useMutation<{ message: string }, ApiError, void>({
+    mutationFn: deleteMyAccount,
+    onSuccess: () => {
+      logout();
+      navigate(paths.login, { replace: true });
+    },
+  });
   const displayInitials = initials ?? (role ? role.slice(0, 2).toUpperCase() : "??");
   const accountPath = accountPathForRole(role);
   const roleLabel = role ? ROLE_LABEL[role] : "Account";
@@ -136,9 +162,67 @@ export default function Topbar({
               <LogOut />
               Log out
             </DropdownMenuItem>
+            {canDeleteAccount && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setDeleteOpen(true)}
+                  className="text-destructive focus:text-destructive cursor-pointer"
+                >
+                  <Trash2 />
+                  Delete account
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {/* Destructive self-delete, gated by typing DELETE. */}
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          setDeleteOpen(open);
+          if (!open) {
+            setConfirmText("");
+            deleteAccount.reset();
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete your account?</DialogTitle>
+            <DialogDescription>
+              This permanently deletes your {roleLabel} account and cannot be undone.
+              Type <span className="font-semibold">DELETE</span> to confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder="Type DELETE"
+            autoComplete="off"
+            aria-label="Type DELETE to confirm"
+          />
+          {deleteAccount.isError && (
+            <p className="text-sm text-destructive">
+              {deleteAccount.error?.message ?? "Could not delete your account."}
+            </p>
+          )}
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={confirmText !== "DELETE" || deleteAccount.isPending}
+              onClick={() => deleteAccount.mutate()}
+            >
+              {deleteAccount.isPending ? "Deleting..." : "Delete account"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }

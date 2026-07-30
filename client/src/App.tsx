@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 
+import type { ApiError } from "./api/apiError";
 import { AuthProvider } from "./context/AuthContext";
 import AppRoutes from "./routes/AppRoutes";
 
@@ -10,6 +11,14 @@ const queryClient = new QueryClient({
     queries: {
       refetchOnWindowFocus: false, // Do not refetch data if tabs switched
       staleTime: 30_000, // Data considered fresh for 30s after fetching
+      // Never retry a client error (4xx) - e.g. a 404 from a bad :id in the URL
+      // would otherwise be re-fetched 3 more times. Only transient 5xx/network
+      // failures are worth retrying.
+      retry: (failureCount, error) => {
+        const status = (error as unknown as ApiError)?.status;
+        if (status != null && status >= 400 && status < 500) return false;
+        return failureCount < 3;
+      },
     },
   },
 });
