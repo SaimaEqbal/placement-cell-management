@@ -32,7 +32,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useStudents } from "../../hooks/useStudents";
+import { useClearDebar, useStudents } from "../../hooks/useStudents";
+import { useSetStudentOfferTaken } from "../../hooks/useDrives";
 import { DEPARTMENT_BRANCHES, DEPARTMENTS } from "../../lib/validation";
 import { paths } from "../../routes/paths";
 import type { StudentRecord } from "../../services/studentService";
@@ -90,6 +91,8 @@ export default function AdminStudentsPage() {
   const branchOptions = department ? DEPARTMENT_BRANCHES[department] ?? [] : [];
 
   const stats = useMemo(() => computeStudentStats(students), [students]);
+  const setStudentOffer = useSetStudentOfferTaken();
+  const clearDebarMutation = useClearDebar();
 
   const filtered = useMemo(() => {
     if (!students) return [];
@@ -140,6 +143,81 @@ export default function AdminStudentsPage() {
               </span>
             ),
           },
+          {
+            id: "offer",
+            accessorFn: (s) => s.placement?.final_package ?? "",
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title="Final offer" />
+            ),
+            enableSorting: false,
+            meta: {
+              label: "Final offer",
+              exportValue: (s) =>
+                s.placement
+                  ? `${s.placement.final_role ?? "—"}${
+                      s.placement.final_package != null ? ` / ${s.placement.final_package} LPA` : ""
+                    }${s.placement.offer_taken ? "" : " (not taken)"}`
+                  : "",
+            },
+            cell: ({ row }) => {
+              const p = row.original.placement;
+              if (!p) return <span className="text-muted-foreground">—</span>;
+              return (
+                <div className="flex flex-col gap-1">
+                  <span className="truncate text-xs font-medium">
+                    {p.final_role || "—"}
+                    {p.final_package != null && ` · ${p.final_package} LPA`}
+                  </span>
+                  <label className="flex cursor-pointer items-center gap-2 text-xs">
+                    <Checkbox
+                      checked={p.offer_taken}
+                      disabled={setStudentOffer.isPending}
+                      onCheckedChange={(checked) =>
+                        setStudentOffer.mutate({
+                          driveId: p.drive_id,
+                          driveStudentId: p.drive_student_id,
+                          taken: checked === true,
+                        })
+                      }
+                    />
+                    {p.offer_taken ? "Offer taken" : "Not taken"}
+                  </label>
+                </div>
+              );
+            },
+          },
+          {
+            id: "debar",
+            accessorFn: (s) => s.debar_remaining_drives ?? 0,
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title="Debar" />
+            ),
+            meta: {
+              label: "Debar (eligible drives skipped)",
+              exportValue: (s) =>
+                (s.debar_remaining_drives ?? 0) > 0
+                  ? `Debarred (${s.debar_remaining_drives})`
+                  : "",
+            },
+            cell: ({ row }) => {
+              const n = row.original.debar_remaining_drives ?? 0;
+              if (n <= 0) return <span className="text-muted-foreground">—</span>;
+              return (
+                <div className="flex flex-col items-start gap-1">
+                  <StatusBadge tone="amber">Debarred ({n})</StatusBadge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    disabled={clearDebarMutation.isPending}
+                    onClick={() => clearDebarMutation.mutate(row.original.id)}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              );
+            },
+          },
         ],
         status: (s) => (
           <StatusBadge
@@ -153,17 +231,22 @@ export default function AdminStudentsPage() {
           </StatusBadge>
         ),
         action: (s) => (
-          <Button asChild variant="outline" size="sm">
-            <Link
-              to={`${paths.adminStudents}/${s.id}`}
-              state={{ ids, backPath: paths.adminStudents }}
-            >
-              View <ArrowRight />
-            </Link>
-          </Button>
+          <div className="flex justify-end gap-2">
+            <Button asChild variant="ghost" size="sm">
+              <Link to={`${paths.adminStudents}/${s.id}/edit`}>Edit</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link
+                to={`${paths.adminStudents}/${s.id}`}
+                state={{ ids, backPath: paths.adminStudents }}
+              >
+                View <ArrowRight />
+              </Link>
+            </Button>
+          </div>
         ),
       }),
-    [ids],
+    [ids, setStudentOffer, clearDebarMutation],
   );
 
   return (

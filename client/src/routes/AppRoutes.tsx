@@ -36,6 +36,7 @@ import CompaniesPage from "../pages/admin/CompaniesPage";
 import DrivesPage from "../pages/admin/DrivesPage";
 import DriveStudentsPage from "../pages/admin/DriveStudentsPage";
 import AdminStudentsPage from "../pages/admin/AdminStudentsPage";
+import AdminStudentEditPage from "../pages/admin/AdminStudentEditPage";
 import InvitationsPage from "../pages/admin/InvitationsPage";
 import CompanyPostsPage from "../pages/admin/CompanyPostsPage";
 import AdminSpcsPage from "../pages/admin/AdminSpcsPage";
@@ -178,6 +179,10 @@ export default function AppRoutes() {
           <Route
             path={`${paths.adminStudents}/:studentId`}
             element={<StudentVerificationDetailPage mode="view" />}
+          />
+          <Route
+            path={`${paths.adminStudents}/:studentId/edit`}
+            element={<AdminStudentEditPage />}
           />
           <Route path={paths.adminInvitations} element={<InvitationsPage />} />
           <Route path={paths.adminPosts} element={<CompanyPostsPage />} />

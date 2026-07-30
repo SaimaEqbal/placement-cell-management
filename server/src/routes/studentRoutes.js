@@ -5,6 +5,7 @@ import {
   getStudentById,
   updateStudent,
   deleteStudent,
+  clearDebar,
   getMyProfile,
   upsertMyProfile,
 } from "../controllers/studentController.js";
@@ -33,5 +34,7 @@ router.get("/:id", auth, requireAdminTPCSPC, getStudentById);
 // Staff edit only; students edit their own profile via PUT /me.
 router.put("/:id", auth, requireAdminTPC, validateUpdateStudent, updateStudent);
 router.delete("/:id", auth, requireAdminTPC, deleteStudent);
+// Clear an absentee debar (staff override).
+router.patch("/:id/debar", auth, requireAdminTPC, clearDebar);
 
 export default router;

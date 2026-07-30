@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
   ExternalLink,
   FileText,
+  Pencil,
   ShieldCheck,
   Trash2,
   UserMinus,
@@ -39,6 +40,7 @@ import {
 import { formatCgpa, formatDate, initialsFromName } from "../../lib/format";
 import { batchLabelForYear } from "../../lib/validation";
 import { reviewStatusLabel, reviewStatusTone } from "../../lib/reviewStatus";
+import { paths } from "../../routes/paths";
 
 /**
  * Purpose: /SPC/verification/:studentId, /TPC/verification/:studentId and
@@ -395,12 +397,17 @@ export default function StudentVerificationDetailPage({
             </Card>
           ) : mode === "view" ? (
             <Card>
-              <CardContent className="flex flex-col gap-3 p-4">
+              <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                 {removeStudent.error && (
                   <p className="text-sm text-destructive">
                     {removeStudent.error.message}
                   </p>
                 )}
+                <Button asChild variant="outline" type="button" disabled={busy}>
+                  <Link to={`${paths.adminStudents}/${studentId}/edit`}>
+                    <Pencil /> Edit student
+                  </Link>
+                </Button>
                 <ConfirmDialog
                   trigger={
                     <Button variant="destructive" type="button" disabled={busy}>

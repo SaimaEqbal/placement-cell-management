@@ -13,9 +13,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState, LoadingState } from "@/components/dashboard/states";
+import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { useConfirmStudents } from "../../hooks/useDrives";
 import { formatCgpa, initialsFromName } from "../../lib/format";
-import type { EligibleStudent } from "../../services/driveService";
+import type { EligibleStudent, ShortlistEntry } from "../../services/driveService";
 
 /**
  * Purpose: the admin review step between creating/editing a drive and confirming
@@ -29,6 +30,7 @@ export function ShortlistReviewDialog({
   driveId,
   driveLabel,
   eligibleStudents,
+  shortlist,
   note,
   loading = false,
   onBack,
@@ -39,6 +41,12 @@ export function ShortlistReviewDialog({
   driveId: number | string | undefined;
   driveLabel?: string;
   eligibleStudents: EligibleStudent[];
+  /**
+   * The drive's saved shortlist. Empty/absent = first build (every eligible student
+   * starts selected). Non-empty = edit: checkboxes are seeded from the saved
+   * shortlist (selected stay checked, withdrawn shown locked, others unchecked).
+   */
+  shortlist?: ShortlistEntry[];
   /** Optional banner, e.g. to explain a previous shortlist was cleared on edit. */
   note?: string;
   /** Show a loading state while the eligible list is being (re)generated. */
@@ -49,18 +57,58 @@ export function ShortlistReviewDialog({
 }) {
   const confirm = useConfirmStudents();
 
+  /** True once the drive has a saved shortlist - i.e. this is an edit, not a first build. */
+  const isEdit = (shortlist?.length ?? 0) > 0;
+
+  /** Ids of withdrawn students (locked, shown but not selectable). */
+  const withdrawnIds = useMemo(
+    () => new Set((shortlist ?? []).filter((s) => !s.is_active).map((s) => String(s.id))),
+    [shortlist],
+  );
+
+  /**
+   * The display list = the eligible universe plus any saved shortlist students no
+   * longer eligible (so previously-selected/withdrawn students never disappear),
+   * de-duplicated by id.
+   */
+  const displayed = useMemo(() => {
+    const map = new Map<string, EligibleStudent & { is_active?: boolean }>();
+    for (const s of eligibleStudents) map.set(String(s.id), s);
+    for (const s of shortlist ?? []) if (!map.has(String(s.id))) map.set(String(s.id), s);
+    return Array.from(map.values());
+  }, [eligibleStudents, shortlist]);
+
+  /** Students the admin can actually toggle (everyone except the withdrawn). */
+  const selectable = useMemo(
+    () => displayed.filter((s) => !withdrawnIds.has(String(s.id))),
+    [displayed, withdrawnIds],
+  );
+
   /** Selected student ids as strings (students.id arrives as a bigint string). */
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  /** Every eligible student starts selected; reset whenever the list changes or the dialog reopens. */
+  /**
+   * Seed the selection when the dialog opens or its data changes: a first build
+   * selects every eligible student; an edit seeds from the saved shortlist
+   * (active-selected checked, everyone else unchecked). Withdrawn are never selected.
+   */
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    if (isEdit) {
+      setSelected(
+        new Set(
+          (shortlist ?? [])
+            .filter((s) => s.is_active)
+            .map((s) => String(s.id)),
+        ),
+      );
+    } else {
       setSelected(new Set(eligibleStudents.map((s) => String(s.id))));
     }
-  }, [open, eligibleStudents]);
+  }, [open, eligibleStudents, shortlist, isEdit]);
 
   const allSelected =
-    eligibleStudents.length > 0 && selected.size === eligibleStudents.length;
+    selectable.length > 0 && selected.size === selectable.length;
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -73,9 +121,7 @@ export function ShortlistReviewDialog({
 
   function toggleAll() {
     setSelected(
-      allSelected
-        ? new Set()
-        : new Set(eligibleStudents.map((s) => String(s.id))),
+      allSelected ? new Set() : new Set(selectable.map((s) => String(s.id))),
     );
   }
 
@@ -114,7 +160,7 @@ export function ShortlistReviewDialog({
 
         {loading ? (
           <LoadingState label="Generating eligible list..." />
-        ) : eligibleStudents.length === 0 ? (
+        ) : displayed.length === 0 ? (
           <EmptyState
             icon={<UserX />}
             title="No eligible students"
@@ -124,7 +170,7 @@ export function ShortlistReviewDialog({
           <>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">
-                {selected.size} of {eligibleStudents.length} selected
+                {selected.size} of {selectable.length} selected
               </span>
               <Button
                 type="button"
@@ -137,17 +183,23 @@ export function ShortlistReviewDialog({
             </div>
 
             <div className="-mx-1 flex-1 space-y-2 overflow-y-auto px-1">
-              {eligibleStudents.map((student) => {
+              {displayed.map((student) => {
                 const id = String(student.id);
+                const withdrawn = withdrawnIds.has(id);
                 const checked = selected.has(id);
                 return (
                   <label
                     key={id}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 hover:bg-muted/50"
+                    className={
+                      withdrawn
+                        ? "flex items-center gap-3 rounded-lg border border-dashed p-3 opacity-60"
+                        : "flex cursor-pointer items-center gap-3 rounded-lg border p-3 hover:bg-muted/50"
+                    }
                   >
                     <Checkbox
-                      checked={checked}
-                      onCheckedChange={() => toggle(id)}
+                      checked={withdrawn ? false : checked}
+                      disabled={withdrawn}
+                      onCheckedChange={() => !withdrawn && toggle(id)}
                     />
                     <div className="grid size-9 shrink-0 place-items-center rounded-md bg-muted text-xs font-semibold">
                       {initialsFromName(student.name)}
@@ -161,10 +213,14 @@ export function ShortlistReviewDialog({
                         {formatCgpa(student.cgpa as string)}
                       </div>
                     </div>
-                    <div className="shrink-0 text-right text-xs text-muted-foreground">
-                      {student.active_backlogs} active ·{" "}
-                      {student.passive_backlogs} passive
-                    </div>
+                    {withdrawn ? (
+                      <StatusBadge tone="red">Withdrawn</StatusBadge>
+                    ) : (
+                      <div className="shrink-0 text-right text-xs text-muted-foreground">
+                        {student.active_backlogs} active ·{" "}
+                        {student.passive_backlogs} passive
+                      </div>
+                    )}
                   </label>
                 );
               })}
@@ -188,7 +244,7 @@ export function ShortlistReviewDialog({
           >
             <ArrowLeft /> Back
           </Button>
-          {!loading && eligibleStudents.length > 0 && (
+          {!loading && displayed.length > 0 && (
             <Button
               type="button"
               onClick={handleConfirm}

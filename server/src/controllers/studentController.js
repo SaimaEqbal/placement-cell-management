@@ -172,8 +172,28 @@ const uniqueViolationMessage = (constraint) => {
 
 export const getStudents = async (req, res) => {
   try {
+    // Each student is joined to their most-recent PLACED placement record (if any)
+    // so the roster can show/toggle the final offer. Read-only: the students table
+    // and its full-overwrite create/update column lists are untouched.
     const result = await pool.query(
-      "SELECT * FROM students ORDER BY id"
+      `SELECT
+          st.*,
+          CASE WHEN pl.drive_student_id IS NOT NULL THEN json_build_object(
+            'drive_student_id', pl.drive_student_id,
+            'drive_id',         pl.drive_id,
+            'final_role',       pl.final_role,
+            'final_package',    pl.final_package,
+            'offer_taken',      pl.offer_taken
+          ) END AS placement
+       FROM students st
+       LEFT JOIN LATERAL (
+         SELECT ds.drive_student_id, ds.drive_id, ds.final_role, ds.final_package, ds.offer_taken
+           FROM drive_students ds
+          WHERE ds.student_id = st.id AND ds.status = 'PLACED'
+          ORDER BY ds.drive_student_id DESC
+          LIMIT 1
+       ) pl ON TRUE
+       ORDER BY st.id`
     );
 
     return res.status(200).json(result.rows);
@@ -223,6 +243,8 @@ export const updateStudent = async (req, res) => {
       tenth_marksheet_url,
       twelfth_marksheet_url,
       last_sem_marksheet_url,
+      payment_receipt_url,
+      payment_id,
 
       placement_status,
       semester,
@@ -311,8 +333,10 @@ export const updateStudent = async (req, res) => {
            placement_status = $29,
            review_status = $30,
            reviewed_at = $31,
-           semester = $32
-       WHERE id = $33
+           semester = $32,
+           payment_receipt_url = $33,
+           payment_id = $34
+       WHERE id = $35
        RETURNING *`,
       [
         roll_no,
@@ -347,6 +371,8 @@ export const updateStudent = async (req, res) => {
         reviewStatus,
         reviewedAt,
         semester,
+        payment_receipt_url,
+        payment_id,
         id,
       ]
     );
@@ -393,14 +419,57 @@ export const deleteStudent = async (req, res) => {
   }
 };
 
+// Clear an absentee debar: reset debar_remaining_drives to 0 so the student is
+// eligible for shortlists again (staff override). Informational counter only.
+export const clearDebar = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `UPDATE students SET debar_remaining_drives = 0
+        WHERE id = $1
+        RETURNING id, debar_remaining_drives`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    return res.status(200).json({
+      message: "Debar cleared.",
+      student: result.rows[0],
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to clear debar" });
+  }
+};
+
 export const getStudentById = async (req, res) => {
   try {
     const { id } = req.params;
 
     const result = await pool.query(
-      `SELECT st.*, (sp.spc_id IS NOT NULL) AS is_spc
+      `SELECT
+          st.*,
+          (sp.spc_id IS NOT NULL) AS is_spc,
+          CASE WHEN pl.drive_student_id IS NOT NULL THEN json_build_object(
+            'drive_student_id', pl.drive_student_id,
+            'drive_id',         pl.drive_id,
+            'final_role',       pl.final_role,
+            'final_package',    pl.final_package,
+            'offer_taken',      pl.offer_taken
+          ) END AS placement
        FROM students st
        LEFT JOIN spc sp ON sp.user_id = st.user_id
+       LEFT JOIN LATERAL (
+         SELECT ds.drive_student_id, ds.drive_id, ds.final_role, ds.final_package, ds.offer_taken
+           FROM drive_students ds
+          WHERE ds.student_id = st.id AND ds.status = 'PLACED'
+          ORDER BY ds.drive_student_id DESC
+          LIMIT 1
+       ) pl ON TRUE
        WHERE st.id = $1`,
       [id]
     );
@@ -486,16 +555,39 @@ export const upsertMyProfile = async (req, res) => {
     const client = await pool.connect();
 
     await client.query("BEGIN");
-    // Only allowlisted columns present in the validated body are considered.
-    const provided = MY_PROFILE_COLUMNS.filter((col) =>
-      Object.prototype.hasOwnProperty.call(req.body, col)
-    );
 
     const existing = await client.query(
       `SELECT * FROM students WHERE user_id = $1`,
       [userId]
     );
     const current = existing.rows[0] ?? null;
+
+    // Academic-record locking: once a profile row exists, students may no longer
+    // edit their historical academic data - only the admin can correct it (see
+    // updateStudent). Already-entered SPIs are immutable; backlog counts and
+    // 10th/12th percentages lock as a set once the row exists. A NULL SPI slot for a
+    // newly-completed semester stays editable (the new-semester update). We strip
+    // any locked field from the incoming body BEFORE building the write, so the lock
+    // is enforced server-side regardless of what the client sends.
+    if (current) {
+      for (let i = 1; i <= 8; i++) {
+        const col = `sem${i}_spi`;
+        if (current[col] != null && col in req.body) delete req.body[col];
+      }
+      for (const col of ["active_backlogs", "passive_backlogs", "tenth_percentage", "twelfth_percentage"]) {
+        if (col in req.body) delete req.body[col];
+      }
+      // Semester may only advance (it unlocks new SPI slots); it can never go back.
+      if (req.body.semester != null && req.body.semester < current.semester) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Semester cannot be decreased." });
+      }
+    }
+
+    // Only allowlisted columns present in the (now lock-stripped) body are considered.
+    const provided = MY_PROFILE_COLUMNS.filter((col) =>
+      Object.prototype.hasOwnProperty.call(req.body, col)
+    );
 
     // Derive CGPA from the merged (existing + incoming) SPIs + semester whenever
     // the save touches any SPI or the semester.
@@ -527,6 +619,7 @@ export const upsertMyProfile = async (req, res) => {
         }
       }
       if (missing.length > 0) {
+        await client.query("ROLLBACK");
         return res.status(400).json({ success: false, errors: missing });
       }
     }
@@ -565,6 +658,7 @@ return res.status(201).json(inserted.rows[0]);
     }
 
     if (provided.length === 0 && !touchesCgpa) {
+      await client.query("ROLLBACK");
       return res.status(400).json({ message: "No profile fields provided." });
     }
 

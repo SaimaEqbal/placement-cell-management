@@ -442,6 +442,32 @@ export const roundResolveSchema = z.object({
   rejected: z.array(roundDecisionSchema).optional().default([]),
 });
 
+// One placed student's final offer, captured at drive completion. The role and
+// package are optional overrides of the drive's advertised job_role/package_ctc;
+// the controller falls back to those when a field is omitted.
+const placementDecisionSchema = z.object({
+  driveStudentId: z.coerce.number().int().positive(),
+  final_role: z.string().trim().min(1).max(255).optional(),
+  final_package: z.coerce.number().positive().optional(),
+});
+
+// completeDrive body: the rejected batch (as for advance-round) PLUS the final
+// offers for the students being placed.
+export const completeDriveSchema = z.object({
+  rejected: z.array(roundDecisionSchema).optional().default([]),
+  placed: z.array(placementDecisionSchema).optional().default([]),
+});
+
+// Toggle a placed student's accepted-offer flag (informational only).
+export const offerTakenSchema = z.object({
+  taken: z.boolean(),
+});
+
+// Student self-service withdrawal toggle: true = withdraw, false = re-join.
+export const withdrawalSchema = z.object({
+  withdraw: z.boolean(),
+});
+
 // The 'email' post type has been removed; every post is an announcement. When
 // `attachments` is provided it is the COMPLETE set for the post (the controller
 // replaces the post's attachments with exactly this list, in order). An optional

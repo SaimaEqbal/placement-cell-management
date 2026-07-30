@@ -7,6 +7,7 @@ import {
   Download,
   Flag,
   Pencil,
+  Trash2,
   Trophy,
   Users,
 } from "lucide-react";
@@ -48,7 +49,9 @@ import {
   useDriveStudents,
   useFinalizeAttendance,
   useFinalizePrefilter,
+  useClearShortlist,
   useMarkAttendance,
+  useSetOfferTaken,
   useSetRoundDate,
   useStartRoundZero,
 } from "../../hooks/useDrives";
@@ -64,6 +67,7 @@ import { paths } from "../../routes/paths";
 import type {
   DriveRecord,
   DriveStudent,
+  PlacementDecision,
   RoundDecision,
 } from "../../services/driveService";
 
@@ -180,7 +184,64 @@ function WorkflowSection({
           <LiveRoundPanel driveId={driveId} drive={drive} students={students} />
         </>
       )}
+
+      {drive.drive_state === "COMPLETED" && (
+        <PlacedStudentsPanel driveId={driveId} students={students} />
+      )}
     </div>
+  );
+}
+
+/**
+ * Purpose: on a completed drive, list the placed students with their final offer
+ * (role + package) and a taken/not-taken toggle. `offer_taken` is informational -
+ * toggling it never changes the student's placement standing or the placed count.
+ */
+function PlacedStudentsPanel({
+  driveId,
+  students,
+}: {
+  driveId: string;
+  students: DriveStudent[];
+}) {
+  const placed = students.filter((s) => s.status === "PLACED");
+  const setOffer = useSetOfferTaken(driveId);
+
+  if (placed.length === 0) return null;
+
+  return (
+    <ListCard
+      eyebrow="Outcome"
+      title="Placed students"
+      description={`${placed.length} student(s) placed. Toggle "Offer taken" if a student did not accept their offer.`}
+    >
+      {setOffer.isError && (
+        <Alert variant="destructive" className="mb-3">
+          <AlertDescription>
+            {setOffer.error?.message ?? "Could not update the offer status."}
+          </AlertDescription>
+        </Alert>
+      )}
+      <div className="flex flex-col gap-3">
+        {placed.map((s) => (
+          <StudentRow key={s.drive_student_id} student={s} showOffer>
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox
+                checked={s.offer_taken !== false}
+                disabled={setOffer.isPending}
+                onCheckedChange={(checked) =>
+                  setOffer.mutate({
+                    driveStudentId: s.drive_student_id,
+                    taken: checked === true,
+                  })
+                }
+              />
+              {s.offer_taken !== false ? "Offer taken" : "Not taken"}
+            </label>
+          </StudentRow>
+        ))}
+      </div>
+    </ListCard>
   );
 }
 
@@ -345,6 +406,7 @@ function ShortlistingPanel({
   students: DriveStudent[];
 }) {
   const start = useStartRoundZero(driveId);
+  const clear = useClearShortlist();
 
   // Edit-shortlist reuses the shared review dialog + on-demand eligible list.
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -352,10 +414,30 @@ function ShortlistingPanel({
 
   const driveLabel = drive.job_role || `Drive #${drive.drive_id}`;
 
+  // Withdrawn students stay in the shortlist (audit) but are shown separately and
+  // never forwarded to the company.
+  const activeStudents = students.filter((s) => s.is_active !== false);
+  const withdrawnStudents = students.filter((s) => s.is_active === false);
+
   const editButton = (
     <Button variant="outline" onClick={() => setReviewOpen(true)}>
       <Pencil /> {students.length === 0 ? "Review shortlist" : "Edit shortlist"}
     </Button>
+  );
+
+  const clearButton = students.length > 0 && (
+    <ConfirmDialog
+      trigger={
+        <Button variant="outline" disabled={clear.isPending}>
+          <Trash2 /> {clear.isPending ? "Clearing..." : "Clear shortlist"}
+        </Button>
+      }
+      title="Clear shortlist?"
+      description="This deletes every shortlist entry (including withdrawn students) and recomputes eligibility from scratch. Manual selections will be lost. You'll then review a fresh eligible list."
+      confirmLabel="Clear shortlist"
+      destructive
+      onConfirm={() => clear.mutate(driveId, { onSuccess: () => setReviewOpen(true) })}
+    />
   );
 
   const reviewDialog = (
@@ -365,6 +447,7 @@ function ShortlistingPanel({
       driveId={driveId}
       driveLabel={driveLabel}
       eligibleStudents={eligible.data?.eligibleStudents ?? []}
+      shortlist={eligible.data?.shortlist}
       loading={eligible.isLoading}
       onConfirmed={() => setReviewOpen(false)}
     />
@@ -388,34 +471,57 @@ function ShortlistingPanel({
     <ListCard
       eyebrow="Shortlist"
       title="Confirmed students"
-      description={`${students.length} student(s) shortlisted. This sends this list to the company and locks the drive.`}
+      description={`${activeStudents.length} student(s) shortlisted${
+        withdrawnStudents.length > 0 ? ` · ${withdrawnStudents.length} withdrawn` : ""
+      }. Only active students are sent to the company when screening starts.`}
     >
-      {start.isError && (
+      {(start.isError || clear.isError) && (
         <Alert variant="destructive" className="mb-3">
           <AlertDescription>
-            {start.error?.message ?? "Could not confirm for company screening."}
+            {start.error?.message ?? clear.error?.message ?? "Something went wrong."}
           </AlertDescription>
         </Alert>
       )}
       <div className="mb-4 flex flex-wrap gap-2">
         {editButton}
+        {clearButton}
         <ConfirmDialog
           trigger={
-            <Button disabled={start.isPending}>
+            <Button disabled={start.isPending || activeStudents.length === 0}>
               <Flag /> {start.isPending ? "Starting..." : "Confirm for company screening"}
             </Button>
           }
           title="Confirm for company screening?"
-          description="This finalises the shortlist, sends it to the company for resume screening, and locks the drive. Eligibility criteria can no longer be changed."
+          description={`This finalises the shortlist${
+            withdrawnStudents.length > 0
+              ? ` (${withdrawnStudents.length} withdrawn student(s) are excluded)`
+              : ""
+          }, sends it to the company for resume screening, and locks the drive. Eligibility criteria can no longer be changed.`}
           confirmLabel="Confirm"
           onConfirm={() => start.mutate()}
         />
       </div>
       <div className="flex flex-col gap-3">
-        {students.map((s) => (
+        {activeStudents.map((s) => (
           <StudentRow key={s.drive_student_id} student={s} />
         ))}
       </div>
+      {withdrawnStudents.length > 0 && (
+        <div className="mt-5 border-t pt-4">
+          <p className="mb-3 text-xs font-medium text-muted-foreground">
+            Withdrawn ({withdrawnStudents.length}) — kept for the record, not forwarded to the company.
+          </p>
+          <div className="flex flex-col gap-3">
+            {withdrawnStudents.map((s) => (
+              <StudentRow
+                key={s.drive_student_id}
+                student={s}
+                children={<StatusBadge tone="red">Withdrawn</StatusBadge>}
+              />
+            ))}
+          </div>
+        </div>
+      )}
       {reviewDialog}
     </ListCard>
   );
@@ -477,6 +583,39 @@ function LiveRoundPanel({
     () => Array.from(unchecked, ([driveStudentId, reason]) => ({ driveStudentId, reason })),
     [unchecked],
   );
+
+  // Final offers for the CLEARED students, editable only in a results stage. Each
+  // entry defaults to the drive's advertised role/package; the admin may override
+  // either before completing. Held locally and reset on round/stage change.
+  const defaultRole = drive.job_role ?? "";
+  const defaultPkg = drive.package_ctc != null ? String(drive.package_ctc) : "";
+  const [finalOffers, setFinalOffers] = useState<Map<number, { role: string; pkg: string }>>(
+    new Map(),
+  );
+  useEffect(() => {
+    setFinalOffers(new Map());
+  }, [round, stage]);
+
+  const offerFor = (id: number) => finalOffers.get(id) ?? { role: defaultRole, pkg: defaultPkg };
+  const setOfferField = (id: number, patch: Partial<{ role: string; pkg: string }>) =>
+    setFinalOffers((prev) => {
+      const next = new Map(prev);
+      next.set(id, { ...offerFor(id), ...patch });
+      return next;
+    });
+
+  /** The final-offer payload for every cleared (still-checked) student. */
+  const placedDecisions: PlacementDecision[] = activeStudents
+    .filter((s) => !unchecked.has(s.drive_student_id))
+    .map((s) => {
+      const o = offerFor(s.drive_student_id);
+      const dec: PlacementDecision = { driveStudentId: s.drive_student_id };
+      const role = o.role.trim();
+      if (role) dec.final_role = role;
+      const pkg = o.pkg.trim();
+      if (pkg !== "" && Number.isFinite(Number(pkg))) dec.final_package = Number(pkg);
+      return dec;
+    });
 
   function handleToggle(student: DriveStudent, checked: boolean) {
     if (checked) {
@@ -548,25 +687,52 @@ function LiveRoundPanel({
             return (
               <StudentRow key={s.drive_student_id} student={s}>
                 {isCheckboxStage && (
-                  <label className="flex cursor-pointer items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={isChecked}
-                      disabled={anyBusy}
-                      onCheckedChange={(checked) => handleToggle(s, checked === true)}
-                    />
-                    <span className={isChecked ? "" : "font-medium text-destructive"}>
-                      {isChecked
-                        ? rowMode === "prefilter"
-                          ? "Keeping"
-                          : "Clearing"
-                        : rowMode === "prefilter"
-                          ? "Removing"
-                          : "Rejecting"}
-                    </span>
-                    {!isChecked && reason && (
-                      <span className="truncate text-xs text-muted-foreground">· {reason}</span>
+                  <div className="flex flex-col gap-2">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={isChecked}
+                        disabled={anyBusy}
+                        onCheckedChange={(checked) => handleToggle(s, checked === true)}
+                      />
+                      <span className={isChecked ? "" : "font-medium text-destructive"}>
+                        {isChecked
+                          ? rowMode === "prefilter"
+                            ? "Keeping"
+                            : "Clearing"
+                          : rowMode === "prefilter"
+                            ? "Removing"
+                            : "Rejecting"}
+                      </span>
+                      {!isChecked && reason && (
+                        <span className="truncate text-xs text-muted-foreground">· {reason}</span>
+                      )}
+                    </label>
+                    {/* Final offer for cleared students, captured at completion.
+                        Defaults to the drive's role/package; editable per student. */}
+                    {isResultStage && isChecked && (
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Input
+                          className="h-9 sm:w-48"
+                          aria-label={`Final role for ${s.name}`}
+                          placeholder="Final role"
+                          value={offerFor(s.drive_student_id).role}
+                          disabled={anyBusy}
+                          onChange={(e) => setOfferField(s.drive_student_id, { role: e.target.value })}
+                        />
+                        <Input
+                          className="h-9 sm:w-32"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          aria-label={`Final package (LPA) for ${s.name}`}
+                          placeholder="Package (LPA)"
+                          value={offerFor(s.drive_student_id).pkg}
+                          disabled={anyBusy}
+                          onChange={(e) => setOfferField(s.drive_student_id, { pkg: e.target.value })}
+                        />
+                      </div>
                     )}
-                  </label>
+                  </div>
                 )}
                 {rowMode === "attendance" && (
                   <label className="flex cursor-pointer items-center gap-2 text-sm">
@@ -647,7 +813,7 @@ function LiveRoundPanel({
             title="Complete this drive?"
             description={`${clearedCount} checked student(s) will be placed and ${unchecked.size} unticked student(s) rejected. This cannot be undone.`}
             confirmLabel="Complete drive"
-            onConfirm={() => complete.mutate(decisions)}
+            onConfirm={() => complete.mutate({ rejected: decisions, placed: placedDecisions })}
           />
         </div>
       )}
@@ -674,9 +840,12 @@ function LiveRoundPanel({
 function StudentRow({
   student,
   children,
+  showOffer = false,
 }: {
   student: DriveStudent;
   children?: ReactNode;
+  /** When true, show the final offer (role + package) under the student meta. */
+  showOffer?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center">
@@ -690,6 +859,12 @@ function StudentRow({
             {student.roll_no} · {student.branch ?? "—"} · CGPA{" "}
             {formatCgpa(student.cgpa as string)}
           </div>
+          {showOffer && (
+            <div className="mt-1 truncate text-xs font-medium">
+              {student.final_role || "—"}
+              {student.final_package != null && ` · ${student.final_package} LPA`}
+            </div>
+          )}
           {student.remarks && (
             <div className="mt-1 text-xs text-muted-foreground">Note: {student.remarks}</div>
           )}

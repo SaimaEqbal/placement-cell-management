@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ApiError } from "../api/apiError";
 import {
   confirmStudents,
+  clearShortlist,
   createDrive,
   deleteDrive,
   getDriveById,
@@ -11,12 +12,14 @@ import {
   getDrives,
   getMyDrives,
   getMyDriveResults,
+  setWithdrawal,
   startRoundZero,
   finalizePrefilter,
   finalizeAttendance,
   advanceRound,
   completeDrive,
   markAttendance,
+  setOfferTaken,
   getRoundHistory,
   getDriveRounds,
   setRoundDate,
@@ -29,6 +32,7 @@ import {
   type DriveWithEligible,
   type MyDrive,
   type MyDriveResult,
+  type PlacementDecision,
   type RoundDecision,
   type RoundHistoryRow,
   type UpdateDrivePayload,
@@ -79,12 +83,12 @@ export function useCreateDrive() {
   });
 }
 
-/** Purpose: PUT /drive/:driveId - edit a drive. The backend clears the old shortlist and returns a fresh eligible list, so we invalidate the list, that drive's detail, and its (now empty) confirmed students. */
+/** Purpose: PUT /drive/:driveId - edit a drive. Editing no longer touches the shortlist, so we only refresh the drives list and that drive's detail. */
 export function useUpdateDrive() {
   const queryClient = useQueryClient();
 
   return useMutation<
-    DriveWithEligible,
+    { message: string; drive: DriveRecord },
     ApiError,
     { id: number | string; payload: UpdateDrivePayload }
   >({
@@ -92,9 +96,22 @@ export function useUpdateDrive() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.drives });
       queryClient.invalidateQueries({ queryKey: queryKeys.drive(variables.id) });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.driveStudents(variables.id),
-      });
+    },
+  });
+}
+
+/**
+ * Purpose: POST /drive/:driveId/clear-shortlist - wipe the shortlist and recompute
+ * eligibility. Invalidates that drive's confirmed students + eligible list.
+ */
+export function useClearShortlist() {
+  const queryClient = useQueryClient();
+
+  return useMutation<DriveWithEligible, ApiError, number | string>({
+    mutationFn: clearShortlist,
+    onSuccess: (_data, driveId) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.driveStudents(driveId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.driveEligible(driveId) });
     },
   });
 }
@@ -143,6 +160,24 @@ export function useMyDrives() {
   return useQuery<MyDrive[], ApiError>({
     queryKey: queryKeys.myDrives,
     queryFn: getMyDrives,
+  });
+}
+
+/**
+ * Purpose: PATCH /drive/:driveId/withdraw - the current student withdraws from
+ * (or re-joins) a drive's shortlist. Refreshes the student's My Drives list.
+ */
+export function useWithdrawDrive() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { message: string; is_active: boolean },
+    ApiError,
+    { driveId: number | string; withdraw: boolean }
+  >({
+    mutationFn: ({ driveId, withdraw }) => setWithdrawal(driveId, withdraw),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.myDrives });
+    },
   });
 }
 
@@ -205,12 +240,59 @@ export function useAdvanceRound(driveId: number | string) {
   });
 }
 
-/** Purpose: POST /drive/:driveId/complete with the unchecked (rejected) batch. */
+/**
+ * Purpose: POST /drive/:driveId/complete with the unchecked (rejected) batch and
+ * the placed students' final offers.
+ */
 export function useCompleteDrive(driveId: number | string) {
   const invalidate = useDriveWorkflowInvalidator(driveId);
-  return useMutation<DriveTransitionResult, ApiError, RoundDecision[] | void>({
-    mutationFn: (rejected) => completeDrive(driveId, rejected ?? []),
+  return useMutation<
+    DriveTransitionResult,
+    ApiError,
+    { rejected?: RoundDecision[]; placed?: PlacementDecision[] } | void
+  >({
+    mutationFn: (vars) => completeDrive(driveId, vars?.rejected ?? [], vars?.placed ?? []),
     onSuccess: invalidate,
+  });
+}
+
+/**
+ * Purpose: PATCH .../offer - toggle a placed student's accepted-offer flag.
+ * Refreshes this drive's students plus the students list (the Admin Students page
+ * shows the same flag via the joined placement summary).
+ */
+export function useSetOfferTaken(driveId: number | string) {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { message: string; driveStudent: DriveStudent },
+    ApiError,
+    { driveStudentId: number | string; taken: boolean }
+  >({
+    mutationFn: ({ driveStudentId, taken }) => setOfferTaken(driveId, driveStudentId, taken),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.driveStudents(driveId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.students() });
+    },
+  });
+}
+
+/**
+ * Purpose: same offer toggle as useSetOfferTaken, but the drive is supplied per
+ * call - for the Admin Students page, where each row's placement belongs to a
+ * different drive. Invalidates the students list so the flag refreshes.
+ */
+export function useSetStudentOfferTaken() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { message: string; driveStudent: DriveStudent },
+    ApiError,
+    { driveId: number | string; driveStudentId: number | string; taken: boolean }
+  >({
+    mutationFn: ({ driveId, driveStudentId, taken }) =>
+      setOfferTaken(driveId, driveStudentId, taken),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.students() });
+    },
   });
 }
 
