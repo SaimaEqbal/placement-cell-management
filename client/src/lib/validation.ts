@@ -31,6 +31,22 @@ export function validateRollNumber(value: string): string | undefined {
   return value.trim() ? undefined : "Roll number is required.";
 }
 
+const HTTP_URL_REGEX = /^https?:\/\/\S+$/i;
+
+/**
+ * Purpose: optional document-URL rule. Blank is allowed, but any non-blank value
+ * must be an absolute http(s) URL - otherwise the browser treats it as a path
+ * relative to the app and the preview iframe loads the app itself.
+ */
+export function validateOptionalUrl(value: string, label: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (!HTTP_URL_REGEX.test(trimmed)) {
+    return `${label} must be a full link starting with http:// or https://`;
+  }
+  return undefined;
+}
+
 /** Purpose: Institutional Email field rule - required, must match the college domain the backend enforces. */
 export function validateInstitutionalEmail(value: string): string | undefined {
   const trimmed = value.trim();

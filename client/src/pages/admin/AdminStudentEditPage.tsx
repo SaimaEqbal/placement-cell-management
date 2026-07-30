@@ -26,6 +26,7 @@ import {
   DEPARTMENT_BRANCHES,
   DEPARTMENT_OPTIONS,
   SEMESTERS,
+  validateOptionalUrl,
 } from "../../lib/validation";
 import { paths } from "../../routes/paths";
 import type { StudentRecord, UpdateStudentPayload } from "../../services/studentService";
@@ -137,6 +138,20 @@ export default function AdminStudentEditPage() {
   const backPath = paths.adminStudents;
 
   function handleSubmit() {
+    // Document links must be absolute URLs (or blank) - a bare string would break
+    // the preview iframe (it resolves relative to the app).
+    const urlError = [
+      validateOptionalUrl(resumeUrl, "Resume URL"),
+      validateOptionalUrl(tenthUrl, "10th marksheet URL"),
+      validateOptionalUrl(twelfthUrl, "12th marksheet URL"),
+      validateOptionalUrl(lastSemUrl, "Latest semester marksheet URL"),
+      validateOptionalUrl(paymentReceiptUrl, "Payment receipt URL"),
+    ].find(Boolean);
+    if (urlError) {
+      setFormError(urlError);
+      return;
+    }
+
     // updateStudent overwrites the full record, so send every column it writes -
     // omitted ones would be NULLed. cgpa is derived server-side.
     const payload: UpdateStudentPayload = {

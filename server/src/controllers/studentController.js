@@ -8,6 +8,12 @@ const spiArrayOf = (src) => [
   src.sem5_spi, src.sem6_spi, src.sem7_spi, src.sem8_spi,
 ];
 
+// students.id is a BIGINT. A non-numeric :id param (e.g. someone hitting
+// /students/hhhhhjhh) would otherwise reach Postgres and throw a 22P02 "invalid
+// input syntax for type bigint" that the catch-all reports as a 500. Guard the
+// param up front and treat a malformed id as "not found".
+const isNumericId = (id) => /^\d+$/.test(String(id));
+
 export const createStudent = async (req,res)=>{
   const client = await pool.connect();
 
@@ -209,6 +215,9 @@ export const getStudents = async (req, res) => {
 export const updateStudent = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isNumericId(id)) {
+      return res.status(404).json({ message: "Student not found" });
+    }
 
     const {
       roll_no,
@@ -395,6 +404,9 @@ export const updateStudent = async (req, res) => {
 export const deleteStudent = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isNumericId(id)) {
+      return res.status(404).json({ message: "Student not found" });
+    }
 
     const result = await pool.query(
       "DELETE FROM students WHERE id = $1 RETURNING *",
@@ -424,6 +436,9 @@ export const deleteStudent = async (req, res) => {
 export const clearDebar = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isNumericId(id)) {
+      return res.status(404).json({ message: "Student not found" });
+    }
 
     const result = await pool.query(
       `UPDATE students SET debar_remaining_drives = 0
@@ -449,6 +464,9 @@ export const clearDebar = async (req, res) => {
 export const getStudentById = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isNumericId(id)) {
+      return res.status(404).json({ message: "Student not found" });
+    }
 
     const result = await pool.query(
       `SELECT

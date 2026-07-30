@@ -11,6 +11,16 @@
  * CompanyPostsPage (admin), and AnnouncementsPage (student feed) all go through
  * this one function.
  */
+/**
+ * Whether a value is an absolute http(s) URL safe to put in an <iframe src> or an
+ * <a href>. A bare string like "hhfjjg" is NOT — the browser would resolve it as a
+ * path relative to the current page (and an SPA then serves its own index.html into
+ * the iframe), so callers must guard on this before embedding/linking.
+ */
+export function isEmbeddableUrl(url: string | null | undefined): boolean {
+  return /^https?:\/\/\S+$/i.test((url ?? "").trim());
+}
+
 export function toDrivePreviewUrl(url: string | null | undefined): string {
   if (!url) return "";
   const trimmed = url.trim();

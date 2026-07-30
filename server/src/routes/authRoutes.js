@@ -6,7 +6,8 @@ import {
   resendVerification,
   forgotPassword,
   resetPassword,
-  getAllAdmins
+  getAllAdmins,
+  deleteMyAccount
 } from "../controllers/authController.js";
 import { auth } from "../middleware/authMiddleware.js";
 import { requireAdmin } from "../middleware/roleMiddleware.js";
@@ -22,5 +23,8 @@ router.post("/reset-password", resetPassword);
 
 // Admin roster: every admin account (Admin only).
 router.get("/admins", auth, requireAdmin, getAllAdmins);
+
+// Self-service account deletion (admin & tpc only; enforced in the controller).
+router.delete("/me", auth, deleteMyAccount);
 
 export default router;
